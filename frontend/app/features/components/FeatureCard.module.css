@@ -1,0 +1,208 @@
+.card {
+  background-color: white;
+  border-radius: 4px;
+  padding: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 10px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+
+.card:hover {
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.expanded {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.todoStatus {
+  border-left-color: #dfe1e6;
+}
+
+.inProgressStatus {
+  border-left-color: #0052cc;
+}
+
+.doneStatus {
+  border-left-color: #00875a;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.titleContainer {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.checkIcon {
+  color: #00875a;
+  font-size: 14px;
+  margin-right: 8px;
+  background-color: rgba(0, 135, 90, 0.1);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+  color: #172b4d;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.priority {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 3px;
+  margin-left: 8px;
+  text-align: center;
+  min-width: 55px;
+}
+
+.highPriority {
+  background-color: #ffebe6;
+  color: #c9372c;
+}
+
+.mediumPriority {
+  background-color: #fffae6;
+  color: #ff991f;
+}
+
+.lowPriority {
+  background-color: #e6fcff;
+  color: #00b8d9;
+}
+
+.details {
+  margin-top: 14px;
+  border-top: 1px solid #f4f5f7;
+  padding-top: 14px;
+}
+
+.metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.metaItem {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+}
+
+.metaLabel {
+  color: #6b778c;
+  margin-right: 6px;
+}
+
+.statusBadge {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.todoStatus.statusBadge {
+  background-color: #dfe1e6;
+  color: #42526e;
+}
+
+.inProgressStatus.statusBadge {
+  background-color: #deebff;
+  color: #0747a6;
+}
+
+.doneStatus.statusBadge {
+  background-color: #e3fcef;
+  color: #006644;
+}
+
+.featureId {
+  color: #6b778c;
+  font-family: monospace;
+  font-weight: 600;
+}
+
+.description {
+  font-size: 13px;
+  color: #5e6c84;
+  margin: 0 0 14px 0;
+  line-height: 1.5;
+}
+
+.noDescription {
+  font-size: 13px;
+  color: #97a0af;
+  margin: 0 0 14px 0;
+  font-style: italic;
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.assignee {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: #5e6c84;
+}
+
+.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: #0052cc;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+.assigneeName {
+  color: #42526e;
+  font-weight: 500;
+}
+
+.editButton {
+  background-color: transparent;
+  border: none;
+  color: #0052cc;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.editButton:hover {
+  background-color: #deebff;
+} 

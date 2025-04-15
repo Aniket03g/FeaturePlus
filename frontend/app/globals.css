@@ -1,0 +1,32 @@
+:root {
+  --primary: #0052cc;
+  --background: #ffffff;
+  --surface: #f4f5f7;
+  --border: #dfe1e6;
+  --text-primary: #172b4d;
+  --text-secondary: #5e6c84;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--text-primary);
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.card {
+  background: var(--background);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(9,30,66,.25);
+}
