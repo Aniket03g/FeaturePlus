@@ -76,6 +76,7 @@ func main() {
 	featureRoutes := router.Group("/api/features")
 	{
 		featureRoutes.POST("", featureHandler.CreateFeature)
+		featureRoutes.GET("", featureHandler.GetAllFeatures)
 		featureRoutes.GET("/:id", featureHandler.GetFeature)
 		featureRoutes.GET("/project/:project_id", featureHandler.GetProjectFeatures)
 		featureRoutes.PUT("/:id", featureHandler.UpdateFeature)

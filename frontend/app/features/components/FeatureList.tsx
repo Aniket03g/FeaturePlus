@@ -208,52 +208,12 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
             <tbody>
               {sortedFeatures.map((feature) => (
                 <tr key={feature.id} className={styles[`row${feature.status}`]}>
-                  <td className={styles.titleCell}>
-                    <div className={styles.titleRow}>
-                      <div className={styles.titleText}>{feature.title}</div>
-                      <div className={styles.featureId}>FP-{feature.id}</div>
-                    </div>
-                    {feature.description && (
-                      <div className={styles.description}>{feature.description}</div>
-                    )}
-                  </td>
-                  <td>
-                    <span className={`${styles.statusBadge} ${getStatusClass(feature.status)}`}>
-                      {getStatusLabel(feature.status)}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`${styles.priorityBadge} ${getPriorityClass(feature.priority)}`}>
-                      {feature.priority.charAt(0).toUpperCase() + feature.priority.slice(1)}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={
-                      feature.tag === 'p0' ? styles.tagP0 : feature.tag === 'p1' ? styles.tagP1 : styles.tagP2
-                    }>
-                      {feature.tag?.toUpperCase() || 'P2'}
-                    </span>
-                  </td>
-                  <td>
-                    {feature.assignee ? (
-                      <div className={styles.assignee}>
-                        <span className={styles.avatar}>
-                          {feature.assignee.username.charAt(0).toUpperCase()}
-                        </span>
-                        <span className={styles.assigneeName}>{feature.assignee.username}</span>
-                      </div>
-                    ) : (
-                      <span className={styles.unassigned}>Unassigned</span>
-                    )}
-                  </td>
-                  <td>
-                    <button 
-                      className={styles.editButton}
-                      onClick={() => handleEditFeature(feature)}
-                    >
-                      Edit
-                    </button>
-                  </td>
+                  <td>HELLO123</td>
+                  <td>HELLO123</td>
+                  <td>HELLO123</td>
+                  <td>HELLO123</td>
+                  <td>HELLO123</td>
+                  <td>HELLO123</td>
                 </tr>
               ))}
             </tbody>

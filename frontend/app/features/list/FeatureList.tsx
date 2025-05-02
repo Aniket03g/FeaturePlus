@@ -242,7 +242,8 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                   priority: 'medium',
                   assignee_id: 0,
                   created_at: '',
-                  updated_at: ''
+                  updated_at: '',
+                  tag: 'p2',
                 });
                 setIsModalOpen(true);
               }}
@@ -304,6 +305,20 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                         </div>
                         {feature.description && (
                           <div className={styles.description}>{feature.description}</div>
+                        )}
+                        {feature.tag && (
+                          <div style={{ marginTop: 4 }}>
+                            <span
+                              className={
+                                feature.tag === 'p0' ? styles.tagP0 : feature.tag === 'p1' ? styles.tagP1 : styles.tagP2
+                              }
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => router.push(`/features/tags/${feature.tag}`)}
+                              title={`Show all features with tag ${feature.tag.toUpperCase()}`}
+                            >
+                              {feature.tag.toUpperCase()}
+                            </span>
+                          </div>
                         )}
                       </div>
                     </td>

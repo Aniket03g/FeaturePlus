@@ -41,3 +41,19 @@ func (r *FeatureRepository) UpdateFeature(feature *models.Feature) error {
 func (r *FeatureRepository) DeleteFeature(id int) error {
 	return r.db.Delete(&models.Feature{}, id).Error
 }
+
+func (r *FeatureRepository) GetFeaturesByTag(tag string) ([]models.Feature, error) {
+	var features []models.Feature
+	if err := r.db.Where("tag = ?", tag).Preload("Assignee").Find(&features).Error; err != nil {
+		return nil, err
+	}
+	return features, nil
+}
+
+func (r *FeatureRepository) GetAllFeatures() ([]models.Feature, error) {
+	var features []models.Feature
+	if err := r.db.Preload("Assignee").Find(&features).Error; err != nil {
+		return nil, err
+	}
+	return features, nil
+}
