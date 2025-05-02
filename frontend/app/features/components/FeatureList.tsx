@@ -170,7 +170,8 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
               priority: 'medium',
               assignee_id: 0,
               created_at: '',
-              updated_at: ''
+              updated_at: '',
+              tag: 'p2',
             });
             setIsModalOpen(true);
           }}
@@ -199,6 +200,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                 <th onClick={() => handleSort('priority')} className={sortField === 'priority' ? styles.sorted : ''}>
                   Priority {sortField === 'priority' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
+                <th>Tag</th>
                 <th>Assignee</th>
                 <th>Actions</th>
               </tr>
@@ -223,6 +225,13 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                   <td>
                     <span className={`${styles.priorityBadge} ${getPriorityClass(feature.priority)}`}>
                       {feature.priority.charAt(0).toUpperCase() + feature.priority.slice(1)}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={
+                      feature.tag === 'p0' ? styles.tagP0 : feature.tag === 'p1' ? styles.tagP1 : styles.tagP2
+                    }>
+                      {feature.tag?.toUpperCase() || 'P2'}
                     </span>
                   </td>
                   <td>
@@ -370,6 +379,21 @@ const FeatureForm = ({ feature, users, onClose, onSubmit }: FeatureFormProps) =>
               {user.username}
             </option>
           ))}
+        </select>
+      </div>
+      
+      <div className={styles.formGroup}>
+        <label htmlFor="tag">Tag</label>
+        <select
+          id="tag"
+          name="tag"
+          value={formData.tag || 'p2'}
+          onChange={handleChange}
+          style={{ borderRadius: 8, padding: '0.5rem', fontWeight: 500 }}
+        >
+          <option value="p0">P0 (Critical)</option>
+          <option value="p1">P1 (High)</option>
+          <option value="p2">P2 (Normal)</option>
         </select>
       </div>
       

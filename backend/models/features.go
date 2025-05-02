@@ -24,6 +24,7 @@ type Feature struct {
 	Description string          `gorm:"type:text" json:"description"`
 	Status      FeatureStatus   `gorm:"type:varchar(20);not null" json:"status"`
 	Priority    FeaturePriority `gorm:"type:varchar(20);not null" json:"priority"`
+	Tag         string          `gorm:"type:varchar(10);not null;default:'p2'" json:"tag"`
 	AssigneeID  int             `gorm:"not null" json:"assignee_id"`
 	CreatedAt   time.Time       `json:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at"`

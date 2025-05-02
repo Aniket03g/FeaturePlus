@@ -47,6 +47,12 @@ const Sidebar = ({ projectId, projectName }: SidebarProps) => {
             <li className={pathname === '/create-project' ? styles.active : ''}>
               <Link href="/create-project">Create Project</Link>
             </li>
+            <li className={pathname === '/project-manager' ? styles.active : ''}>
+              <Link href="/project-manager">Project Manager</Link>
+            </li>
+            <li className={pathname === '/product-manager' ? styles.active : ''}>
+              <Link href="/product-manager">Product Manager</Link>
+            </li>
           </ul>
         </div>
       )}
