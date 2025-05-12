@@ -11,19 +11,28 @@ import (
 )
 
 type FeatureHandler struct {
-	repo *repositories.FeatureRepository
+	repo    *repositories.FeatureRepository
+	tagRepo *repositories.TagRepository
 }
 
-func NewFeatureHandler(repo *repositories.FeatureRepository) *FeatureHandler {
-	return &FeatureHandler{repo: repo}
+func NewFeatureHandler(repo *repositories.FeatureRepository, tagRepo *repositories.TagRepository) *FeatureHandler {
+	return &FeatureHandler{repo: repo, tagRepo: tagRepo}
+}
+
+type FeatureWithTags struct {
+	models.Feature
+	TagsInput string `json:"tags_input,omitempty"`
 }
 
 func (h *FeatureHandler) CreateFeature(c *gin.Context) {
-	var feature models.Feature
-	if err := c.ShouldBindJSON(&feature); err != nil {
+	var featureWithTags FeatureWithTags
+	if err := c.ShouldBindJSON(&featureWithTags); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Extract feature from the combined structure
+	feature := featureWithTags.Feature
 
 	// Convert string values to proper types
 	feature.Status = models.FeatureStatus(feature.Status)
@@ -37,6 +46,32 @@ func (h *FeatureHandler) CreateFeature(c *gin.Context) {
 	if err := h.repo.CreateFeature(&feature); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Handle tags if provided
+	if featureWithTags.TagsInput != "" {
+		var createdByUser uint = 1 // Default to admin if not available
+		if userID, exists := c.Get("user_id"); exists {
+			createdByUser = userID.(uint)
+		}
+
+		err := h.tagRepo.UpdateFeatureTags(feature.ID, createdByUser, featureWithTags.TagsInput)
+		if err != nil {
+			// Log the error but don't fail the whole request
+			// We already created the feature successfully
+			c.JSON(http.StatusCreated, gin.H{
+				"feature": feature,
+				"warning": "Feature created but failed to save tags",
+			})
+			return
+		}
+
+		// Fetch the feature again with its tags
+		updatedFeature, err := h.repo.GetFeatureByID(int(feature.ID))
+		if err == nil {
+			c.JSON(http.StatusCreated, updatedFeature)
+			return
+		}
 	}
 
 	c.JSON(http.StatusCreated, feature)
@@ -84,11 +119,14 @@ func (h *FeatureHandler) UpdateFeature(c *gin.Context) {
 		return
 	}
 
-	var feature models.Feature
-	if err := c.ShouldBindJSON(&feature); err != nil {
+	var featureWithTags FeatureWithTags
+	if err := c.ShouldBindJSON(&featureWithTags); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Extract feature from the combined structure
+	feature := featureWithTags.Feature
 
 	// Convert string values to proper types
 	feature.Status = models.FeatureStatus(feature.Status)
@@ -117,6 +155,32 @@ func (h *FeatureHandler) UpdateFeature(c *gin.Context) {
 		return
 	}
 
+	// Handle tags if provided
+	if featureWithTags.TagsInput != "" {
+		var createdByUser uint = 1 // Default to admin if not available
+		if userID, exists := c.Get("user_id"); exists {
+			createdByUser = userID.(uint)
+		}
+
+		err := h.tagRepo.UpdateFeatureTags(existingFeature.ID, createdByUser, featureWithTags.TagsInput)
+		if err != nil {
+			// Log the error but don't fail the whole request
+			// We already updated the feature successfully
+			c.JSON(http.StatusOK, gin.H{
+				"feature": existingFeature,
+				"warning": "Feature updated but failed to save tags",
+			})
+			return
+		}
+
+		// Fetch the feature again with its updated tags
+		updatedFeature, err := h.repo.GetFeatureByID(featureID)
+		if err == nil {
+			c.JSON(http.StatusOK, updatedFeature)
+			return
+		}
+	}
+
 	c.JSON(http.StatusOK, existingFeature)
 }
 
@@ -127,6 +191,9 @@ func (h *FeatureHandler) DeleteFeature(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid feature ID"})
 		return
 	}
+
+	// Delete associated tags first
+	h.tagRepo.DeleteTagsByFeatureID(uint(featureID))
 
 	if err := h.repo.DeleteFeature(featureID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

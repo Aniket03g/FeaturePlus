@@ -22,7 +22,7 @@ func main() {
 	}
 
 	// Migrate all schemas
-	if err := db.Migrate(&models.User{}, &models.Project{}, &models.Feature{}, &models.SubFeature{}, &models.Task{}); err != nil {
+	if err := db.Migrate(&models.User{}, &models.Project{}, &models.Feature{}, &models.SubFeature{}, &models.Task{}, &models.FeatureTag{}); err != nil {
 		panic("failed to migrate database: " + err.Error())
 	}
 
@@ -31,12 +31,14 @@ func main() {
 	projectRepo := repositories.NewProjectRepository(db.DB)
 	featureRepo := repositories.NewFeatureRepository(db.DB)
 	taskRepo := repositories.NewTaskRepository(db.DB)
+	tagRepo := repositories.NewTagRepository(db.DB)
 
 	// Create handlers
 	userHandler := handlers.NewUserHandler(userRepo)
 	projectHandler := handlers.NewProjectHandler(projectRepo)
-	featureHandler := handlers.NewFeatureHandler(featureRepo)
+	featureHandler := handlers.NewFeatureHandler(featureRepo, tagRepo)
 	taskHandler := handlers.NewTaskHandler(taskRepo)
+	tagHandler := handlers.NewTagHandler(tagRepo, featureRepo)
 
 	router := gin.Default()
 
@@ -93,6 +95,10 @@ func main() {
 		featureRoutes.GET("/:id/tasks", taskHandler.GetTasksByFeature)
 		featureRoutes.PUT("/:id/task/:task_id", taskHandler.UpdateTaskForFeature)
 		featureRoutes.DELETE("/:id/task/:task_id", taskHandler.DeleteTaskForFeature)
+
+		// Feature tags routes
+		featureRoutes.GET("/:id/tags", tagHandler.GetFeatureTags)
+		featureRoutes.PUT("/:id/tags", tagHandler.UpdateFeatureTags)
 	}
 
 	// General task routes
@@ -110,6 +116,13 @@ func main() {
 		subFeatureRoutes.POST("", handlers.CreateSubFeature(db.DB))
 		subFeatureRoutes.PUT("/:id", handlers.UpdateSubFeature(db.DB))
 		subFeatureRoutes.GET("", handlers.GetSubFeaturesByFeature(db.DB))
+	}
+
+	// Tag routes
+	tagRoutes := router.Group("/api/tags")
+	{
+		tagRoutes.GET("", tagHandler.GetAllTags)
+		tagRoutes.GET("/:tag_name/features", tagHandler.GetFeaturesByTag)
 	}
 
 	// Health check

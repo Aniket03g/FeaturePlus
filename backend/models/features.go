@@ -32,6 +32,7 @@ type Feature struct {
 	DeletedAt   gorm.DeletedAt  `gorm:"index" json:"-"`
 
 	// Associations
-	Project  Project `gorm:"foreignKey:ProjectID" json:"-"`
-	Assignee User    `gorm:"foreignKey:AssigneeID" json:"assignee"`
+	Project  Project      `gorm:"foreignKey:ProjectID" json:"-"`
+	Assignee User         `gorm:"foreignKey:AssigneeID" json:"assignee"`
+	Tags     []FeatureTag `gorm:"foreignKey:FeatureID" json:"tags"`
 }

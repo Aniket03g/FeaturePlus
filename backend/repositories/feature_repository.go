@@ -20,7 +20,7 @@ func (r *FeatureRepository) CreateFeature(feature *models.Feature) error {
 
 func (r *FeatureRepository) GetFeatureByID(id int) (*models.Feature, error) {
 	var feature models.Feature
-	if err := r.db.Preload("Project").Preload("Assignee").First(&feature, id).Error; err != nil {
+	if err := r.db.Preload("Project").Preload("Assignee").Preload("Tags").First(&feature, id).Error; err != nil {
 		return nil, err
 	}
 	return &feature, nil
@@ -28,7 +28,7 @@ func (r *FeatureRepository) GetFeatureByID(id int) (*models.Feature, error) {
 
 func (r *FeatureRepository) GetFeaturesByProject(projectID int) ([]models.Feature, error) {
 	var features []models.Feature
-	if err := r.db.Where("project_id = ?", projectID).Preload("Assignee").Find(&features).Error; err != nil {
+	if err := r.db.Where("project_id = ?", projectID).Preload("Assignee").Preload("Tags").Find(&features).Error; err != nil {
 		return nil, err
 	}
 	return features, nil
@@ -44,7 +44,7 @@ func (r *FeatureRepository) DeleteFeature(id int) error {
 
 func (r *FeatureRepository) GetAllFeatures() ([]models.Feature, error) {
 	var features []models.Feature
-	if err := r.db.Preload("Assignee").Find(&features).Error; err != nil {
+	if err := r.db.Preload("Assignee").Preload("Tags").Find(&features).Error; err != nil {
 		return nil, err
 	}
 	return features, nil
