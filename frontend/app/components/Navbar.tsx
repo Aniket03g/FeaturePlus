@@ -1,12 +1,66 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import styles from './Navbar.module.css';
+
+interface UserData {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+}
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<UserData | null>(null);
+  const [loading, setLoading] = useState(true);
+  
+  // Check if user is logged in on component mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+        
+        // Try to get user data from localStorage (for faster UI)
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+        }
+        
+        // Always validate with the server
+        const response = await fetch('http://localhost:8080/api/auth/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+        } else {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    checkAuth();
+  }, []);
   
   const isActive = (path: string) => {
     return pathname === path || pathname?.startsWith(`${path}/`);
@@ -14,6 +68,13 @@ const Navbar = () => {
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
+  };
+  
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    router.push('/login');
   };
 
   return (
@@ -46,14 +107,45 @@ const Navbar = () => {
         </div>
         
         <div className={styles.userSection}>
-          <Link 
-            href="#" 
-            className={styles.userButton}
-            onClick={() => setIsMenuOpen(false)}
-          >
-            <span className={styles.avatar}>U</span>
-            <span className={styles.username}>User</span>
-          </Link>
+          {!loading && (
+            user ? (
+              <div className={styles.userDropdown}>
+                <button className={styles.userButton}>
+                  <span className={styles.avatar}>{user.username?.charAt(0) || 'U'}</span>
+                  <span className={styles.username}>{user.username}</span>
+                </button>
+                <div className={styles.dropdownMenu}>
+                  <div className={styles.dropdownUserInfo}>
+                    <span className={styles.dropdownUsername}>{user.username}</span>
+                    <span className={styles.dropdownEmail}>{user.email}</span>
+                    <span className={styles.dropdownRole}>{user.role}</span>
+                  </div>
+                  <div className={styles.dropdownDivider}></div>
+                  <button 
+                    className={styles.logoutButton}
+                    onClick={handleLogout}
+                  >
+                    Log Out
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className={styles.authButtons}>
+                <Link 
+                  href="/login" 
+                  className={styles.loginButton}
+                >
+                  Log In
+                </Link>
+                <Link 
+                  href="/signup" 
+                  className={styles.signupButton}
+                >
+                  Sign Up
+                </Link>
+              </div>
+            )
+          )}
         </div>
         
         <button 

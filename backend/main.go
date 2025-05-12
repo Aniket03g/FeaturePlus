@@ -5,6 +5,7 @@ import (
 	"FeaturePlus/handlers"
 	"FeaturePlus/models"
 	"FeaturePlus/repositories"
+	"FeaturePlus/routes"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -52,6 +53,9 @@ func main() {
 		}
 		c.Next()
 	})
+
+	// Register auth routes
+	routes.RegisterAuthRoutes(router, db.DB)
 
 	// User routes
 	userRoutes := router.Group("/api/users")

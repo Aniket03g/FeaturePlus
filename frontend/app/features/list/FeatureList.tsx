@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import API from '@/app/api/api';
 import type { Feature, User } from '@/app/types';
 import { SubFeature } from '@/app/types/subfeature';
+import { Task } from '@/app/types/task';
 import styles from './FeatureList.module.css';
 import { useRouter } from 'next/navigation';
 
@@ -21,9 +22,27 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
   const [sortField, setSortField] = useState<keyof Feature>('title');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [subFeatureCounts, setSubFeatureCounts] = useState<Record<number, number>>({});
+  const [taskCounts, setTaskCounts] = useState<Record<number, number>>({});
   const [selectedFeatureSubFeatures, setSelectedFeatureSubFeatures] = useState<SubFeature[]>([]);
   const [selectedFeatureId] = useState<number | null>(null);
   const [showGlobalSubFeatureForm, setShowGlobalSubFeatureForm] = useState(false);
+  const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
+  const [featureTasks, setFeatureTasks] = useState<Task[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
+  const [newTask, setNewTask] = useState<{
+    task_name: string;
+    description: string;
+    task_type: string;
+  }>({
+    task_name: '',
+    description: '',
+    task_type: 'UI',
+  });
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isEditTaskFormOpen, setIsEditTaskFormOpen] = useState(false);
+  const [confirmDeleteTaskId, setConfirmDeleteTaskId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,21 +57,31 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
 
         // Fetch sub-feature counts for each feature
         const counts: Record<number, number> = {};
+        const taskCounts: Record<number, number> = {};
         await Promise.all(
           featuresRes.data.map(async (feature: Feature) => {
             try {
-              const response = await fetch(`http://localhost:8080/api/sub-features?feature_id=${feature.id}`);
-              if (response.ok) {
-                const subFeatures = await response.json();
+              const subFeaturesResponse = await fetch(`http://localhost:8080/api/sub-features?feature_id=${feature.id}`);
+              if (subFeaturesResponse.ok) {
+                const subFeatures = await subFeaturesResponse.json();
                 counts[feature.id] = subFeatures.length;
               }
+              
+              // Fetch task counts for each feature
+              const tasksResponse = await fetch(`http://localhost:8080/api/features/${feature.id}/tasks`);
+              if (tasksResponse.ok) {
+                const tasks = await tasksResponse.json();
+                taskCounts[feature.id] = tasks.length;
+              }
             } catch (error) {
-              console.error(`Error fetching sub-features for feature ${feature.id}:`, error);
+              console.error(`Error fetching data for feature ${feature.id}:`, error);
               counts[feature.id] = 0;
+              taskCounts[feature.id] = 0;
             }
           })
         );
         setSubFeatureCounts(counts);
+        setTaskCounts(taskCounts);
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -63,7 +92,47 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
     fetchData();
   }, [projectId]);
 
-  const handleEditFeature = (feature: Feature) => {
+  const handleFeatureClick = async (feature: Feature) => {
+    setSelectedFeature(feature);
+    setIsPopupOpen(true);
+    
+    // Reset any tasks-related state
+    setConfirmDeleteTaskId(null);
+    
+    // Fetch tasks for this feature
+    await fetchTasksForFeature(feature.id);
+  };
+  
+  const fetchTasksForFeature = async (featureId: number) => {
+    setLoadingTasks(true);
+    try {
+      const response = await fetch(`http://localhost:8080/api/features/${featureId}/tasks`);
+      if (response.ok) {
+        const tasks = await response.json();
+        console.log(`Fetched ${tasks.length} tasks for feature ${featureId}`, tasks);
+        setFeatureTasks(tasks);
+      } else {
+        console.error('Failed to fetch tasks for feature:', response.statusText);
+        setFeatureTasks([]);
+      }
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      setFeatureTasks([]);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  const handlePopupClose = () => {
+    setIsPopupOpen(false);
+    setSelectedFeature(null);
+    setFeatureTasks([]);
+  };
+
+  const handleEditFeature = (feature: Feature, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
     setEditingFeature(feature);
     setIsModalOpen(true);
   };
@@ -218,6 +287,211 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
     return sortDirection === 'asc' ? result : -result;
   });
 
+  const handleAddTask = () => {
+    if (!selectedFeature) return;
+    setIsTaskFormOpen(true);
+  };
+
+  const handleTaskFormClose = () => {
+    setIsTaskFormOpen(false);
+    setNewTask({
+      task_name: '',
+      description: '',
+      task_type: 'UI',
+    });
+  };
+
+  const handleTaskInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setNewTask({ ...newTask, [name]: value });
+  };
+
+  const handleTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFeature) return;
+    
+    try {
+      const taskData = {
+        task_name: newTask.task_name,
+        description: newTask.description,
+        task_type: newTask.task_type,
+        feature_id: selectedFeature.id,
+        created_by_user: 1 // This should ideally be the current user's ID
+      };
+      
+      console.log("Creating task with data:", taskData);
+      
+      const response = await fetch(`http://localhost:8080/api/features/${selectedFeature.id}/tasks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(taskData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to create task');
+      }
+
+      const createdTask = await response.json();
+      
+      // Add the new task to the tasks list
+      setFeatureTasks([...featureTasks, createdTask]);
+      
+      // Update the task count for this feature
+      setTaskCounts({
+        ...taskCounts,
+        [selectedFeature.id]: (taskCounts[selectedFeature.id] || 0) + 1
+      });
+      
+      // Close the form
+      handleTaskFormClose();
+    } catch (error) {
+      console.error('Error creating task:', error);
+      alert('Failed to create task. Please try again.');
+    }
+  };
+
+  const handleEditTask = (task: Task) => {
+    setEditingTask({...task});
+    setIsEditTaskFormOpen(true);
+  };
+
+  const handleEditTaskFormClose = () => {
+    setIsEditTaskFormOpen(false);
+    setEditingTask(null);
+  };
+
+  const handleEditTaskInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    if (!editingTask) return;
+    const { name, value } = e.target;
+    setEditingTask({ ...editingTask, [name]: value });
+  };
+
+  const handleEditTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedFeature || !editingTask) return;
+    
+    try {
+      // Create a properly structured task object for the backend
+      const taskData = {
+        id: Number(editingTask.id),
+        task_name: editingTask.task_name,
+        description: editingTask.description || "",
+        task_type: editingTask.task_type,
+        feature_id: Number(selectedFeature.id),
+        created_by_user: Number(editingTask.created_by_user) || 1
+      };
+      
+      console.log("Updating task with data:", taskData);
+      
+      // Use the feature-specific task update endpoint with the correct path
+      const response = await fetch(`http://localhost:8080/api/features/${selectedFeature.id}/task/${editingTask.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(taskData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("API error response:", errorData);
+        throw new Error(errorData.error || 'Failed to update task');
+      }
+
+      const updatedTask = await response.json();
+      
+      // Update the task in the tasks list
+      setFeatureTasks(featureTasks.map(task => 
+        task.id === updatedTask.id ? updatedTask : task
+      ));
+      
+      // Close the form
+      handleEditTaskFormClose();
+    } catch (error) {
+      console.error('Error updating task:', error);
+      alert('Failed to update task. Please try again.');
+    }
+  };
+
+  const handleDeleteTask = (taskId: number) => {
+    console.log(`Delete button clicked for task ID: ${taskId}`);
+    if (taskId && !isNaN(taskId)) {
+      setConfirmDeleteTaskId(taskId);
+    } else {
+      console.error("Invalid task ID:", taskId);
+    }
+  };
+
+  const handleCancelDeleteTask = () => {
+    setConfirmDeleteTaskId(null);
+  };
+
+  const executeTaskDeletion = async (taskId: number) => {
+    if (!selectedFeature) {
+      console.error("No selected feature");
+      return;
+    }
+    
+    if (!taskId || isNaN(taskId)) {
+      console.error("Invalid task ID for deletion:", taskId);
+      return;
+    }
+    
+    try {
+      const url = `http://localhost:8080/api/features/${selectedFeature.id}/task/${taskId}`;
+      console.log(`Deleting task ID: ${taskId} from feature ID: ${selectedFeature.id}`);
+      console.log(`DELETE request to: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      console.log("DELETE response status:", response.status);
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to delete task';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+          console.error('Error response:', errorData);
+        } catch (parseError) {
+          console.error('Error parsing error response:', parseError);
+        }
+        throw new Error(errorMessage);
+      }
+      
+      console.log("Task deleted successfully");
+      
+      // Clear the confirmation
+      setConfirmDeleteTaskId(null);
+      
+      // Update the task count for this feature
+      if (selectedFeature && taskCounts[selectedFeature.id] > 0) {
+        setTaskCounts({
+          ...taskCounts,
+          [selectedFeature.id]: taskCounts[selectedFeature.id] - 1
+        });
+      }
+      
+      // Refresh the tasks list to ensure we're showing the current state
+      if (selectedFeature) {
+        await fetchTasksForFeature(selectedFeature.id);
+      }
+      
+      // Show success message
+      alert('Task deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      alert(`Failed to delete task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   if (loading) {
     return <div className={styles.loading}>
       <div className={styles.loadingIndicator}></div>
@@ -243,7 +517,6 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                   assignee_id: 0,
                   created_at: '',
                   updated_at: '',
-                  tag: 'p2',
                 });
                 setIsModalOpen(true);
               }}
@@ -289,7 +562,11 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
               </thead>
               <tbody>
                 {sortedFeatures.map((feature) => (
-                  <tr key={feature.id} className={styles[`row${feature.status}`]}>
+                  <tr 
+                    key={feature.id} 
+                    className={`${styles[`row${feature.status}`]} ${styles.clickableRow}`}
+                    onClick={() => handleFeatureClick(feature)}
+                  >
                     <td className={styles.titleCell}>
                       <div className={styles.titleMain}>
                         <div className={styles.titleHeader}>
@@ -302,23 +579,12 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                           >
                             {subFeatureCounts[feature.id] || 0} sub-features
                           </button>
+                          <div className={styles.taskCount} title="Number of tasks">
+                            {taskCounts[feature.id] || 0} tasks
+                          </div>
                         </div>
                         {feature.description && (
                           <div className={styles.description}>{feature.description}</div>
-                        )}
-                        {feature.tag && (
-                          <div style={{ marginTop: 4 }}>
-                            <span
-                              className={
-                                feature.tag === 'p0' ? styles.tagP0 : feature.tag === 'p1' ? styles.tagP1 : styles.tagP2
-                              }
-                              style={{ cursor: 'pointer' }}
-                              onClick={() => router.push(`/features/tags/${feature.tag}`)}
-                              title={`Show all features with tag ${feature.tag.toUpperCase()}`}
-                            >
-                              {feature.tag.toUpperCase()}
-                            </span>
-                          </div>
                         )}
                       </div>
                     </td>
@@ -347,7 +613,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                     <td className={styles.actionsCell}>
                       <button 
                         className={styles.editButton}
-                        onClick={() => handleEditFeature(feature)}
+                        onClick={(e) => handleEditFeature(feature, e)}
                       >
                         Edit
                       </button>
@@ -438,25 +704,25 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                     <div className={styles.formGroup}>
                       <label htmlFor="status">Status</label>
                       <select id="status" name="status" defaultValue="todo">
-                        <option value="todo">To Do</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="done">Done</option>
+                        <option key="todo" value="todo">To Do</option>
+                        <option key="in_progress" value="in_progress">In Progress</option>
+                        <option key="done" value="done">Done</option>
                       </select>
                     </div>
                     
                     <div className={styles.formGroup}>
                       <label htmlFor="priority">Priority</label>
                       <select id="priority" name="priority" defaultValue="medium">
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
+                        <option key="low" value="low">Low</option>
+                        <option key="medium" value="medium">Medium</option>
+                        <option key="high" value="high">High</option>
                       </select>
                     </div>
                     
                     <div className={styles.formGroup}>
                       <label htmlFor="assignee_id">Assignee</label>
                       <select id="assignee_id" name="assignee_id" defaultValue="">
-                        <option value="">Unassigned</option>
+                        <option key="unassigned" value="">Unassigned</option>
                         {users.map(user => (
                           <option key={user.id} value={user.id}>
                             {user.username}
@@ -479,6 +745,287 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                     </div>
                   </form>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isPopupOpen && selectedFeature && (
+          <div className={styles.modalOverlay} onClick={handlePopupClose}>
+            <div className={styles.featurePopup} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.popupHeader}>
+                <h3>{selectedFeature.title}</h3>
+                <button className={styles.closeButton} onClick={handlePopupClose}>×</button>
+              </div>
+              <div className={styles.popupContent}>
+                <div className={styles.featureDetails}>
+                  <p className={styles.featureId}>FP-{selectedFeature.id}</p>
+                  <div className={styles.featureStatusRow}>
+                    <span className={`${styles.statusBadge} ${getStatusClass(selectedFeature.status)}`}>
+                      {getStatusLabel(selectedFeature.status)}
+                    </span>
+                    <span className={`${styles.priorityBadge} ${getPriorityClass(selectedFeature.priority)}`}>
+                      {selectedFeature.priority.charAt(0).toUpperCase() + selectedFeature.priority.slice(1)} Priority
+                    </span>
+                  </div>
+                  <div className={styles.descriptionSection}>
+                    <h4>Description</h4>
+                    <p>{selectedFeature.description || 'No description provided.'}</p>
+                  </div>
+                  
+                  <div className={styles.tasksSection}>
+                    <div className={styles.tasksSectionHeader}>
+                      <h4>Tasks</h4>
+                      <button 
+                        className={styles.addTaskButton}
+                        onClick={handleAddTask}
+                      >
+                        Add Task
+                      </button>
+                    </div>
+                    {loadingTasks ? (
+                      <div className={styles.taskLoading}>Loading tasks...</div>
+                    ) : featureTasks.length > 0 ? (
+                      <ul className={styles.tasksList}>
+                        {featureTasks.map(task => {
+                          // Get task ID from either lowercase id or uppercase ID property
+                          const taskId = task.id !== undefined ? task.id : task.ID;
+                          return (
+                            <li key={taskId} className={styles.taskItem} onClick={(e) => e.stopPropagation()}>
+                              <div className={styles.taskHeader}>
+                                <span className={styles.taskName}>{task.task_name}</span>
+                                <span className={styles.taskType}>{task.task_type}</span>
+                              </div>
+                              {task.description && (
+                                <p className={styles.taskDescription}>{task.description}</p>
+                              )}
+                              <div className={styles.taskActions}>
+                                <button 
+                                  className={styles.editTaskButton}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditTask(task);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button 
+                                  className={styles.deleteTaskButton}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    console.log("Delete button clicked, task object:", JSON.stringify(task, null, 2));
+                                    
+                                    if (taskId !== undefined && taskId !== null) {
+                                      const numericTaskId = Number(taskId);
+                                      console.log("Task ID after Number conversion:", numericTaskId);
+                                      if (!isNaN(numericTaskId) && numericTaskId > 0) {
+                                        handleDeleteTask(numericTaskId);
+                                      } else {
+                                        console.error("Invalid task ID value:", taskId);
+                                      }
+                                    } else {
+                                      console.error("Cannot delete - task ID not found", task);
+                                    }
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                              {taskId === confirmDeleteTaskId && (
+                                <div className={styles.deleteConfirmation} onClick={(e) => e.stopPropagation()}>
+                                  <p>Are you sure you want to delete this task?</p>
+                                  <div className={styles.deleteActions}>
+                                    <button 
+                                      className={styles.cancelDeleteButton}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        console.log("Cancel delete button clicked");
+                                        handleCancelDeleteTask();
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button 
+                                      className={styles.confirmDeleteButton}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
+                                        
+                                        if (taskId !== undefined && taskId !== null) {
+                                          const numericTaskId = Number(taskId);
+                                          console.log("Task ID after Number conversion:", numericTaskId);
+                                          if (!isNaN(numericTaskId) && numericTaskId > 0) {
+                                            executeTaskDeletion(numericTaskId);
+                                          } else {
+                                            console.error("Invalid task ID value for deletion:", taskId);
+                                            alert("Cannot delete - invalid task ID");
+                                          }
+                                        } else {
+                                          console.error("Cannot delete - task ID not found", task);
+                                          alert("Cannot delete - task ID not found");
+                                        }
+                                      }}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <div className={styles.noTasks}>No tasks added yet</div>
+                    )}
+                  </div>
+                  
+                  <div className={styles.popupFooter}>
+                    <button 
+                      className={styles.editButton}
+                      onClick={() => {
+                        handleEditFeature(selectedFeature);
+                        handlePopupClose();
+                      }}
+                    >
+                      Edit Feature
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isTaskFormOpen && selectedFeature && (
+          <div className={styles.modalOverlay} onClick={handleTaskFormClose}>
+            <div className={styles.taskFormModal} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3>Add Task</h3>
+                <button className={styles.closeButton} onClick={handleTaskFormClose}>×</button>
+              </div>
+              <div className={styles.modalContent}>
+                <form onSubmit={handleTaskSubmit} className={styles.taskForm}>
+                  <div className={styles.formGroup}>
+                    <label htmlFor="task_name">Task Title*</label>
+                    <input
+                      type="text"
+                      id="task_name"
+                      name="task_name"
+                      value={newTask.task_name}
+                      onChange={handleTaskInputChange}
+                      required
+                      placeholder="Enter task title"
+                    />
+                  </div>
+                  
+                  <div className={styles.formGroup}>
+                    <label htmlFor="description">Description</label>
+                    <textarea
+                      id="description"
+                      name="description"
+                      value={newTask.description}
+                      onChange={handleTaskInputChange}
+                      rows={3}
+                      placeholder="Describe the task..."
+                    />
+                  </div>
+                  
+                  <div className={styles.formGroup}>
+                    <label htmlFor="task_type">Task Type*</label>
+                    <select
+                      id="task_type"
+                      name="task_type"
+                      value={newTask.task_type}
+                      onChange={handleTaskInputChange}
+                      required
+                    >
+                      <option key="ui" value="UI">UI</option>
+                      <option key="db" value="DB">DB</option>
+                      <option key="backend" value="Backend">Backend</option>
+                    </select>
+                  </div>
+                  
+                  <div className={styles.formActions}>
+                    <button 
+                      type="button" 
+                      className={styles.cancelButton}
+                      onClick={handleTaskFormClose}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className={styles.saveButton}>
+                      Create
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isEditTaskFormOpen && editingTask && selectedFeature && (
+          <div className={styles.modalOverlay} onClick={handleEditTaskFormClose}>
+            <div className={styles.taskFormModal} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3>Edit Task</h3>
+                <button className={styles.closeButton} onClick={handleEditTaskFormClose}>×</button>
+              </div>
+              <div className={styles.modalContent}>
+                <form onSubmit={handleEditTaskSubmit} className={styles.taskForm}>
+                  <div className={styles.formGroup}>
+                    <label htmlFor="task_name">Task Title*</label>
+                    <input
+                      type="text"
+                      id="task_name"
+                      name="task_name"
+                      value={editingTask.task_name}
+                      onChange={handleEditTaskInputChange}
+                      required
+                      placeholder="Enter task title"
+                    />
+                  </div>
+                  
+                  <div className={styles.formGroup}>
+                    <label htmlFor="description">Description</label>
+                    <textarea
+                      id="description"
+                      name="description"
+                      value={editingTask.description}
+                      onChange={handleEditTaskInputChange}
+                      rows={3}
+                      placeholder="Describe the task..."
+                    />
+                  </div>
+                  
+                  <div className={styles.formGroup}>
+                    <label htmlFor="task_type">Task Type*</label>
+                    <select
+                      id="task_type"
+                      name="task_type"
+                      value={editingTask.task_type}
+                      onChange={handleEditTaskInputChange}
+                      required
+                    >
+                      <option key="ui" value="UI">UI</option>
+                      <option key="db" value="DB">DB</option>
+                      <option key="backend" value="Backend">Backend</option>
+                    </select>
+                  </div>
+                  
+                  <div className={styles.formActions}>
+                    <button 
+                      type="button" 
+                      className={styles.cancelButton}
+                      onClick={handleEditTaskFormClose}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className={styles.saveButton}>
+                      Update
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
@@ -550,9 +1097,9 @@ const FeatureForm = ({ feature, users, onClose, onSubmit }: FeatureFormProps) =>
             onChange={handleChange}
             className={styles[`status${formData.status.charAt(0).toUpperCase() + formData.status.slice(1)}`]}
           >
-            <option value="todo">To Do</option>
-            <option value="in_progress">In Progress</option>
-            <option value="done">Done</option>
+            <option key="todo" value="todo">To Do</option>
+            <option key="in_progress" value="in_progress">In Progress</option>
+            <option key="done" value="done">Done</option>
           </select>
         </div>
         
@@ -565,9 +1112,9 @@ const FeatureForm = ({ feature, users, onClose, onSubmit }: FeatureFormProps) =>
             onChange={handleChange}
             className={styles[`priority${formData.priority.charAt(0).toUpperCase() + formData.priority.slice(1)}`]}
           >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
+            <option key="low" value="low">Low</option>
+            <option key="medium" value="medium">Medium</option>
+            <option key="high" value="high">High</option>
           </select>
         </div>
       </div>
@@ -580,7 +1127,7 @@ const FeatureForm = ({ feature, users, onClose, onSubmit }: FeatureFormProps) =>
           value={formData.assignee_id}
           onChange={handleChange}
         >
-          <option value={0}>Unassigned</option>
+          <option key="unassigned" value={0}>Unassigned</option>
           {users.map((user) => (
             <option key={user.id} value={user.id}>
               {user.username}

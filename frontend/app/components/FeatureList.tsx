@@ -17,6 +17,8 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sortField, setSortField] = useState<keyof Feature>('title');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,7 +40,20 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
     fetchData();
   }, [projectId]);
 
-  const handleEditFeature = (feature: Feature) => {
+  const handleFeatureClick = (feature: Feature) => {
+    setSelectedFeature(feature);
+    setIsPopupOpen(true);
+  };
+
+  const handlePopupClose = () => {
+    setIsPopupOpen(false);
+    setSelectedFeature(null);
+  };
+
+  const handleEditFeature = (feature: Feature, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
     setEditingFeature(feature);
     setIsModalOpen(true);
   };
@@ -205,7 +220,11 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
             </thead>
             <tbody>
               {sortedFeatures.map((feature) => (
-                <tr key={feature.id} className={styles[`row${feature.status}`]}>
+                <tr 
+                  key={feature.id} 
+                  className={`${styles[`row${feature.status}`]} ${styles.clickableRow}`}
+                  onClick={() => handleFeatureClick(feature)}
+                >
                   <td className={styles.titleCell}>
                     <div className={styles.titleRow}>
                       <div className={styles.titleText}>{feature.title}</div>
@@ -240,7 +259,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                   <td>
                     <button 
                       className={styles.editButton}
-                      onClick={() => handleEditFeature(feature)}
+                      onClick={(e) => handleEditFeature(feature, e)}
                     >
                       Edit
                     </button>
@@ -265,6 +284,45 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
               onClose={handleModalClose}
               onSubmit={editingFeature?.id ? handleSaveFeature : handleCreateFeature}
             />
+          </div>
+        </div>
+      )}
+
+      {isPopupOpen && selectedFeature && (
+        <div className={styles.modalOverlay} onClick={handlePopupClose}>
+          <div className={styles.featurePopup} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.popupHeader}>
+              <h3>{selectedFeature.title}</h3>
+              <button className={styles.closeButton} onClick={handlePopupClose}>×</button>
+            </div>
+            <div className={styles.popupContent}>
+              <div className={styles.featureDetails}>
+                <p className={styles.featureId}>FP-{selectedFeature.id}</p>
+                <div className={styles.featureStatusRow}>
+                  <span className={`${styles.statusBadge} ${getStatusClass(selectedFeature.status)}`}>
+                    {getStatusLabel(selectedFeature.status)}
+                  </span>
+                  <span className={`${styles.priorityBadge} ${getPriorityClass(selectedFeature.priority)}`}>
+                    {selectedFeature.priority.charAt(0).toUpperCase() + selectedFeature.priority.slice(1)} Priority
+                  </span>
+                </div>
+                <div className={styles.descriptionSection}>
+                  <h4>Description</h4>
+                  <p>{selectedFeature.description || 'No description provided.'}</p>
+                </div>
+                <div className={styles.popupFooter}>
+                  <button 
+                    className={styles.editButton}
+                    onClick={() => {
+                      handleEditFeature(selectedFeature);
+                      handlePopupClose();
+                    }}
+                  >
+                    Edit Feature
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

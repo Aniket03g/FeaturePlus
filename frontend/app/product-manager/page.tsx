@@ -13,8 +13,7 @@ const ProductManagerPage = () => {
     description: "",
     status: "todo",
     priority: "medium",
-    assignee_id: 0,
-    tag: "p2",
+    assignee_id: 0
   });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
@@ -58,8 +57,7 @@ const ProductManagerPage = () => {
         description: "",
         status: "todo",
         priority: "medium",
-        assignee_id: 0,
-        tag: "p2",
+        assignee_id: 0
       });
     } catch (err) {
       setError("Failed to create feature");
@@ -117,14 +115,6 @@ const ProductManagerPage = () => {
               {users.map((user) => (
                 <option key={user.id} value={user.id}>{user.username}</option>
               ))}
-            </select>
-          </div>
-          <div className={styles.formGroup}>
-            <label>Tag</label>
-            <select name="tag" value={formData.tag} onChange={handleChange} className={formData.tag === 'p0' ? styles.tagP0 : formData.tag === 'p1' ? styles.tagP1 : styles.tagP2} style={{ borderRadius: 8, fontWeight: 600 }}>
-              <option value="p0">P0 (Critical)</option>
-              <option value="p1">P1 (High)</option>
-              <option value="p2">P2 (Normal)</option>
             </select>
           </div>
           <div className={styles.formActions} style={{ marginTop: 24 }}>
