@@ -14,14 +14,14 @@ import (
 )
 
 func main() {
-	// Initialize DB
+	// Initialize DBcd b
 	db, err := database.InitDB()
 	if err != nil {
 		panic("failed to connect database")
 	}
 
 	// Migrate all schemas
-	if err := db.Migrate(&models.User{}, &models.Project{}, &models.Feature{}, &models.SubFeature{}); err != nil {
+	if err := db.Migrate(&models.User{}, &models.Project{}, &models.Feature{}, &models.SubFeature{}, &models.Task{}); err != nil {
 		panic("failed to migrate database: " + err.Error())
 	}
 
@@ -29,11 +29,13 @@ func main() {
 	userRepo := repositories.NewUserRepository(db.DB)
 	projectRepo := repositories.NewProjectRepository(db.DB)
 	featureRepo := repositories.NewFeatureRepository(db.DB)
+	taskRepo := repositories.NewTaskRepository(db.DB)
 
 	// Create handlers
 	userHandler := handlers.NewUserHandler(userRepo)
 	projectHandler := handlers.NewProjectHandler(projectRepo)
 	featureHandler := handlers.NewFeatureHandler(featureRepo)
+	taskHandler := handlers.NewTaskHandler(taskRepo)
 
 	router := gin.Default()
 
@@ -81,6 +83,21 @@ func main() {
 		featureRoutes.GET("/project/:project_id", featureHandler.GetProjectFeatures)
 		featureRoutes.PUT("/:id", featureHandler.UpdateFeature)
 		featureRoutes.DELETE("/:id", featureHandler.DeleteFeature)
+
+		// Feature-specific Task routes
+		featureRoutes.POST("/:id/tasks", taskHandler.CreateTaskForFeature)
+		featureRoutes.GET("/:id/tasks", taskHandler.GetTasksByFeature)
+		featureRoutes.PUT("/:id/task/:task_id", taskHandler.UpdateTaskForFeature)
+		featureRoutes.DELETE("/:id/task/:task_id", taskHandler.DeleteTaskForFeature)
+	}
+
+	// General task routes
+	taskRoutes := router.Group("/api/tasks")
+	{
+		taskRoutes.POST("", taskHandler.CreateTask)
+		taskRoutes.GET("/:id", taskHandler.GetTask)
+		taskRoutes.PUT("/:id", taskHandler.UpdateTask)
+		taskRoutes.DELETE("/:id", taskHandler.DeleteTask)
 	}
 
 	// Sub-feature routes
@@ -91,7 +108,7 @@ func main() {
 		subFeatureRoutes.GET("", handlers.GetSubFeaturesByFeature(db.DB))
 	}
 
-	// Health check endpoint
+	// Health check
 	router.GET("/api/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
@@ -99,31 +116,26 @@ func main() {
 		})
 	})
 
-	// Static files
-	// Serve static files from the frontend build directory
+	// Static frontend files
 	staticDir := "../frontend/.next"
 	router.Static("/static", filepath.Join(staticDir, "static"))
 	router.Static("/_next", filepath.Join(staticDir, "static"))
 
-	// Serve the index.html for any other route
+	// Handle unmatched routes (e.g., for client-side routing)
 	router.NoRoute(func(c *gin.Context) {
-		// If the request is for an API endpoint, return 404
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "API endpoint not found"})
 			return
 		}
 
-		// Try to serve other static files from the frontend directory
 		path := filepath.Join(staticDir, c.Request.URL.Path)
 		if _, err := os.Stat(path); err == nil {
 			c.File(path)
 			return
 		}
 
-		// Default to serving index.html for client-side routing
 		indexPath := filepath.Join(staticDir, "server", "app", "index.html")
 		if _, err := os.Stat(indexPath); os.IsNotExist(err) {
-			// If index.html doesn't exist in the expected location, try to find it
 			c.JSON(http.StatusNotFound, gin.H{"error": "Frontend build not found"})
 			return
 		}

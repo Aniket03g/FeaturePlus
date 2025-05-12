@@ -25,6 +25,10 @@ func (h *FeatureHandler) CreateFeature(c *gin.Context) {
 		return
 	}
 
+	// Convert string values to proper types
+	feature.Status = models.FeatureStatus(feature.Status)
+	feature.Priority = models.FeaturePriority(feature.Priority)
+
 	if !isValidStatus(feature.Status) || !isValidPriority(feature.Priority) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status or priority"})
 		return
@@ -86,6 +90,10 @@ func (h *FeatureHandler) UpdateFeature(c *gin.Context) {
 		return
 	}
 
+	// Convert string values to proper types
+	feature.Status = models.FeatureStatus(feature.Status)
+	feature.Priority = models.FeaturePriority(feature.Priority)
+
 	if !isValidStatus(feature.Status) || !isValidPriority(feature.Priority) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status or priority"})
 		return
@@ -130,19 +138,15 @@ func (h *FeatureHandler) DeleteFeature(c *gin.Context) {
 
 // GET /api/features?tag=p0
 func (h *FeatureHandler) GetAllFeatures(c *gin.Context) {
-	tag := c.Query("tag")
 	var features []models.Feature
 	var err error
 
-	if tag != "" {
-		features, err = h.repo.GetFeaturesByTag(tag)
-	} else {
-		features, err = h.repo.GetAllFeatures()
-	}
+	features, err = h.repo.GetAllFeatures()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusOK, features)
 }
 

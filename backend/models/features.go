@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type FeatureStatus string
@@ -18,16 +20,16 @@ const (
 )
 
 type Feature struct {
-	ID          int             `gorm:"primaryKey" json:"id"`
+	ID          uint            `gorm:"primaryKey" json:"id"`
 	ProjectID   int             `gorm:"not null;index" json:"project_id"`
-	Title       string          `gorm:"size:255;not null" json:"title"`
+	Title       string          `gorm:"type:varchar(255);not null" json:"title"`
 	Description string          `gorm:"type:text" json:"description"`
-	Status      FeatureStatus   `gorm:"type:varchar(20);not null" json:"status"`
-	Priority    FeaturePriority `gorm:"type:varchar(20);not null" json:"priority"`
-	Tag         string          `gorm:"type:varchar(10);not null;default:'p2'" json:"tag"`
-	AssigneeID  int             `gorm:"not null" json:"assignee_id"`
+	Status      FeatureStatus   `gorm:"type:varchar(50);not null;default:'todo'" json:"status"`
+	Priority    FeaturePriority `gorm:"type:varchar(50);not null;default:'medium'" json:"priority"`
+	AssigneeID  uint            `gorm:"default:0" json:"assignee_id"`
 	CreatedAt   time.Time       `json:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt  `gorm:"index" json:"-"`
 
 	// Associations
 	Project  Project `gorm:"foreignKey:ProjectID" json:"-"`
