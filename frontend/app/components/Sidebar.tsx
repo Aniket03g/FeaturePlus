@@ -10,7 +10,7 @@ interface SidebarProps {
 
 const Sidebar = ({ projectId, projectName }: SidebarProps) => {
   const pathname = usePathname();
-  const isProjectPage = pathname.includes('/projects/') && projectId;
+  const isProjectPage = pathname && pathname.includes('/projects/') && projectId;
 
   return (
     <div className={styles.sidebar}>
@@ -28,6 +28,9 @@ const Sidebar = ({ projectId, projectName }: SidebarProps) => {
             </li>
             <li className={pathname === `/projects/${projectId}/list` ? styles.active : ''}>
               <Link href={`/projects/${projectId}/list`}>List</Link>
+            </li>
+            <li className={pathname === `/projects/${projectId}/sub-features` ? styles.active : ''}>
+              <Link href={`/projects/${projectId}/sub-features`}>Sub-features</Link>
             </li>
             <li className={pathname === `/projects/${projectId}/settings` ? styles.active : ''}>
               <Link href={`/projects/${projectId}/settings`}>Settings</Link>

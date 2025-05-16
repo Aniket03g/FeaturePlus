@@ -12,6 +12,7 @@ type TaskRepository interface {
 	Delete(taskID uint) error
 	GetByID(taskID uint) (*models.Task, error)
 	GetByFeatureID(featureID uint) ([]models.Task, error)
+	GetBySubFeatureID(subFeatureID uint) ([]models.Task, error)
 }
 
 type taskRepository struct {
@@ -43,5 +44,11 @@ func (r *taskRepository) GetByID(taskID uint) (*models.Task, error) {
 func (r *taskRepository) GetByFeatureID(featureID uint) ([]models.Task, error) {
 	var tasks []models.Task
 	err := r.db.Unscoped().Where("feature_id = ?", featureID).Find(&tasks).Error
+	return tasks, err
+}
+
+func (r *taskRepository) GetBySubFeatureID(subFeatureID uint) ([]models.Task, error) {
+	var tasks []models.Task
+	err := r.db.Unscoped().Where("sub_feature_id = ?", subFeatureID).Find(&tasks).Error
 	return tasks, err
 }

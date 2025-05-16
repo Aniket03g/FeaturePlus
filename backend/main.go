@@ -3,6 +3,7 @@ package main
 import (
 	"FeaturePlus/database"
 	"FeaturePlus/handlers"
+	"FeaturePlus/middleware"
 	"FeaturePlus/models"
 	"FeaturePlus/repositories"
 	"FeaturePlus/routes"
@@ -59,7 +60,7 @@ func main() {
 	// Register auth routes
 	routes.RegisterAuthRoutes(router, db.DB)
 
-	// User routes
+	// User routes - not protected, admin only functions should be protected elsewhere
 	userRoutes := router.Group("/api/users")
 	{
 		userRoutes.GET("", userHandler.GetAllUsers)
@@ -69,8 +70,9 @@ func main() {
 		userRoutes.DELETE("/:id", userHandler.DeleteUser)
 	}
 
+	// Protected routes - requires authentication
 	// Project routes
-	projectRoutes := router.Group("/api/projects")
+	projectRoutes := router.Group("/api/projects", middleware.AuthMiddleware())
 	{
 		projectRoutes.POST("", projectHandler.CreateProject)
 		projectRoutes.GET("", projectHandler.GetAllProjects)
@@ -81,7 +83,7 @@ func main() {
 	}
 
 	// Feature routes
-	featureRoutes := router.Group("/api/features")
+	featureRoutes := router.Group("/api/features", middleware.AuthMiddleware())
 	{
 		featureRoutes.POST("", featureHandler.CreateFeature)
 		featureRoutes.GET("", featureHandler.GetAllFeatures)
@@ -89,6 +91,7 @@ func main() {
 		featureRoutes.GET("/project/:project_id", featureHandler.GetProjectFeatures)
 		featureRoutes.PUT("/:id", featureHandler.UpdateFeature)
 		featureRoutes.DELETE("/:id", featureHandler.DeleteFeature)
+		featureRoutes.GET("/:id/subfeatures", featureHandler.GetSubfeatures)
 
 		// Feature-specific Task routes
 		featureRoutes.POST("/:id/tasks", taskHandler.CreateTaskForFeature)
@@ -102,7 +105,7 @@ func main() {
 	}
 
 	// General task routes
-	taskRoutes := router.Group("/api/tasks")
+	taskRoutes := router.Group("/api/tasks", middleware.AuthMiddleware())
 	{
 		taskRoutes.POST("", taskHandler.CreateTask)
 		taskRoutes.GET("/:id", taskHandler.GetTask)
@@ -111,15 +114,23 @@ func main() {
 	}
 
 	// Sub-feature routes
-	subFeatureRoutes := router.Group("/api/sub-features")
+	subFeatureRoutes := router.Group("/api/sub-features", middleware.AuthMiddleware())
 	{
 		subFeatureRoutes.POST("", handlers.CreateSubFeature(db.DB))
 		subFeatureRoutes.PUT("/:id", handlers.UpdateSubFeature(db.DB))
 		subFeatureRoutes.GET("", handlers.GetSubFeaturesByFeature(db.DB))
+		subFeatureRoutes.GET("/project", handlers.GetSubFeaturesByProject(db.DB))
+		subFeatureRoutes.GET("/:id", handlers.GetSubFeatureDetail(db.DB))
+
+		// Sub-feature task routes
+		subFeatureRoutes.POST("/:id/tasks", taskHandler.CreateTaskForSubFeature)
+		subFeatureRoutes.GET("/:id/tasks", taskHandler.GetTasksBySubFeature)
+		subFeatureRoutes.PUT("/:id/task/:task_id", taskHandler.UpdateTaskForSubFeature)
+		subFeatureRoutes.DELETE("/:id/task/:task_id", taskHandler.DeleteTaskForSubFeature)
 	}
 
 	// Tag routes
-	tagRoutes := router.Group("/api/tags")
+	tagRoutes := router.Group("/api/tags", middleware.AuthMiddleware())
 	{
 		tagRoutes.GET("", tagHandler.GetAllTags)
 		tagRoutes.GET("/:tag_name/features", tagHandler.GetFeaturesByTag)

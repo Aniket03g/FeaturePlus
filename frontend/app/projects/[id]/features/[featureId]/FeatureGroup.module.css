@@ -1,0 +1,433 @@
+.container {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 50vh;
+}
+
+.loadingIndicator {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top-color: #3182ce;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error {
+  text-align: center;
+  padding: 2rem;
+  color: #e53e3e;
+  font-weight: 500;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.breadcrumbLink {
+  color: #4299e1;
+  text-decoration: none;
+}
+
+.breadcrumbLink:hover {
+  text-decoration: underline;
+}
+
+.breadcrumbSeparator {
+  margin: 0 0.5rem;
+  color: #a0aec0;
+}
+
+.breadcrumbCurrent {
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.addButton {
+  background-color: #3182ce;
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background-color 0.2s;
+}
+
+.addButton:hover {
+  background-color: #2c5282;
+}
+
+.featureGroupDetails {
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.featureGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.featureActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.viewTasksButton {
+  display: inline-flex;
+  align-items: center;
+  background-color: #ebf8ff;
+  color: #3182ce;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  border: 1px solid #bee3f8;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.viewTasksButton:hover {
+  background-color: #bee3f8;
+}
+
+.featureGroupTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.featurePrefix {
+  color: #718096;
+  font-size: 0.9em;
+  font-weight: 500;
+  background-color: #f7fafc;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  margin-right: 0.5rem;
+}
+
+.featureGroupDescription {
+  margin-top: 0.75rem;
+  margin-bottom: 1.5rem;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+.featureGroupMetadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.statusBadge, .priorityBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.statusTodo {
+  background-color: #e2e8f0;
+  color: #4a5568;
+}
+
+.statusInProgress {
+  background-color: #ebf8ff;
+  color: #2b6cb0;
+}
+
+.statusDone {
+  background-color: #f0fff4;
+  color: #2f855a;
+}
+
+.priorityLow {
+  background-color: #f7fafc;
+  color: #718096;
+}
+
+.priorityMedium {
+  background-color: #fffaf0;
+  color: #c05621;
+}
+
+.priorityHigh {
+  background-color: #fff5f5;
+  color: #c53030;
+}
+
+.featureTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.relatedFeaturesSection {
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+}
+
+.sectionTitle {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: #2d3748;
+}
+
+.addFeatureForm {
+  background-color: #f7fafc;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.addFeatureForm h3 {
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+  font-size: 1.125rem;
+  color: #2d3748;
+}
+
+.formGroup {
+  margin-bottom: 1rem;
+}
+
+.formRow {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.formRow .formGroup {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #4a5568;
+}
+
+.formGroup input, 
+.formGroup textarea, 
+.formGroup select {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  background-color: white;
+  color: #2d3748;
+}
+
+.formGroup input:focus, 
+.formGroup textarea:focus, 
+.formGroup select:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.cancelButton, 
+.submitButton {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+.cancelButton {
+  background-color: white;
+  color: #4a5568;
+  border: 1px solid #e2e8f0;
+}
+
+.cancelButton:hover {
+  background-color: #f7fafc;
+}
+
+.submitButton {
+  background-color: #3182ce;
+  color: white;
+  border: none;
+}
+
+.submitButton:hover {
+  background-color: #2c5282;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #718096;
+}
+
+.featuresTable {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.featuresTable table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.featuresTable th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #4a5568;
+  border-bottom: 2px solid #e2e8f0;
+  cursor: pointer;
+}
+
+.featuresTable th:hover {
+  color: #2b6cb0;
+}
+
+.featureRow {
+  border-bottom: 1px solid #edf2f7;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.featureRow:hover {
+  background-color: #f7fafc;
+}
+
+.featureRow td {
+  padding: 1rem;
+  vertical-align: top;
+}
+
+.featureTitle {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.featureName {
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.childCount {
+  font-size: 0.75rem;
+  color: #718096;
+}
+
+.featureDescription {
+  color: #718096;
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.taskCount {
+  display: inline-block;
+  margin-right: 0.5rem;
+  font-size: 0.75rem;
+  color: #4a5568;
+  background-color: #edf2f7;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+}
+
+.viewTasksLink {
+  font-size: 0.75rem;
+  color: #3182ce;
+  text-decoration: none;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  background-color: #ebf8ff;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.5rem;
+  transition: background-color 0.2s;
+  border: 1px solid #bee3f8;
+  cursor: pointer;
+}
+
+.viewTasksLink:hover {
+  background-color: #bee3f8;
+}
+
+.assignee {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.assigneeAvatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background-color: #4299e1;
+  color: white;
+  font-weight: 600;
+}
+
+.assigneeName {
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.unassigned {
+  color: #a0aec0;
+  font-size: 0.875rem;
+} 

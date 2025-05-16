@@ -39,7 +39,7 @@ const ProjectListPage = () => {
   return (
     <div className={styles.container}>
       <div className={styles.projectHeader}>
-        <h1>{project.name} Features</h1>
+        <h1>{project.name} Feature Groups</h1>
       </div>
       <div className={styles.projectContent}>
         <FeatureList projectId={id} onFeatureUpdated={fetchProject} />

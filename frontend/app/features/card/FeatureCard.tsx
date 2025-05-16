@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import styles from './FeatureCard.module.css';
 import { Feature } from '@/app/types';
+import TagList from '../components/TagList';
 
 interface FeatureCardProps {
   feature: Feature;
@@ -53,6 +54,13 @@ const FeatureCard = ({ feature, onEdit }: FeatureCardProps) => {
           {feature.priority.charAt(0).toUpperCase() + feature.priority.slice(1)}
         </div>
       </div>
+      
+      {/* Display tags below the title even when not expanded */}
+      {feature.tags && feature.tags.length > 0 && (
+        <div className={styles.tagsContainer}>
+          <TagList tags={feature.tags} />
+        </div>
+      )}
       
       {isExpanded && (
         <div className={styles.details}>

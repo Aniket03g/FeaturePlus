@@ -123,3 +123,92 @@ func GetSubFeaturesByFeature(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, subFeatures)
 	}
 }
+
+func GetSubFeaturesByProject(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		projectID := c.Query("project_id")
+		if projectID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Project ID is required"})
+			return
+		}
+
+		// Verify project exists
+		var project models.Project
+		if err := db.First(&project, projectID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify project"})
+			return
+		}
+
+		type SubFeatureWithFeatureInfo struct {
+			models.SubFeature
+			FeatureTitle string `json:"feature_title"`
+		}
+
+		var subFeatures []SubFeatureWithFeatureInfo
+
+		// Join with features to get both sub-features and their parent feature info
+		if err := db.Table("sub_features").
+			Select("sub_features.*, features.title as feature_title").
+			Joins("JOIN features ON sub_features.feature_id = features.id").
+			Where("features.project_id = ?", projectID).
+			Order("sub_features.created_at DESC").
+			Find(&subFeatures).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sub-features: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, subFeatures)
+	}
+}
+
+func GetSubFeatureDetail(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		if id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Sub-feature ID is required"})
+			return
+		}
+
+		// Get the sub-feature
+		var subFeature models.SubFeature
+		if err := db.First(&subFeature, id).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Sub-feature not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sub-feature"})
+			return
+		}
+
+		// Get the parent feature
+		var parentFeature models.Feature
+		if err := db.First(&parentFeature, subFeature.FeatureID).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Parent feature not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch parent feature"})
+			return
+		}
+
+		// Get related tasks
+		var tasks []models.Task
+		if err := db.Where("sub_feature_id = ?", id).Find(&tasks).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tasks"})
+			return
+		}
+
+		// Construct response
+		response := gin.H{
+			"sub_feature":    subFeature,
+			"parent_feature": gin.H{"id": parentFeature.ID, "title": parentFeature.Title},
+			"tasks":          tasks,
+		}
+
+		c.JSON(http.StatusOK, response)
+	}
+}

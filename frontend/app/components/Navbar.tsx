@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import API from '@/app/api/api';
 import styles from './Navbar.module.css';
 
 interface UserData {
@@ -36,17 +37,13 @@ const Navbar = () => {
         }
         
         // Always validate with the server
-        const response = await fetch('http://localhost:8080/api/auth/me', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        if (response.ok) {
-          const userData = await response.json();
+        try {
+          // Use API client instead of fetch
+          const response = await API.get('/auth/me');
+          const userData = response.data;
           setUser(userData);
           localStorage.setItem('user', JSON.stringify(userData));
-        } else {
+        } catch (error) {
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           setUser(null);

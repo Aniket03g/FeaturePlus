@@ -43,4 +43,12 @@ API.interceptors.response.use(
   }
 );
 
+// Add endpoints for tags
+const TagsAPI = {
+  getAll: () => API.get('/tags'),
+  getByName: (tagName: string) => API.get(`/tags/${encodeURIComponent(tagName)}`),
+  getFeaturesByTag: (tagName: string) => API.get(`/tags/${encodeURIComponent(tagName)}/features`),
+};
+
+export { TagsAPI };
 export default API;

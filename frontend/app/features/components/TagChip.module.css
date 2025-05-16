@@ -1,0 +1,18 @@
+.tagChip {
+  display: inline-flex;
+  align-items: center;
+  background-color: #f0f0f0;
+  color: #333;
+  padding: 4px 8px;
+  border-radius: 16px;
+  font-size: 12px;
+  margin-right: 4px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-weight: 500;
+}
+
+.tagChip:hover {
+  background-color: #e0e0e0;
+} 

@@ -20,7 +20,7 @@ func (r *FeatureRepository) CreateFeature(feature *models.Feature) error {
 
 func (r *FeatureRepository) GetFeatureByID(id int) (*models.Feature, error) {
 	var feature models.Feature
-	if err := r.db.Preload("Project").Preload("Assignee").Preload("Tags").First(&feature, id).Error; err != nil {
+	if err := r.db.Preload("Project").Preload("Assignee").Preload("Tags").Preload("ParentFeature").First(&feature, id).Error; err != nil {
 		return nil, err
 	}
 	return &feature, nil
@@ -28,7 +28,25 @@ func (r *FeatureRepository) GetFeatureByID(id int) (*models.Feature, error) {
 
 func (r *FeatureRepository) GetFeaturesByProject(projectID int) ([]models.Feature, error) {
 	var features []models.Feature
-	if err := r.db.Where("project_id = ?", projectID).Preload("Assignee").Preload("Tags").Find(&features).Error; err != nil {
+	if err := r.db.Where("project_id = ?", projectID).Preload("Assignee").Preload("Tags").Preload("ParentFeature").Find(&features).Error; err != nil {
+		return nil, err
+	}
+	return features, nil
+}
+
+// GetSubfeaturesByParentID gets all features that have a specific parent feature ID
+func (r *FeatureRepository) GetSubfeaturesByParentID(parentID uint) ([]models.Feature, error) {
+	var features []models.Feature
+	if err := r.db.Where("parent_feature_id = ?", parentID).Preload("Assignee").Preload("Tags").Find(&features).Error; err != nil {
+		return nil, err
+	}
+	return features, nil
+}
+
+// GetRootFeaturesByProject gets all top-level features (without parent) for a project
+func (r *FeatureRepository) GetRootFeaturesByProject(projectID int) ([]models.Feature, error) {
+	var features []models.Feature
+	if err := r.db.Where("project_id = ? AND parent_feature_id IS NULL", projectID).Preload("Assignee").Preload("Tags").Find(&features).Error; err != nil {
 		return nil, err
 	}
 	return features, nil
@@ -44,7 +62,7 @@ func (r *FeatureRepository) DeleteFeature(id int) error {
 
 func (r *FeatureRepository) GetAllFeatures() ([]models.Feature, error) {
 	var features []models.Feature
-	if err := r.db.Preload("Assignee").Preload("Tags").Find(&features).Error; err != nil {
+	if err := r.db.Preload("Assignee").Preload("Tags").Preload("ParentFeature").Find(&features).Error; err != nil {
 		return nil, err
 	}
 	return features, nil

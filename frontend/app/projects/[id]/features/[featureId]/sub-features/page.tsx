@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import API from '@/app/api/api';
 import type { Feature, User } from '@/app/types';
@@ -9,8 +9,9 @@ import styles from './SubFeatures.module.css';
 
 export default function SubFeaturesPage() {
   const params = useParams();
-  const projectId = params.id as string;
-  const featureId = params.featureId as string;
+  const projectId = params?.id as string;
+  const featureId = params?.featureId as string;
+  const router = useRouter();
   
   const [feature, setFeature] = useState<Feature | null>(null);
   const [subFeatures, setSubFeatures] = useState<SubFeature[]>([]);
@@ -31,12 +32,12 @@ export default function SubFeaturesPage() {
         setLoading(true);
         const [featureRes, subFeaturesRes, usersRes] = await Promise.all([
           API.get(`/features/${featureId}`),
-          fetch(`http://localhost:8080/api/sub-features?feature_id=${featureId}`).then(res => res.json()),
+          API.get(`/sub-features?feature_id=${featureId}`),
           API.get('/users')
         ]);
         
         setFeature(featureRes.data);
-        setSubFeatures(subFeaturesRes);
+        setSubFeatures(subFeaturesRes.data);
         setUsers(usersRes.data);
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -59,20 +60,12 @@ export default function SubFeaturesPage() {
   const handleSubmitSubFeature = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:8080/api/sub-features', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...subFeatureForm,
-          feature_id: Number(featureId)
-        }),
+      const response = await API.post('/sub-features', {
+        ...subFeatureForm,
+        feature_id: Number(featureId)
       });
 
-      if (!response.ok) throw new Error('Failed to create sub-feature');
-      
-      const newSubFeature = await response.json();
+      const newSubFeature = response.data;
       setSubFeatures([...subFeatures, newSubFeature]);
       setIsAddingSubFeature(false);
       setSubFeatureForm({

@@ -126,10 +126,16 @@ func (h *TagHandler) UpdateFeatureTags(c *gin.Context) {
 		return
 	}
 
-	// Default to user ID 1 for now
-	const currentUserID = 1
+	// Get the current user ID from the context
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
 
-	if err := h.tagRepo.UpdateFeatureTags(uint(featureID), uint(currentUserID), requestBody.Tags); err != nil {
+	currentUserID := userID.(uint)
+
+	if err := h.tagRepo.UpdateFeatureTags(uint(featureID), currentUserID, requestBody.Tags); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update tags"})
 		return
 	}

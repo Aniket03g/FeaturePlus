@@ -203,20 +203,40 @@
   font-weight: 500;
   color: #2d3748;
   font-size: 1rem;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+  transition: color 0.2s;
 }
 
-.featureId {
+.featureTitle:hover {
+  color: #4f46e5;
+  text-decoration: underline;
+}
+
+.featureId, .taskCount {
   font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  background-color: #f3f4f6;
+  padding: 0.35rem 0.5rem;
   border-radius: 4px;
   color: #6b7280;
   white-space: nowrap;
   font-weight: 500;
-  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  min-width: 45px;
+  text-align: center;
+  margin-right: 6px;
+}
+
+.featureId {
+  background-color: #f3f4f6;
+}
+
+.taskCount {
+  background-color: #eef2ff;
+  color: #4f46e5;
 }
 
 .description {
@@ -1064,4 +1084,239 @@
 
 .confirmDeleteButton:hover {
   background-color: #c53030;
+}
+
+.formHelp {
+  display: block;
+  font-size: 12px;
+  color: #718096;
+  margin-top: 4px;
+}
+
+.featureTags {
+  margin-top: 8px;
+}
+
+.featureInfo {
+  display: flex;
+  flex-direction: column;
+}
+
+.featureMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.featureDescription {
+  font-size: 12px;
+  color: #666;
+  margin-left: 4px;
+}
+
+.actionButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: #f3f4f6;
+  border: none;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.actionButton:hover {
+  background-color: #e5e7eb;
+  color: #4f46e5;
+  transform: translateY(-1px);
+}
+
+.actionButton svg {
+  width: 16px;
+  height: 16px;
+}
+
+.existingTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.existingTag {
+  display: inline-flex;
+  align-items: center;
+  background-color: #f0f0f0;
+  color: #333;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.removeTagButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.removeTagButton:hover {
+  color: #e53e3e;
+  background-color: rgba(229, 62, 62, 0.1);
+}
+
+.featureRow {
+  cursor: default;
+}
+
+.tagInputContainer {
+  position: relative;
+  width: 100%;
+}
+
+.tagSuggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
+  background-color: white;
+  border: 1px solid #e2e8f0;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+}
+
+.tagSuggestion {
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.tagSuggestion:hover {
+  background-color: #f7fafc;
+}
+
+/* Add new styles for the parent-child relationship */
+.parentFeature {
+  margin-left: 5px;
+  font-size: 0.8rem;
+  color: #666;
+  font-style: italic;
+}
+
+/* Filter controls */
+.filterControls {
+  display: flex;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.filterButton {
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  padding: 6px 12px;
+  border-radius: 4px;
+  margin-right: 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.filterButton:hover {
+  background-color: #e5e5e5;
+}
+
+.activeFilter {
+  background-color: #3182ce;
+  color: white;
+  border-color: #3182ce;
+}
+
+.activeFilter:hover {
+  background-color: #2c5282;
+}
+
+.parentFeatureSection {
+  margin-top: 1rem;
+  border-top: 1px solid #eee;
+  padding-top: 1rem;
+}
+
+.parentFeatureSection h4 {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #666;
+}
+
+.parentFeatureId {
+  background-color: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  margin-right: 8px;
+  color: #666;
+}
+
+.parentFeatureTitle {
+  font-weight: 500;
+}
+
+.childFeatureCount {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 0.75rem;
+  color: #4a5568;
+  background-color: #edf2f7;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.childFeaturesSection {
+  margin-top: 1rem;
+  border-top: 1px solid #eee;
+  padding-top: 1rem;
+}
+
+.childFeaturesSection h4 {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #666;
+}
+
+.viewSubfeaturesButton {
+  padding: 6px 12px;
+  background-color: #f3f4f6;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.viewSubfeaturesButton:hover {
+  background-color: #e5e5e5;
 } 

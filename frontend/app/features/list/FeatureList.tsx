@@ -1,11 +1,21 @@
 "use client";
-import { useState, useEffect } from 'react';
-import API from '@/app/api/api';
+import { useState, useEffect, useMemo } from 'react';
+import API, { TagsAPI } from '@/app/api/api';
 import type { Feature, User } from '@/app/types';
 import { SubFeature } from '@/app/types/subfeature';
 import { Task } from '@/app/types/task';
 import styles from './FeatureList.module.css';
 import { useRouter } from 'next/navigation';
+import TagList from '../components/TagList';
+
+// Extend the Feature interface to include the parent_feature_id until it's properly updated in the types file
+declare module '@/app/types' {
+  interface Feature {
+    parent_feature_id?: number | null;
+    parent_feature?: Feature;
+    tags_input?: string;
+  }
+}
 
 interface FeatureListProps {
   projectId: string | number;
@@ -43,6 +53,8 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isEditTaskFormOpen, setIsEditTaskFormOpen] = useState(false);
   const [confirmDeleteTaskId, setConfirmDeleteTaskId] = useState<number | null>(null);
+  const [filterType, setFilterType] = useState<'all' | 'root' | 'sub'>('root');
+  const [childFeatureCounts, setChildFeatureCounts] = useState<Record<number, number>>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,21 +70,16 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
         // Fetch sub-feature counts for each feature
         const counts: Record<number, number> = {};
         const taskCounts: Record<number, number> = {};
+        const childFeatureCounts: Record<number, number> = {};
         await Promise.all(
           featuresRes.data.map(async (feature: Feature) => {
             try {
-              const subFeaturesResponse = await fetch(`http://localhost:8080/api/sub-features?feature_id=${feature.id}`);
-              if (subFeaturesResponse.ok) {
-                const subFeatures = await subFeaturesResponse.json();
-                counts[feature.id] = subFeatures.length;
-              }
+              const subFeaturesResponse = await API.get(`/sub-features?feature_id=${feature.id}`);
+              counts[feature.id] = subFeaturesResponse.data.length;
               
               // Fetch task counts for each feature
-              const tasksResponse = await fetch(`http://localhost:8080/api/features/${feature.id}/tasks`);
-              if (tasksResponse.ok) {
-                const tasks = await tasksResponse.json();
-                taskCounts[feature.id] = tasks.length;
-              }
+              const tasksResponse = await API.get(`/features/${feature.id}/tasks`);
+              taskCounts[feature.id] = tasksResponse.data.length;
             } catch (error) {
               console.error(`Error fetching data for feature ${feature.id}:`, error);
               counts[feature.id] = 0;
@@ -82,6 +89,17 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
         );
         setSubFeatureCounts(counts);
         setTaskCounts(taskCounts);
+
+        // First pass to collect all features
+        const allFeatures = featuresRes.data as Feature[];
+        
+        // Second pass to count child features
+        allFeatures.forEach(feature => {
+          if (feature.parent_feature_id) {
+            const parentId = feature.parent_feature_id;
+            childFeatureCounts[parentId] = (childFeatureCounts[parentId] || 0) + 1;
+          }
+        });
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -92,29 +110,66 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
     fetchData();
   }, [projectId]);
 
+  // Function to fetch features and update state
+  const fetchFeatures = async () => {
+    try {
+      const featuresRes = await API.get(`/features/project/${projectId}`);
+      setFeatures(featuresRes.data);
+      
+      // Fetch sub-feature counts for each feature
+      const counts: Record<number, number> = {};
+      const taskCounts: Record<number, number> = {};
+      const childFeatureCounts: Record<number, number> = {};
+      
+      // First pass to collect all features
+      const allFeatures = featuresRes.data as Feature[];
+      
+      // Second pass to count child features
+      allFeatures.forEach(feature => {
+        if (feature.parent_feature_id) {
+          const parentId = feature.parent_feature_id;
+          childFeatureCounts[parentId] = (childFeatureCounts[parentId] || 0) + 1;
+        }
+      });
+      
+      await Promise.all(
+        featuresRes.data.map(async (feature: Feature) => {
+          try {
+            // Use API client instead of fetch
+            const subFeaturesResponse = await API.get(`/sub-features?feature_id=${feature.id}`);
+            counts[feature.id] = subFeaturesResponse.data.length;
+            
+            // Fetch task counts for each feature
+            const tasksResponse = await API.get(`/features/${feature.id}/tasks`);
+            taskCounts[feature.id] = tasksResponse.data.length;
+          } catch (error) {
+            console.error(`Error fetching data for feature ${feature.id}:`, error);
+            counts[feature.id] = 0;
+            taskCounts[feature.id] = 0;
+          }
+        })
+      );
+      
+      setSubFeatureCounts(counts);
+      setTaskCounts(taskCounts);
+      setChildFeatureCounts(childFeatureCounts);
+    } catch (error) {
+      console.error('Error fetching features:', error);
+    }
+  };
+
   const handleFeatureClick = async (feature: Feature) => {
-    setSelectedFeature(feature);
-    setIsPopupOpen(true);
-    
-    // Reset any tasks-related state
-    setConfirmDeleteTaskId(null);
-    
-    // Fetch tasks for this feature
-    await fetchTasksForFeature(feature.id);
+    // Navigate to the feature details page where all related features will be displayed
+    router.push(`/projects/${projectId}/features/${feature.id}`);
   };
   
   const fetchTasksForFeature = async (featureId: number) => {
     setLoadingTasks(true);
     try {
-      const response = await fetch(`http://localhost:8080/api/features/${featureId}/tasks`);
-      if (response.ok) {
-        const tasks = await response.json();
-        console.log(`Fetched ${tasks.length} tasks for feature ${featureId}`, tasks);
-        setFeatureTasks(tasks);
-      } else {
-        console.error('Failed to fetch tasks for feature:', response.statusText);
-        setFeatureTasks([]);
-      }
+      // Use API client instead of fetch
+      const response = await API.get(`/features/${featureId}/tasks`);
+      console.log(`Fetched ${response.data.length} tasks for feature ${featureId}`, response.data);
+      setFeatureTasks(response.data);
     } catch (error) {
       console.error('Error fetching tasks:', error);
       setFeatureTasks([]);
@@ -144,38 +199,51 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
 
   const handleSaveFeature = async (updatedFeature: Feature) => {
     try {
-      await API.put(`/features/${updatedFeature.id}`, updatedFeature);
-      setFeatures(
-        features.map((f) => (f.id === updatedFeature.id ? updatedFeature : f))
-      );
+      // Include tags_input in the update data
+      const updateData = {
+        ...updatedFeature,
+        tags_input: updatedFeature.tags_input || ''
+      };
+      
+      console.log("Updating feature with data:", updateData);
+      
+      // Use API client instead of fetch
+      await API.put(`/features/${updatedFeature.id}`, updateData);
+
+      await fetchFeatures();
       handleModalClose();
       onFeatureUpdated();
     } catch (error) {
       console.error('Error updating feature:', error);
+      alert('Failed to update feature. Please try again.');
     }
   };
 
-  const handleCreateFeature = async (newFeature: Omit<Feature, 'id' | 'created_at' | 'updated_at'>) => {
+  const handleCreateFeature = async (newFeature: Feature) => {
     try {
       // Create a properly structured object for the backend
       const submitData = {
         project_id: Number(projectId),
+        parent_feature_id: newFeature.parent_feature_id,
         title: newFeature.title,
         description: newFeature.description,
         status: newFeature.status,
         priority: newFeature.priority,
-        assignee_id: newFeature.assignee_id || 0
+        assignee_id: newFeature.assignee_id || 0,
+        tags_input: newFeature.tags_input || ''
       };
       
       console.log("Submitting feature data:", submitData);
       
+      // Use API client instead of fetch to ensure auth headers are included
       const response = await API.post('/features', submitData);
-      setFeatures([...features, response.data]);
+
+      await fetchFeatures();
       handleModalClose();
       onFeatureUpdated();
     } catch (error) {
       console.error('Error creating feature:', error);
-      alert('Failed to create feature. Please check the console for details.');
+      alert('Failed to create feature. Please try again.');
     }
   };
 
@@ -237,20 +305,13 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
     if (!featureId) return;
     
     try {
-      const response = await fetch('http://localhost:8080/api/sub-features', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...subFeature,
-          feature_id: featureId,
-        }),
+      // Use API client instead of fetch to ensure auth headers are included
+      const response = await API.post('/sub-features', {
+        ...subFeature,
+        feature_id: featureId,
       });
-
-      if (!response.ok) throw new Error('Failed to create sub-feature');
       
-      const newSubFeature = await response.json();
+      const newSubFeature = response.data;
       
       // Update sub-features list if we're viewing them
       if (selectedFeatureId === featureId) {
@@ -273,7 +334,22 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
     }
   };
 
-  const sortedFeatures = [...features].sort((a, b) => {
+  const handleFilterChange = (type: 'all' | 'root' | 'sub') => {
+    setFilterType(type);
+  };
+
+  const filteredFeatures = useMemo(() => {
+    switch (filterType) {
+      case 'root':
+        return features.filter(feature => !feature.parent_feature_id);
+      case 'sub':
+        return features.filter(feature => feature.parent_feature_id !== null);
+      default:
+        return features;
+    }
+  }, [features, filterType]);
+  
+  const sortedFeatures = [...filteredFeatures].sort((a, b) => {
     const aValue = a[sortField];
     const bValue = b[sortField];
     
@@ -311,30 +387,19 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
     if (!selectedFeature) return;
     
     try {
+      // Make sure all required fields are included and properly formatted
       const taskData = {
         task_name: newTask.task_name,
-        description: newTask.description,
+        description: newTask.description || "",
         task_type: newTask.task_type,
-        feature_id: selectedFeature.id,
-        created_by_user: 1 // This should ideally be the current user's ID
+        feature_id: Number(selectedFeature.id) // Ensure feature_id is a number
       };
       
       console.log("Creating task with data:", taskData);
       
-      const response = await fetch(`http://localhost:8080/api/features/${selectedFeature.id}/tasks`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(taskData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to create task');
-      }
-
-      const createdTask = await response.json();
+      // Use API client instead of fetch to ensure auth headers are included
+      const response = await API.post(`/features/${selectedFeature.id}/tasks`, taskData);
+      const createdTask = response.data;
       
       // Add the new task to the tasks list
       setFeatureTasks([...featureTasks, createdTask]);
@@ -380,28 +445,15 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
         task_name: editingTask.task_name,
         description: editingTask.description || "",
         task_type: editingTask.task_type,
-        feature_id: Number(selectedFeature.id),
-        created_by_user: Number(editingTask.created_by_user) || 1
+        feature_id: Number(selectedFeature.id)
+        // No need to specify created_by_user as the backend will handle it
       };
       
       console.log("Updating task with data:", taskData);
       
-      // Use the feature-specific task update endpoint with the correct path
-      const response = await fetch(`http://localhost:8080/api/features/${selectedFeature.id}/task/${editingTask.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(taskData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error("API error response:", errorData);
-        throw new Error(errorData.error || 'Failed to update task');
-      }
-
-      const updatedTask = await response.json();
+      // Use API client instead of fetch
+      const response = await API.put(`/features/${selectedFeature.id}/task/${editingTask.id}`, taskData);
+      const updatedTask = response.data;
       
       // Update the task in the tasks list
       setFeatureTasks(featureTasks.map(task => 
@@ -441,30 +493,12 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
     }
     
     try {
-      const url = `http://localhost:8080/api/features/${selectedFeature.id}/task/${taskId}`;
+      const url = `/features/${selectedFeature.id}/task/${taskId}`;
       console.log(`Deleting task ID: ${taskId} from feature ID: ${selectedFeature.id}`);
       console.log(`DELETE request to: ${url}`);
       
-      const response = await fetch(url, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      console.log("DELETE response status:", response.status);
-
-      if (!response.ok) {
-        let errorMessage = 'Failed to delete task';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-          console.error('Error response:', errorData);
-        } catch (parseError) {
-          console.error('Error parsing error response:', parseError);
-        }
-        throw new Error(errorMessage);
-      }
+      // Use API client instead of fetch
+      await API.delete(url);
       
       console.log("Task deleted successfully");
       
@@ -510,6 +544,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                 setEditingFeature({
                   id: 0,
                   project_id: Number(projectId),
+                  parent_feature_id: null,
                   title: '',
                   description: '',
                   status: 'todo',
@@ -521,26 +556,20 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                 setIsModalOpen(true);
               }}
             >
-              <span className={styles.plusIcon}>+</span> Add Feature
-            </button>
-            <button 
-              className={styles.createSubFeatureButton}
-              onClick={() => setShowGlobalSubFeatureForm(true)}
-            >
-              <span className={styles.plusIcon}>+</span> Add Sub-feature
+              <span className={styles.plusIcon}>+</span> Add Feature Group
             </button>
           </div>
         </div>
 
         <div className={styles.tableHeader}>
-          <h2>Features</h2>
+          <h2>Feature Groups</h2>
         </div>
 
         {features.length === 0 ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>🔍</div>
-            <p className={styles.emptyTitle}>No features found</p>
-            <p className={styles.emptyMessage}>Get started by adding your first feature</p>
+            <p className={styles.emptyTitle}>No feature groups found</p>
+            <p className={styles.emptyMessage}>Get started by adding your first feature group</p>
           </div>
         ) : (
           <div className={styles.tableContainer}>
@@ -548,7 +577,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
               <thead>
                 <tr>
                   <th className={styles.titleCell} onClick={() => handleSort('title')}>
-                    Title {sortField === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    Feature Group {sortField === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
                   </th>
                   <th className={styles.statusCell} onClick={() => handleSort('status')}>
                     Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
@@ -564,44 +593,58 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                 {sortedFeatures.map((feature) => (
                   <tr 
                     key={feature.id} 
-                    className={`${styles[`row${feature.status}`]} ${styles.clickableRow}`}
-                    onClick={() => handleFeatureClick(feature)}
+                    className={styles.featureRow}
                   >
                     <td className={styles.titleCell}>
-                      <div className={styles.titleMain}>
-                        <div className={styles.titleHeader}>
-                          <div className={styles.featureTitle}>{feature.title}</div>
-                          <div className={styles.featureId}>FP-{feature.id}</div>
-                          <button
-                            className={styles.subFeatureButton}
-                            onClick={(e) => handleNavigateToSubFeatures(feature.id, e)}
-                            title="View sub-features"
-                          >
-                            {subFeatureCounts[feature.id] || 0} sub-features
-                          </button>
-                          <div className={styles.taskCount} title="Number of tasks">
-                            {taskCounts[feature.id] || 0} tasks
-                          </div>
+                      <div className={styles.featureInfo}>
+                        <span className={styles.featureTitle}>
+                          <span className={styles.featurePrefix}>FP-{feature.id}</span>{' '}
+                          <span onClick={() => handleFeatureClick(feature)} className={styles.clickableTitle}>
+                            {feature.title}
+                          </span>
+                        </span>
+                        <div className={styles.featureMeta}>
+                          {childFeatureCounts[feature.id] > 0 && (
+                            <span className={styles.childFeatureCount}>
+                              {childFeatureCounts[feature.id]} related feature{childFeatureCounts[feature.id] !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                          {taskCounts[feature.id] !== undefined && (
+                            <span className={styles.taskCount}>
+                              {taskCounts[feature.id]} task{taskCounts[feature.id] !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                          {feature.description && (
+                            <span className={styles.featureDescription}>
+                              {feature.description.length > 50
+                                ? `${feature.description.substring(0, 50)}...`
+                                : feature.description}
+                            </span>
+                          )}
                         </div>
-                        {feature.description && (
-                          <div className={styles.description}>{feature.description}</div>
+                        {/* Display tags */}
+                        {feature.tags && feature.tags.length > 0 && (
+                          <div className={styles.featureTags}>
+                            <TagList tags={feature.tags} navigateOnClick={true} />
+                          </div>
                         )}
                       </div>
                     </td>
                     <td className={styles.statusCell}>
-                      <span className={`${styles.statusBadge} ${getStatusClass(feature.status)}`}>
-                        {getStatusLabel(feature.status)}
+                      <span className={`${styles.statusBadge} ${styles[`status${feature.status.charAt(0).toUpperCase() + feature.status.slice(1)}`]}`}>
+                        {feature.status === 'in_progress' ? 'In Progress' : 
+                        feature.status.charAt(0).toUpperCase() + feature.status.slice(1)}
                       </span>
                     </td>
                     <td className={styles.priorityCell}>
-                      <span className={`${styles.priorityBadge} ${getPriorityClass(feature.priority)}`}>
+                      <span className={`${styles.priorityBadge} ${styles[`priority${feature.priority.charAt(0).toUpperCase() + feature.priority.slice(1)}`]}`}>
                         {feature.priority.charAt(0).toUpperCase() + feature.priority.slice(1)}
                       </span>
                     </td>
                     <td className={styles.assigneeCell}>
                       {feature.assignee ? (
                         <div className={styles.assignee}>
-                          <span className={styles.avatar}>
+                          <span className={styles.assigneeAvatar}>
                             {feature.assignee.username.charAt(0).toUpperCase()}
                           </span>
                           <span className={styles.assigneeName}>{feature.assignee.username}</span>
@@ -611,12 +654,21 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                       )}
                     </td>
                     <td className={styles.actionsCell}>
-                      <button 
-                        className={styles.editButton}
-                        onClick={(e) => handleEditFeature(feature, e)}
-                      >
-                        Edit
-                      </button>
+                      <div className={styles.actionButtons}>
+                        <button
+                          className={styles.actionButton}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditFeature(feature);
+                          }}
+                          title="Edit Feature"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -635,6 +687,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
               <FeatureForm 
                 feature={editingFeature}
                 users={users}
+                features={features}
                 onClose={handleModalClose}
                 onSubmit={editingFeature?.id ? handleSaveFeature : handleCreateFeature}
               />
@@ -744,153 +797,6 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                       </button>
                     </div>
                   </form>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isPopupOpen && selectedFeature && (
-          <div className={styles.modalOverlay} onClick={handlePopupClose}>
-            <div className={styles.featurePopup} onClick={(e) => e.stopPropagation()}>
-              <div className={styles.popupHeader}>
-                <h3>{selectedFeature.title}</h3>
-                <button className={styles.closeButton} onClick={handlePopupClose}>×</button>
-              </div>
-              <div className={styles.popupContent}>
-                <div className={styles.featureDetails}>
-                  <p className={styles.featureId}>FP-{selectedFeature.id}</p>
-                  <div className={styles.featureStatusRow}>
-                    <span className={`${styles.statusBadge} ${getStatusClass(selectedFeature.status)}`}>
-                      {getStatusLabel(selectedFeature.status)}
-                    </span>
-                    <span className={`${styles.priorityBadge} ${getPriorityClass(selectedFeature.priority)}`}>
-                      {selectedFeature.priority.charAt(0).toUpperCase() + selectedFeature.priority.slice(1)} Priority
-                    </span>
-                  </div>
-                  <div className={styles.descriptionSection}>
-                    <h4>Description</h4>
-                    <p>{selectedFeature.description || 'No description provided.'}</p>
-                  </div>
-                  
-                  <div className={styles.tasksSection}>
-                    <div className={styles.tasksSectionHeader}>
-                      <h4>Tasks</h4>
-                      <button 
-                        className={styles.addTaskButton}
-                        onClick={handleAddTask}
-                      >
-                        Add Task
-                      </button>
-                    </div>
-                    {loadingTasks ? (
-                      <div className={styles.taskLoading}>Loading tasks...</div>
-                    ) : featureTasks.length > 0 ? (
-                      <ul className={styles.tasksList}>
-                        {featureTasks.map(task => {
-                          // Get task ID from either lowercase id or uppercase ID property
-                          const taskId = task.id !== undefined ? task.id : task.ID;
-                          return (
-                            <li key={taskId} className={styles.taskItem} onClick={(e) => e.stopPropagation()}>
-                              <div className={styles.taskHeader}>
-                                <span className={styles.taskName}>{task.task_name}</span>
-                                <span className={styles.taskType}>{task.task_type}</span>
-                              </div>
-                              {task.description && (
-                                <p className={styles.taskDescription}>{task.description}</p>
-                              )}
-                              <div className={styles.taskActions}>
-                                <button 
-                                  className={styles.editTaskButton}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditTask(task);
-                                  }}
-                                >
-                                  Edit
-                                </button>
-                                <button 
-                                  className={styles.deleteTaskButton}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    console.log("Delete button clicked, task object:", JSON.stringify(task, null, 2));
-                                    
-                                    if (taskId !== undefined && taskId !== null) {
-                                      const numericTaskId = Number(taskId);
-                                      console.log("Task ID after Number conversion:", numericTaskId);
-                                      if (!isNaN(numericTaskId) && numericTaskId > 0) {
-                                        handleDeleteTask(numericTaskId);
-                                      } else {
-                                        console.error("Invalid task ID value:", taskId);
-                                      }
-                                    } else {
-                                      console.error("Cannot delete - task ID not found", task);
-                                    }
-                                  }}
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                              {taskId === confirmDeleteTaskId && (
-                                <div className={styles.deleteConfirmation} onClick={(e) => e.stopPropagation()}>
-                                  <p>Are you sure you want to delete this task?</p>
-                                  <div className={styles.deleteActions}>
-                                    <button 
-                                      className={styles.cancelDeleteButton}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        console.log("Cancel delete button clicked");
-                                        handleCancelDeleteTask();
-                                      }}
-                                    >
-                                      Cancel
-                                    </button>
-                                    <button 
-                                      className={styles.confirmDeleteButton}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        e.preventDefault();
-                                        
-                                        if (taskId !== undefined && taskId !== null) {
-                                          const numericTaskId = Number(taskId);
-                                          console.log("Task ID after Number conversion:", numericTaskId);
-                                          if (!isNaN(numericTaskId) && numericTaskId > 0) {
-                                            executeTaskDeletion(numericTaskId);
-                                          } else {
-                                            console.error("Invalid task ID value for deletion:", taskId);
-                                            alert("Cannot delete - invalid task ID");
-                                          }
-                                        } else {
-                                          console.error("Cannot delete - task ID not found", task);
-                                          alert("Cannot delete - task ID not found");
-                                        }
-                                      }}
-                                    >
-                                      Delete
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <div className={styles.noTasks}>No tasks added yet</div>
-                    )}
-                  </div>
-                  
-                  <div className={styles.popupFooter}>
-                    <button 
-                      className={styles.editButton}
-                      onClick={() => {
-                        handleEditFeature(selectedFeature);
-                        handlePopupClose();
-                      }}
-                    >
-                      Edit Feature
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -1038,27 +944,111 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
 interface FeatureFormProps {
   feature: Feature | null;
   users: User[];
+  features?: Feature[];
   onClose: () => void;
   onSubmit: (feature: Feature) => void;
 }
 
-const FeatureForm = ({ feature, users, onClose, onSubmit }: FeatureFormProps) => {
+const FeatureForm = ({ feature, users, features = [], onClose, onSubmit }: FeatureFormProps) => {
   const [formData, setFormData] = useState<Feature | null>(feature);
+  const [tagsInput, setTagsInput] = useState(feature?.tags_input || '');
+  const [existingTags, setExistingTags] = useState<string[]>(feature?.tags?.map(tag => tag.tag_name) || []);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  useEffect(() => {
+    // Initialize existingTags from feature tags if available
+    if (feature?.tags) {
+      setExistingTags(feature.tags.map(tag => tag.tag_name));
+    }
+    
+    // Fetch all existing tags for autocomplete
+    const fetchAllTags = async () => {
+      try {
+        const response = await TagsAPI.getAll();
+        const tags = response.data as {tag_name: string}[];
+        const uniqueTags = [...new Set(tags.map(tag => tag.tag_name))];
+        setAllTags(uniqueTags);
+      } catch (error) {
+        console.error('Error fetching tags:', error);
+      }
+    };
+    
+    fetchAllTags();
+  }, [feature]);
 
   if (!formData) return null;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    
+    if (name === 'tags_input') {
+      setTagsInput(value);
+      
+      // Show tag suggestions after typing at least 2 characters
+      if (value.length >= 2) {
+        const filtered = allTags.filter(tag => 
+          tag.toLowerCase().includes(value.toLowerCase())
+        );
+        setTagSuggestions(filtered);
+        setShowSuggestions(true);
+      } else {
+        setShowSuggestions(false);
+      }
+      return;
+    }
+    
+    if (name === 'parent_feature_id') {
+      if (value === "") {
+        // If empty selection, set parent_feature_id to null
+        setFormData({
+          ...formData,
+          parent_feature_id: null
+        });
+      } else {
+        // Otherwise set it to the selected value
+        setFormData({
+          ...formData,
+          parent_feature_id: parseInt(value, 10)
+        });
+      }
+      return;
+    }
+    
     setFormData({
       ...formData,
       [name]: name === 'assignee_id' ? Number(value) : value
     });
   };
 
+  const handleTagSelect = (tag: string) => {
+    setTagsInput(tag);
+    setShowSuggestions(false);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    
+    let newTags = tagsInput ? tagsInput.split(/[\s,;]+/).filter(Boolean) : [];
+    
+    // Combine existing tags and new tags input
+    const combinedTags = [...existingTags, ...newTags].filter(Boolean);
+    const uniqueTags = [...new Set(combinedTags)];
+    const combinedTagsInput = uniqueTags.join(',');
+    
+    onSubmit({
+      ...formData,
+      tags_input: combinedTagsInput
+    });
   };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setExistingTags(existingTags.filter(tag => tag !== tagToRemove));
+  };
+
+  // Filter out the current feature from the parent options to prevent circular references
+  const availableParentFeatures = features.filter(f => f.id !== formData.id);
 
   return (
     <form onSubmit={handleSubmit} className={styles.form}>
@@ -1076,6 +1066,26 @@ const FeatureForm = ({ feature, users, onClose, onSubmit }: FeatureFormProps) =>
       </div>
       
       <div className={styles.formGroup}>
+        <label htmlFor="parent_feature_id">Parent Feature</label>
+        <select
+          id="parent_feature_id"
+          name="parent_feature_id"
+          value={formData.parent_feature_id || ""}
+          onChange={handleChange}
+        >
+          <option value="">None (Root Feature)</option>
+          {availableParentFeatures.map((parentFeature) => (
+            <option key={parentFeature.id} value={parentFeature.id}>
+              FP-{parentFeature.id} {parentFeature.title}
+            </option>
+          ))}
+        </select>
+        <small className={styles.formHelp}>
+          A feature can be a subfeature of another feature.
+        </small>
+      </div>
+      
+      <div className={styles.formGroup}>
         <label htmlFor="description">Description</label>
         <textarea
           id="description"
@@ -1087,36 +1097,80 @@ const FeatureForm = ({ feature, users, onClose, onSubmit }: FeatureFormProps) =>
         />
       </div>
       
-      <div className={styles.formRow}>
-        <div className={styles.formGroup}>
-          <label htmlFor="status">Status</label>
-          <select
-            id="status"
-            name="status"
-            value={formData.status}
+      <div className={styles.formGroup}>
+        <label htmlFor="tags_input">Tags</label>
+        <div className={styles.tagInputContainer}>
+          <input
+            type="text"
+            id="tags_input"
+            name="tags_input"
+            value={tagsInput}
             onChange={handleChange}
-            className={styles[`status${formData.status.charAt(0).toUpperCase() + formData.status.slice(1)}`]}
-          >
-            <option key="todo" value="todo">To Do</option>
-            <option key="in_progress" value="in_progress">In Progress</option>
-            <option key="done" value="done">Done</option>
-          </select>
+            placeholder="Enter tags separated by space, comma or semicolon (e.g. 'api ui #backend')"
+            autoComplete="off"
+          />
+          {showSuggestions && tagSuggestions.length > 0 && (
+            <div className={styles.tagSuggestions}>
+              {tagSuggestions.map((tag, index) => (
+                <div 
+                  key={index} 
+                  className={styles.tagSuggestion}
+                  onClick={() => handleTagSelect(tag)}
+                >
+                  {tag}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+        <small className={styles.formHelp}>
+          Tags help categorize features. Prefix with # is optional.
+        </small>
         
-        <div className={styles.formGroup}>
-          <label htmlFor="priority">Priority</label>
-          <select
-            id="priority"
-            name="priority"
-            value={formData.priority}
-            onChange={handleChange}
-            className={styles[`priority${formData.priority.charAt(0).toUpperCase() + formData.priority.slice(1)}`]}
-          >
-            <option key="low" value="low">Low</option>
-            <option key="medium" value="medium">Medium</option>
-            <option key="high" value="high">High</option>
-          </select>
-        </div>
+        {existingTags.length > 0 && (
+          <div className={styles.existingTags}>
+            {existingTags.map((tag, index) => (
+              <div key={index} className={styles.existingTag}>
+                <span>{tag}</span>
+                <button 
+                  type="button" 
+                  className={styles.removeTagButton}
+                  onClick={() => handleRemoveTag(tag)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      
+      <div className={styles.formGroup}>
+        <label htmlFor="status">Status</label>
+        <select
+          id="status"
+          name="status"
+          value={formData.status}
+          onChange={handleChange}
+        >
+          <option value="todo">To Do</option>
+          <option value="in_progress">In Progress</option>
+          <option value="done">Done</option>
+        </select>
+      </div>
+      
+      <div className={styles.formGroup}>
+        <label htmlFor="priority">Priority</label>
+        <select
+          id="priority"
+          name="priority"
+          value={formData.priority}
+          onChange={handleChange}
+        >
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
       </div>
       
       <div className={styles.formGroup}>
@@ -1127,7 +1181,7 @@ const FeatureForm = ({ feature, users, onClose, onSubmit }: FeatureFormProps) =>
           value={formData.assignee_id}
           onChange={handleChange}
         >
-          <option key="unassigned" value={0}>Unassigned</option>
+          <option value={0}>Unassigned</option>
           {users.map((user) => (
             <option key={user.id} value={user.id}>
               {user.username}

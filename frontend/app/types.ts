@@ -16,6 +16,12 @@ export interface Project {
   updated_at: string;
 }
 
+export interface FeatureTag {
+  tag_name: string;
+  feature_id: number;
+  created_by_user: number;
+}
+
 export interface Feature {
   id: number;
   project_id: number;
@@ -28,4 +34,6 @@ export interface Feature {
   updated_at: string;
   assignee?: User;
   project?: Project;
+  tags?: FeatureTag[];
+  tags_input?: string; // For form handling
 } 

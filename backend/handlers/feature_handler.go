@@ -102,7 +102,38 @@ func (h *FeatureHandler) GetProjectFeatures(c *gin.Context) {
 		return
 	}
 
+	// Check if we should return only root features
+	rootOnly := c.Query("root_only")
+	if rootOnly == "true" {
+		features, err := h.repo.GetRootFeaturesByProject(projectID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, features)
+		return
+	}
+
+	// Return all features for the project
 	features, err := h.repo.GetFeaturesByProject(projectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, features)
+}
+
+// GetSubfeatures returns all subfeatures for a given parent feature
+func (h *FeatureHandler) GetSubfeatures(c *gin.Context) {
+	parentIDStr := c.Param("id")
+	parentID, err := strconv.ParseUint(parentIDStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid parent feature ID"})
+		return
+	}
+
+	features, err := h.repo.GetSubfeaturesByParentID(uint(parentID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -149,6 +180,11 @@ func (h *FeatureHandler) UpdateFeature(c *gin.Context) {
 	existingFeature.Status = feature.Status
 	existingFeature.Priority = feature.Priority
 	existingFeature.AssigneeID = feature.AssigneeID
+
+	// Update parent feature ID if provided
+	if feature.ParentFeatureID != nil {
+		existingFeature.ParentFeatureID = feature.ParentFeatureID
+	}
 
 	if err := h.repo.UpdateFeature(existingFeature); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

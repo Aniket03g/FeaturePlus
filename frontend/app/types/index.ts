@@ -13,6 +13,7 @@ export type { Project } from './project';
 export interface Feature {
   id: number;
   project_id: number;
+  parent_feature_id: number | null;
   title: string;
   description: string;
   status: 'todo' | 'in_progress' | 'done';
@@ -20,6 +21,7 @@ export interface Feature {
   assignee_id: number;
   created_at: string;
   updated_at: string;
+  parent_feature?: Feature;
 }
 
 // Re-export SubFeature from its own file
