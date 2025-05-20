@@ -1,9 +1,0 @@
-{
-  "/_not-found/page": "app/_not-found/page.js",
-  "/(examples)/(others-pages)/(forms)/form-elements/page": "app/(examples)/(others-pages)/(forms)/form-elements/page.js",
-  "/(withsidebar)/page": "app/(withsidebar)/page.js",
-  "/(withsidebar)/users/page": "app/(withsidebar)/users/page.js",
-  "/(examples)/(others-pages)/(tables)/basic-tables/page": "app/(examples)/(others-pages)/(tables)/basic-tables/page.js",
-  "/(examples)/(others-pages)/blank/page": "app/(examples)/(others-pages)/blank/page.js",
-  "/(full-width-pages)/(error-pages)/error-404/page": "app/(full-width-pages)/(error-pages)/error-404/page.js"
-}
