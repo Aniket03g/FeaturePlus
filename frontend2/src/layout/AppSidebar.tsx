@@ -51,6 +51,11 @@ const navItems: NavItem[] = [
     name: "User Profile",
     path: "/profile",
   },
+  {
+    icon: <BoxCubeIcon />, 
+    name: "Projects",
+    path: "/projects",
+  },
 
   {
     name: "Forms",
@@ -69,6 +74,16 @@ const navItems: NavItem[] = [
       { name: "Blank Page", path: "/blank", pro: false },
       { name: "404 Error", path: "/error-404", pro: false },
     ],
+  },
+  {
+    icon: <TableIcon />,
+    name: "Features",
+    path: "/features",
+  },
+  {
+    icon: <TableIcon />,
+    name: "Tasks",
+    path: "/tasks",
   },
 ];
 

@@ -105,8 +105,9 @@ func main() {
 	}
 
 	// General task routes
-	taskRoutes := router.Group("/api/tasks", middleware.AuthMiddleware())
+	taskRoutes := router.Group("/api/tasks")
 	{
+		taskRoutes.GET("", taskHandler.GetAllTasks)
 		taskRoutes.POST("", taskHandler.CreateTask)
 		taskRoutes.GET("/:id", taskHandler.GetTask)
 		taskRoutes.PUT("/:id", taskHandler.UpdateTask)

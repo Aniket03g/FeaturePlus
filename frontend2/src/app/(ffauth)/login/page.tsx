@@ -2,7 +2,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import API from '@/app/api/api';
+// import API from '@/app/api/api';
+import API from '../../../api/api';
+
 import styles from './page.module.css';
 
 export default function LoginPage() {

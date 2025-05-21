@@ -258,3 +258,13 @@ func (h *TaskHandler) DeleteTaskForSubFeature(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Task deleted"})
 }
+
+// GetAllTasks retrieves all tasks with their feature title
+func (h *TaskHandler) GetAllTasks(c *gin.Context) {
+	tasks, err := h.taskRepo.GetAllWithFeatureTitle()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch tasks"})
+		return
+	}
+	c.JSON(http.StatusOK, tasks)
+}

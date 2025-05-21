@@ -13,6 +13,7 @@ type TaskRepository interface {
 	GetByID(taskID uint) (*models.Task, error)
 	GetByFeatureID(featureID uint) ([]models.Task, error)
 	GetBySubFeatureID(subFeatureID uint) ([]models.Task, error)
+	GetAllWithFeatureTitle() ([]map[string]interface{}, error)
 }
 
 type taskRepository struct {
@@ -51,4 +52,13 @@ func (r *taskRepository) GetBySubFeatureID(subFeatureID uint) ([]models.Task, er
 	var tasks []models.Task
 	err := r.db.Unscoped().Where("sub_feature_id = ?", subFeatureID).Find(&tasks).Error
 	return tasks, err
+}
+
+func (r *taskRepository) GetAllWithFeatureTitle() ([]map[string]interface{}, error) {
+	var results []map[string]interface{}
+	err := r.db.Table("tasks").
+		Select("tasks.id, tasks.task_type, tasks.task_name, tasks.description, tasks.feature_id, features.title as feature_title").
+		Joins("LEFT JOIN features ON tasks.feature_id = features.id").
+		Scan(&results).Error
+	return results, err
 }
