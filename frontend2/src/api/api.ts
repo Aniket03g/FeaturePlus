@@ -60,6 +60,8 @@ const FeaturesAPI = {
 const TasksAPI = {
   getByFeature: (featureId: number) => API.get(`/features/${featureId}/tasks`),
   createForFeature: (featureId: number, data: any) => API.post(`/features/${featureId}/tasks`, data),
+  deleteTask: (featureId: number, taskId: number) => API.delete(`/features/${featureId}/task/${taskId}`),
+  updateTask: (featureId: number, taskId: number, data: any) => API.put(`/features/${featureId}/task/${taskId}`, data),
 };
 
 export { TagsAPI, FeaturesAPI, TasksAPI };
