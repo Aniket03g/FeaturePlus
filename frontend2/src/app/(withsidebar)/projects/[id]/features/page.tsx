@@ -18,6 +18,7 @@ interface Feature {
   priority?: string; // Optional, placeholder if not present
   description?: string;
   tags?: FeatureTag[];
+  parent_feature_id?: number | null;
 }
 
 interface User {
@@ -55,17 +56,24 @@ export default function FeaturesPage() {
   const [featureTagSuggestions, setFeatureTagSuggestions] = useState<string[]>([]);
   const [featureShowTagSuggestions, setFeatureShowTagSuggestions] = useState(false);
   const [featureSelectedTags, setFeatureSelectedTags] = useState<string[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<'all' | number>('all');
+  const [featureGroups, setFeatureGroups] = useState<Feature[]>([]);
+  const [childFeatures, setChildFeatures] = useState<Feature[]>([]);
 
   useEffect(() => {
     const fetchFeatures = async () => {
       try {
         setLoading(true);
-        const [featuresRes, usersRes] = await Promise.all([
+        // Fetch all root features (feature groups)
+        const [groupsRes, usersRes] = await Promise.all([
           API.get(`/features/project/${projectId}?root_only=true`),
           API.get('/users'),
         ]);
-        setFeatures(featuresRes.data);
+        setFeatureGroups(groupsRes.data);
         setUsers(usersRes.data);
+        // Fetch all features for this project
+        const allFeaturesRes = await API.get(`/features/project/${projectId}`);
+        setFeatures(allFeaturesRes.data);
       } catch (error) {
         console.error('Error fetching features or users:', error);
       } finally {
@@ -82,6 +90,15 @@ export default function FeaturesPage() {
       setFeatureAllTags(tags);
     });
   }, []);
+
+  // Filter child features based on selected group
+  useEffect(() => {
+    if (selectedGroupId === 'all') {
+      setChildFeatures(features);
+    } else {
+      setChildFeatures(features.filter(f => f.parent_feature_id === selectedGroupId));
+    }
+  }, [selectedGroupId, features]);
 
   const handleGroupFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setGroupForm({ ...groupForm, [e.target.name]: e.target.value });
@@ -223,7 +240,7 @@ export default function FeaturesPage() {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-3xl font-bold">Feature Group</h1>
         <div className="flex gap-2">
           <button
@@ -240,40 +257,84 @@ export default function FeaturesPage() {
           </button>
         </div>
       </div>
-      {features.length === 0 ? (
-        <p>No feature groups found for this project.</p>
-      ) : (
-        <div className="space-y-6">
-          {features.map((feature) => (
-            <Link key={feature.id} href={`/projects/${projectId}/features/${feature.id}`} className="block">
+      {/* Filter Chips Row */}
+      <div className="flex gap-2 mb-8">
+        <button
+          className={`px-4 py-1 rounded-full border text-sm font-medium transition ${selectedGroupId === 'all' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
+          onClick={() => setSelectedGroupId('all')}
+        >
+          All
+        </button>
+        {featureGroups.map(group => (
+          <button
+            key={group.id}
+            className={`px-4 py-1 rounded-full border text-sm font-medium transition ${selectedGroupId === group.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
+            onClick={() => setSelectedGroupId(group.id)}
+          >
+            {group.title}
+          </button>
+        ))}
+      </div>
+      {/* Feature List */}
+      <div className="space-y-6">
+        {/* Filtering logic for chips */}
+        {selectedGroupId === 'all' ? (
+          // Show all feature groups and all child features
+          [...featureGroups, ...features.filter(f => f.parent_feature_id !== null)].map(item => (
+            <Link key={item.id} href={`/projects/${projectId}/features/${item.id}`} className="block">
               <div className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xl font-semibold text-blue-700">{feature.title}</span>
-                    <span className="ml-2 text-xs bg-gray-200 text-gray-700 rounded px-2 py-1">2 tasks</span>
-                  </div>
+                  <span className="text-xl font-semibold text-blue-700">{item.title}</span>
                   <span className="text-blue-500 hover:underline text-sm">View</span>
                 </div>
                 <div className="mt-2 text-gray-700 text-base">
-                  {feature.description || 'No description provided.'}
+                  {item.description || 'No description provided.'}
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {(feature.tags ?? []).length > 0 && (feature.tags ?? []).map((tag) => (
+                  {(item.tags ?? []).length > 0 && (item.tags ?? []).map((tag) => (
                     <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
                   ))}
                 </div>
                 <div className="mt-4 flex space-x-4 text-sm">
                   <span className="font-medium">Status:</span>
-                  <span className="capitalize text-gray-600">{feature.status}</span>
+                  <span className="capitalize text-gray-600">{item.status}</span>
                   <span className="font-medium ml-4">Priority:</span>
-                  <span className="capitalize text-gray-600">{feature.priority || '-'}</span>
+                  <span className="capitalize text-gray-600">{item.priority || '-'}</span>
                 </div>
               </div>
             </Link>
-          ))}
-        </div>
-      )}
-
+          ))
+        ) : (
+          // Show only the selected feature group and its child features
+          [
+            ...featureGroups.filter(g => g.id === selectedGroupId),
+            ...features.filter(f => f.parent_feature_id === selectedGroupId)
+          ].map(item => (
+            <Link key={item.id} href={`/projects/${projectId}/features/${item.id}`} className="block">
+              <div className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xl font-semibold text-blue-700">{item.title}</span>
+                  <span className="text-blue-500 hover:underline text-sm">View</span>
+                </div>
+                <div className="mt-2 text-gray-700 text-base">
+                  {item.description || 'No description provided.'}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(item.tags ?? []).length > 0 && (item.tags ?? []).map((tag) => (
+                    <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
+                  ))}
+                </div>
+                <div className="mt-4 flex space-x-4 text-sm">
+                  <span className="font-medium">Status:</span>
+                  <span className="capitalize text-gray-600">{item.status}</span>
+                  <span className="font-medium ml-4">Priority:</span>
+                  <span className="capitalize text-gray-600">{item.priority || '-'}</span>
+                </div>
+              </div>
+            </Link>
+          ))
+        )}
+      </div>
       {/* Feature Group Modal */}
       {showGroupModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-10 overflow-y-auto">
@@ -390,7 +451,7 @@ export default function FeaturesPage() {
                   required
                 >
                   <option value="" disabled>Select a feature group</option>
-                  {features.map((fg) => (
+                  {featureGroups.map((fg) => (
                     <option key={fg.id} value={fg.id}>{fg.title}</option>
                   ))}
                 </select>
