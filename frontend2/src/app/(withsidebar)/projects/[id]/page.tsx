@@ -37,5 +37,17 @@ export default function ProjectDetailPage() {
     fetchProject();
   }, [projectId]);
 
-  // ... rest of the component remains the same ...
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">{project?.name}</h1>
+      <p className="mb-4 text-gray-700">{project?.description}</p>
+      <Link
+        href={`/projects/${projectId}/features`}
+        className="inline-block bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg mb-6"
+      >
+        View Features
+      </Link>
+      {/* ...rest of the project details... */}
+    </div>
+  );
 }

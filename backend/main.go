@@ -88,7 +88,7 @@ func main() {
 		featureRoutes.POST("", featureHandler.CreateFeature)
 		featureRoutes.GET("", featureHandler.GetAllFeatures)
 		featureRoutes.GET("/:id", featureHandler.GetFeature)
-		featureRoutes.GET("/project/:project_id", featureHandler.GetProjectFeatures)
+		// featureRoutes.GET("/project/:project_id", featureHandler.GetProjectFeatures)
 		featureRoutes.PUT("/:id", featureHandler.UpdateFeature)
 		featureRoutes.DELETE("/:id", featureHandler.DeleteFeature)
 		featureRoutes.GET("/:id/subfeatures", featureHandler.GetSubfeatures)
@@ -103,6 +103,9 @@ func main() {
 		featureRoutes.GET("/:id/tags", tagHandler.GetFeatureTags)
 		featureRoutes.PUT("/:id/tags", tagHandler.UpdateFeatureTags)
 	}
+
+	// Public route for project features (for frontend access)
+	router.GET("/api/features/project/:project_id", featureHandler.GetProjectFeatures)
 
 	// General task routes
 	taskRoutes := router.Group("/api/tasks")

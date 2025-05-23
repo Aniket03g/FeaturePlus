@@ -50,5 +50,17 @@ const TagsAPI = {
   getFeaturesByTag: (tagName: string) => API.get(`/tags/${encodeURIComponent(tagName)}/features`),
 };
 
-export { TagsAPI };
+// Add endpoints for features, subfeatures, tags, and tasks
+const FeaturesAPI = {
+  getById: (featureId: number) => API.get(`/features/${featureId}`),
+  getSubfeatures: (featureId: number) => API.get(`/features/${featureId}/subfeatures`),
+  getTags: (featureId: number) => API.get(`/features/${featureId}/tags`),
+};
+
+const TasksAPI = {
+  getByFeature: (featureId: number) => API.get(`/features/${featureId}/tasks`),
+  createForFeature: (featureId: number, data: any) => API.post(`/features/${featureId}/tasks`, data),
+};
+
+export { TagsAPI, FeaturesAPI, TasksAPI };
 export default API;

@@ -22,10 +22,30 @@
       "static/css/app/(withsidebar)/page.css",
       "static/chunks/app/(withsidebar)/page.js"
     ],
-    "/(withsidebar)/features/page": [
+    "/(withsidebar)/projects/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/(withsidebar)/features/page.js"
+      "static/chunks/app/(withsidebar)/projects/page.js"
+    ],
+    "/(withsidebar)/projects/[id]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(withsidebar)/projects/[id]/page.js"
+    ],
+    "/(withsidebar)/projects/[id]/features/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(withsidebar)/projects/[id]/features/page.js"
+    ],
+    "/(withsidebar)/projects/[id]/features/[featureId]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/(withsidebar)/projects/[id]/features/[featureId]/page.js"
+    ],
+    "/_not-found/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/_not-found/page.js"
     ]
   }
 }
