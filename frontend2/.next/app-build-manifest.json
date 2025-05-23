@@ -22,6 +22,12 @@
       "static/css/app/(withsidebar)/page.css",
       "static/chunks/app/(withsidebar)/page.js"
     ],
+    "/(withsidebar)/users/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/(withsidebar)/users/page.css",
+      "static/chunks/app/(withsidebar)/users/page.js"
+    ],
     "/(withsidebar)/projects/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
