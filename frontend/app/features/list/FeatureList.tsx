@@ -55,6 +55,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
   const [confirmDeleteTaskId, setConfirmDeleteTaskId] = useState<number | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'root' | 'sub'>('root');
   const [childFeatureCounts, setChildFeatureCounts] = useState<Record<number, number>>({});
+  const [modalType, setModalType] = useState<'featureGroup' | 'feature'>('featureGroup');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -554,9 +555,32 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                   updated_at: '',
                 });
                 setIsModalOpen(true);
+                setModalType('featureGroup');
               }}
             >
               <span className={styles.plusIcon}>+</span> Add Feature Group
+            </button>
+            <button
+              className={styles.createButton}
+              onClick={() => {
+                setEditingFeature({
+                  id: 0,
+                  project_id: Number(projectId),
+                  parent_feature_id: undefined, // will be set in form
+                  title: '',
+                  description: '',
+                  status: 'todo',
+                  priority: 'medium',
+                  assignee_id: 0,
+                  created_at: '',
+                  updated_at: '',
+                });
+                setIsModalOpen(true);
+                setModalType('feature');
+              }}
+              style={{ marginLeft: 8 }}
+            >
+              <span className={styles.plusIcon}>+</span> Add Feature
             </button>
           </div>
         </div>
@@ -681,7 +705,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
           <div className={styles.modalOverlay}>
             <div className={styles.modal}>
               <div className={styles.modalHeader}>
-                <h3>{editingFeature?.id ? 'Edit Feature' : 'Create Feature'}</h3>
+                <h3>{modalType === 'featureGroup' ? 'Create Feature Group' : 'Create Feature'}</h3>
                 <button className={styles.closeButton} onClick={handleModalClose}>×</button>
               </div>
               <FeatureForm 
@@ -690,6 +714,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                 features={features}
                 onClose={handleModalClose}
                 onSubmit={editingFeature?.id ? handleSaveFeature : handleCreateFeature}
+                modalType={modalType}
               />
             </div>
           </div>
@@ -947,9 +972,10 @@ interface FeatureFormProps {
   features?: Feature[];
   onClose: () => void;
   onSubmit: (feature: Feature) => void;
+  modalType: 'featureGroup' | 'feature';
 }
 
-const FeatureForm = ({ feature, users, features = [], onClose, onSubmit }: FeatureFormProps) => {
+const FeatureForm = ({ feature, users, features = [], onClose, onSubmit, modalType }: FeatureFormProps) => {
   const [formData, setFormData] = useState<Feature | null>(feature);
   const [tagsInput, setTagsInput] = useState(feature?.tags_input || '');
   const [existingTags, setExistingTags] = useState<string[]>(feature?.tags?.map(tag => tag.tag_name) || []);

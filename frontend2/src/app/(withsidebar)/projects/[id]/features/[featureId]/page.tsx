@@ -14,8 +14,9 @@ interface Feature {
 }
 
 interface Tag {
-  id: number;
-  name: string;
+  tag_name: string;
+  feature_id: number;
+  created_by_user: number;
 }
 
 interface Task {
@@ -175,15 +176,13 @@ export default function FeatureGroupDetailPage() {
     setFormError("");
     try {
       if (isEditingTask && editingTask) {
-        if (typeof editingTask.id === 'number' && editingTask.id > 0) {
-          await TasksAPI.updateTask(Number(featureGroup?.id), editingTask.id, taskForm);
-          setFeatureTasks((prev) => prev.map((t) => t.id === editingTask.id ? { ...t, ...taskForm } : t));
-        }
+        // Edit task
+        await TasksAPI.updateTask(Number(featureGroup?.id), editingTask.id, taskForm);
+        setFeatureTasks((prev) => prev.map((t) => t.id === editingTask.id ? { ...t, ...taskForm } : t));
       } else {
+        // Add task
         const res = await TasksAPI.createForFeature(Number(featureGroup?.id), taskForm);
-        if (res.data && typeof res.data.id === 'number' && res.data.id > 0) {
-          setFeatureTasks((prev) => [...prev, res.data]);
-        }
+        setFeatureTasks((prev) => [...prev, res.data]);
       }
       closeTaskForm();
     } catch (err) {
@@ -194,7 +193,6 @@ export default function FeatureGroupDetailPage() {
   };
 
   const handleDeleteTask = async (taskId: number) => {
-    if (typeof taskId !== 'number' || taskId <= 0) return;
     try {
       await TasksAPI.deleteTask(Number(featureGroup?.id), taskId);
       setFeatureTasks((prev) => prev.filter((t) => t.id !== taskId));
@@ -235,43 +233,38 @@ export default function FeatureGroupDetailPage() {
             )}
           </div>
           {/* Tags as chips */}
-          <div className="flex flex-wrap gap-2 mt-2">
-            {(featureTags.length > 0 ? featureTags : [
-              { id: 0, name: "ui" },
-              { id: 1, name: "api" },
-              { id: 2, name: "feature" },
-            ]).map((tag) => (
-              <span key={tag.id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.name}</span>
-            ))}
-          </div>
+          {featureTags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {featureTags.map((tag) => (
+                <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Tasks Section */}
       {featureTasks.length > 0 && (
         <div className="mb-8">
-          <div className="flex items-center mb-4 gap-4 justify-between">
+          <div className="flex items-center mb-4 gap-4">
             <h2 className="text-xl font-semibold mb-0">Tasks</h2>
-            <div className="flex items-center gap-2 ml-auto">
-              <button
-                className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition"
-                style={{ minWidth: 0, height: '2.25rem' }}
-                onClick={openAddTaskForm}
-              >
-                + Add Task
-              </button>
-              <div className="flex gap-2 ml-2">
-                {['All', 'DB', 'UI', 'Backend'].map(type => (
-                  <button
-                    key={type}
-                    className={`px-4 py-1 rounded-full border text-sm font-medium transition
-                      ${taskFilter === type ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
-                    onClick={() => setTaskFilter(type)}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
+            <button
+              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white font-semibold text-base shadow hover:bg-blue-700 transition"
+              onClick={openAddTaskForm}
+            >
+              <span className="text-lg">+</span> Add Task
+            </button>
+            <div className="flex gap-2 ml-4">
+              {['All', 'DB', 'UI', 'Backend'].map(type => (
+                <button
+                  key={type}
+                  className={`px-4 py-1 rounded-full border text-sm font-medium transition
+                    ${taskFilter === type ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
+                  onClick={() => setTaskFilter(type)}
+                >
+                  {type}
+                </button>
+              ))}
             </div>
           </div>
           {showTaskForm && (
@@ -402,18 +395,13 @@ export default function FeatureGroupDetailPage() {
                   {feature.description || "No description provided."}
                 </div>
                 {/* Tags as chips below description, show dummy if none */}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(tagsMap[feature.id] && tagsMap[feature.id].length > 0
-                    ? tagsMap[feature.id]
-                    : [
-                        { id: 0, name: "ui" },
-                        { id: 1, name: "api" },
-                        { id: 2, name: "feature" },
-                      ]
-                  ).map((tag) => (
-                    <span key={tag.id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.name}</span>
-                  ))}
-                </div>
+                {tagsMap[feature.id] && tagsMap[feature.id].length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {tagsMap[feature.id].map((tag) => (
+                      <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}
