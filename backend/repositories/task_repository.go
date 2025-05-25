@@ -14,6 +14,7 @@ type TaskRepository interface {
 	GetByFeatureID(featureID uint) ([]models.Task, error)
 	GetBySubFeatureID(subFeatureID uint) ([]models.Task, error)
 	GetAllWithFeatureTitle() ([]map[string]interface{}, error)
+	GetByProjectID(projectID uint) ([]map[string]interface{}, error)
 }
 
 type taskRepository struct {
@@ -59,6 +60,16 @@ func (r *taskRepository) GetAllWithFeatureTitle() ([]map[string]interface{}, err
 	err := r.db.Table("tasks").
 		Select("tasks.id, tasks.task_type, tasks.task_name, tasks.description, tasks.feature_id, features.title as feature_title").
 		Joins("LEFT JOIN features ON tasks.feature_id = features.id").
+		Scan(&results).Error
+	return results, err
+}
+
+func (r *taskRepository) GetByProjectID(projectID uint) ([]map[string]interface{}, error) {
+	var results []map[string]interface{}
+	err := r.db.Table("tasks").
+		Select("tasks.id, tasks.task_type, tasks.task_name, tasks.description, tasks.feature_id, features.title as feature_title").
+		Joins("JOIN features ON tasks.feature_id = features.id").
+		Where("features.project_id = ?", projectID).
 		Scan(&results).Error
 	return results, err
 }

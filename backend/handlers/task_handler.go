@@ -268,3 +268,20 @@ func (h *TaskHandler) GetAllTasks(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, tasks)
 }
+
+// GetTasksByProject retrieves all tasks for a given project ID
+func (h *TaskHandler) GetTasksByProject(c *gin.Context) {
+	projectID, err := strconv.Atoi(c.Param("project_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID"})
+		return
+	}
+
+	tasks, err := h.taskRepo.GetByProjectID(uint(projectID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch tasks for project"})
+		return
+	}
+
+	c.JSON(http.StatusOK, tasks)
+}
