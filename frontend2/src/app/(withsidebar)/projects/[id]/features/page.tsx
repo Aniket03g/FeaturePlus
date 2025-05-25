@@ -276,7 +276,7 @@ export default function FeaturesPage() {
         ))}
       </div>
       {/* Feature List */}
-      <div className="space-y-6">
+        <div className="space-y-6">
         {/* Filtering logic for chips */}
         {selectedGroupId === 'all' ? (
           // Show all feature groups and all child features
@@ -301,7 +301,7 @@ export default function FeaturesPage() {
                   <span className="font-medium ml-4">Priority:</span>
                   <span className="capitalize text-gray-600">{item.priority || '-'}</span>
                 </div>
-              </div>
+                  </div>
             </Link>
           ))
         ) : (

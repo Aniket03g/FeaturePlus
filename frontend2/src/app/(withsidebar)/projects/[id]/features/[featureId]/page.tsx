@@ -76,6 +76,7 @@ export default function FeatureGroupDetailPage() {
         // Fetch tasks for this feature
         const tasksRes = await TasksAPI.getByFeature(Number(featureId));
         setFeatureTasks(tasksRes.data);
+        console.log("Fetched tasks:", tasksRes.data);
 
         // Fetch subfeatures
         const subRes = await FeaturesAPI.getSubfeatures(Number(featureId));
@@ -204,7 +205,10 @@ export default function FeatureGroupDetailPage() {
   // Compute filtered tasks
   const filteredTasks = taskFilter === "All"
     ? featureTasks
-    : featureTasks.filter(task => task.task_type.toLowerCase() === taskFilter.toLowerCase());
+    : featureTasks.filter(task => {
+        console.log(`Task Type: ${task.task_type}, Filter: ${taskFilter}`);
+        return task.task_type.toLowerCase() === taskFilter.toLowerCase();
+      });
 
   if (loading) {
     return <div className="p-6">Loading feature group...</div>;
@@ -234,11 +238,11 @@ export default function FeatureGroupDetailPage() {
           </div>
           {/* Tags as chips */}
           {featureTags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
+          <div className="flex flex-wrap gap-2 mt-2">
               {featureTags.map((tag) => (
                 <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
-              ))}
-            </div>
+            ))}
+          </div>
           )}
         </div>
       </div>
@@ -339,12 +343,17 @@ export default function FeatureGroupDetailPage() {
                 const taskId = task.id;
                 return (
                   <div key={taskId} className="bg-white rounded-lg shadow p-4 border border-gray-200">
-                    <div className="flex items-center gap-2 mb-1 justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500 font-medium min-w-[48px]">{task.task_type}</span>
-                        <span className="font-semibold text-blue-700 text-base">{task.task_name}</span>
+                    <div className="flex items-start gap-4 mb-2">
+                      <span className="flex-shrink-0 bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs">{task.task_type}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-blue-700 text-base">{task.task_name}</span>
+                        </div>
+                        <div className="text-gray-700 text-sm">
+                          {task.description || "No description provided."}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <button
                           className="p-1 rounded hover:bg-blue-50 text-gray-500 hover:text-blue-600 transition"
                           onClick={() => openEditTaskForm(task)}
@@ -361,7 +370,6 @@ export default function FeatureGroupDetailPage() {
                         </button>
                       </div>
                     </div>
-                    <div className="text-gray-700 text-sm mt-1 ml-[48px]">{task.description || "No description provided."}</div>
                   </div>
                 );
               })
@@ -396,11 +404,11 @@ export default function FeatureGroupDetailPage() {
                 </div>
                 {/* Tags as chips below description, show dummy if none */}
                 {tagsMap[feature.id] && tagsMap[feature.id].length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                     {tagsMap[feature.id].map((tag) => (
                       <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
-                    ))}
-                  </div>
+                  ))}
+                </div>
                 )}
               </div>
             </div>

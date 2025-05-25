@@ -88,7 +88,6 @@ func main() {
 		featureRoutes.POST("", featureHandler.CreateFeature)
 		featureRoutes.GET("", featureHandler.GetAllFeatures)
 		featureRoutes.GET("/:id", featureHandler.GetFeature)
-		// featureRoutes.GET("/project/:project_id", featureHandler.GetProjectFeatures)
 		featureRoutes.PUT("/:id", featureHandler.UpdateFeature)
 		featureRoutes.DELETE("/:id", featureHandler.DeleteFeature)
 		featureRoutes.GET("/:id/subfeatures", featureHandler.GetSubfeatures)
@@ -115,6 +114,9 @@ func main() {
 		taskRoutes.GET("/:id", taskHandler.GetTask)
 		taskRoutes.PUT("/:id", taskHandler.UpdateTask)
 		taskRoutes.DELETE("/:id", taskHandler.DeleteTask)
+
+		// New route to get tasks by project ID
+		taskRoutes.GET("/project/:project_id", taskHandler.GetTasksByProject)
 	}
 
 	// Sub-feature routes
