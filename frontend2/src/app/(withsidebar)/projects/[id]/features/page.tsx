@@ -239,9 +239,9 @@ export default function FeaturesPage() {
   }
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen max-w-4xl mx-auto">
+    <div className="p-6 bg-gray-50 min-h-screen max-w-4xl mx-l">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-3xl font-bold">Feature Group</h1>
+        <h1 className="text-3xl font-bold">Project: {projectId} </h1>
         <div className="flex gap-2">
           <button
             className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
