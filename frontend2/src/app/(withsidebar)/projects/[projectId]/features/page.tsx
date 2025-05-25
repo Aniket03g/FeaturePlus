@@ -28,9 +28,10 @@ interface User {
 
 export default function FeaturesPage() {
   const params = useParams();
-  const projectId = params.id as string;
+  const projectId = params.projectId as string;
   const [features, setFeatures] = useState<Feature[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [project, setProject] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showFeatureModal, setShowFeatureModal] = useState(false);
@@ -65,12 +66,14 @@ export default function FeaturesPage() {
       try {
         setLoading(true);
         // Fetch all root features (feature groups)
-        const [groupsRes, usersRes] = await Promise.all([
+        const [groupsRes, usersRes, projectRes] = await Promise.all([
           API.get(`/features/project/${projectId}?root_only=true`),
           API.get('/users'),
+          API.get(`/projects/${projectId}`),
         ]);
         setFeatureGroups(groupsRes.data);
         setUsers(usersRes.data);
+        setProject(projectRes.data);
         // Fetch all features for this project
         const allFeaturesRes = await API.get(`/features/project/${projectId}`);
         setFeatures(allFeaturesRes.data);
@@ -241,7 +244,7 @@ export default function FeaturesPage() {
   return (
     <div className="p-6 bg-gray-50 min-h-screen max-w-4xl mx-l">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-3xl font-bold">Project: {projectId} </h1>
+        <h1 className="text-3xl font-bold">Project[{projectId}]: {project.name} </h1>
         <div className="flex gap-2">
           <button
             className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
