@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import API, { TagsAPI } from '@/api/api';
 import Link from 'next/link';
-import FeatureCreateEditForm from './FeatureCreateEditForm';
 
 interface FeatureTag {
   tag_name: string;
@@ -34,8 +33,8 @@ export default function FeaturesPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [project, setProject] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showGroupModal, setShowGroupModal] = useState(false);
   const [showFeatureModal, setShowFeatureModal] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupForm, setGroupForm] = useState({ title: '', description: '', tags: '' });
   const [groupFormLoading, setGroupFormLoading] = useState(false);
   const [groupFormError, setGroupFormError] = useState('');
@@ -48,14 +47,14 @@ export default function FeaturesPage() {
     priority: 'medium',
     assignee_id: '',
   });
-  const [featureFormLoading, setFeatureFormLoading] = useState(false);
-  const [featureFormError, setFeatureFormError] = useState('');
   const [allTags, setAllTags] = useState<string[]>([]);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [showTagSuggestions, setShowTagSuggestions] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [featureAllTags, setFeatureAllTags] = useState<string[]>([]);
   const [featureTagSuggestions, setFeatureTagSuggestions] = useState<string[]>([]);
+  const [featureShowTagSuggestions, setFeatureShowTagSuggestions] = useState(false);
+  const [featureSelectedTags, setFeatureSelectedTags] = useState<string[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<'all' | number>('all');
   const [featureGroups, setFeatureGroups] = useState<Feature[]>([]);
   const [childFeatures, setChildFeatures] = useState<Feature[]>([]);
@@ -102,9 +101,16 @@ export default function FeaturesPage() {
     }
   }, [selectedGroupId, features]);
 
+
   const handleGroupFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setGroupForm({ ...groupForm, [e.target.name]: e.target.value });
   };
+
+/*
+  const featureEdit = (project: Project, feature: Feature) => {(
+         <FeatureCreateEdit project={project} feature={feature} onEdit={onFeatureEdit} onCreate={onFeatureCreate} />
+  )};
+*/
 
   const handleGroupTagInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGroupForm({ ...groupForm, tags: e.target.value });
@@ -117,25 +123,11 @@ export default function FeaturesPage() {
     }
   };
 
-  const onFeatureEdit = () => {
-  }
-  const onFeatureCreate = () => {
-  }
-
   const handleGroupTagSelect = (tag: string) => {
     setSelectedTags([...selectedTags, tag]);
     setGroupForm({ ...groupForm, tags: '' });
     setShowTagSuggestions(false);
   };
-
-  const handleFeatureEdit = (project: Project, feature: Feature) => {(
-          <FeatureCreateEditForm 
-             project={project} 
-             feature={feature} 
-             featureGroups={featureGroups} 
-             onEdit={onFeatureEdit} 
-             onCreate={onFeatureCreate} /> 
-  )};
 
   const handleGroupTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if ((e.key === 'Enter' || e.key === ',' || e.key === ';' || e.key === ' ') && groupForm.tags.trim()) {
@@ -179,6 +171,37 @@ export default function FeaturesPage() {
     }
   };
 
+  const handleFeatureTagInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFeatureForm({ ...featureForm, tags: e.target.value });
+    if (e.target.value.length >= 2) {
+      const filtered = featureAllTags.filter(tag => tag.toLowerCase().includes(e.target.value.toLowerCase()) && !featureSelectedTags.includes(tag));
+      setFeatureTagSuggestions(filtered);
+      setFeatureShowTagSuggestions(true);
+    } else {
+      setFeatureShowTagSuggestions(false);
+    }
+  };
+
+  const handleFeatureTagSelect = (tag: string) => {
+    setFeatureSelectedTags([...featureSelectedTags, tag]);
+    setFeatureForm({ ...featureForm, tags: '' });
+    setFeatureShowTagSuggestions(false);
+  };
+
+  const handleFeatureTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.key === 'Enter' || e.key === ',' || e.key === ';' || e.key === ' ') && featureForm.tags.trim()) {
+      e.preventDefault();
+      if (!featureSelectedTags.includes(featureForm.tags.trim())) {
+        setFeatureSelectedTags([...featureSelectedTags, featureForm.tags.trim()]);
+      }
+      setFeatureForm({ ...featureForm, tags: '' });
+      setFeatureShowTagSuggestions(false);
+    }
+  };
+
+  const handleRemoveFeatureTag = (tag: string) => {
+    setFeatureSelectedTags(featureSelectedTags.filter(t => t !== tag));
+  };
 
 
   if (loading) {
@@ -186,6 +209,7 @@ export default function FeaturesPage() {
   }
 
   return (
+   <>
     <div className="p-6 bg-gray-50 min-h-screen max-w-4xl mx-l">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-3xl font-bold">Project[{projectId}]: {project.name} </h1>
@@ -228,40 +252,11 @@ export default function FeaturesPage() {
         {selectedGroupId === 'all' ? (
           // Show all feature groups and all child features
           [...featureGroups, ...features.filter(f => f.parent_feature_id !== null)].map(item => (
-            <div key={item.id} href={`/projects/${projectId}/features/${item.id}`} className="block"> 
+            <Link key={item.id} href={`/projects/${projectId}/features/${item.id}`} className="block">
               <div className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition">
                 <div className="flex items-center justify-between">
                   <span className="text-xl font-semibold text-blue-700">{item.title}</span>
                   <span className="text-blue-500 hover:underline text-sm">View</span>
-                  <button className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition" onClick={() => handleFeatureEdit(project, item)} > Edit </button>
-                </div>
-                <div className="mt-2 text-gray-700 text-base">
-                  {item.description || 'No description provided.'}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(item.tags ?? []).length > 0 && (item.tags ?? []).map((tag) => (
-                    <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
-                  ))}
-                </div>
-                <div className="mt-4 flex space-x-4 text-sm">
-                  <span className="font-medium">Status:</span>
-                  <span className="capitalize text-gray-600">{item.status}</span>
-                  <span className="font-medium ml-4">Priority:</span>
-                  <span className="capitalize text-gray-600">{item.priority || '-'}</span>
-                </div>
-                  </div>
-            </div> 
-          ))
-        ) : (
-          // Show only the selected feature group and its child features
-          [
-            ...featureGroups.filter(g => g.id === selectedGroupId),
-            ...features.filter(f => f.parent_feature_id === selectedGroupId)
-          ].map(item => (
-            <div key={item.id} href={`/projects/${projectId}/features/${item.id}`} className="block"> 
-              <div className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition">
-                <div className="flex items-center justify-between">
-                  <span className="text-xl font-semibold text-blue-700">{item.title}</span>
                   <button className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition" onClick={() => featureEdit(project, item)} > Edit </button>
                 </div>
                 <div className="mt-2 text-gray-700 text-base">
@@ -278,8 +273,37 @@ export default function FeaturesPage() {
                   <span className="font-medium ml-4">Priority:</span>
                   <span className="capitalize text-gray-600">{item.priority || '-'}</span>
                 </div>
+                  </div>
+            </Link>
+          ))
+        ) : (
+          // Show only the selected feature group and its child features
+          [
+            ...featureGroups.filter(g => g.id === selectedGroupId),
+            ...features.filter(f => f.parent_feature_id === selectedGroupId)
+          ].map(item => (
+            <Link key={item.id} href={`/projects/${projectId}/features/${item.id}`} className="block">
+              <div className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-xl font-semibold text-blue-700">{item.title}</span>
+                  <Link className="text-blue-500 hover:underline text-sm">Edit</span>
+                </div>
+                <div className="mt-2 text-gray-700 text-base">
+                  {item.description || 'No description provided.'}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(item.tags ?? []).length > 0 && (item.tags ?? []).map((tag) => (
+                    <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
+                  ))}
+                </div>
+                <div className="mt-4 flex space-x-4 text-sm">
+                  <span className="font-medium">Status:</span>
+                  <span className="capitalize text-gray-600">{item.status}</span>
+                  <span className="font-medium ml-4">Priority:</span>
+                  <span className="capitalize text-gray-600">{item.priority || '-'}</span>
+                </div>
               </div>
-            </div>
+            </Link>
           ))
         )}
       </div>
@@ -372,8 +396,9 @@ export default function FeaturesPage() {
       )}
       {/* Feature Modal */}
       {showFeatureModal && (
-         <FeatureCreateEditForm project={project} featureGroups={featureGroups} onEdit={onFeatureEdit} onCreate={onFeatureCreate} />
+         <FeatureCreateEdit project={project} onEdit={onFeatureEdit} onCreate={onFeatureCreate} />
       )}
     </div>
+    </>
   );
 } 
