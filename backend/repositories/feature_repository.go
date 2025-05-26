@@ -57,7 +57,7 @@ func (r *FeatureRepository) UpdateFeature(feature *models.Feature) error {
 }
 
 func (r *FeatureRepository) DeleteFeature(id int) error {
-	return r.db.Delete(&models.Feature{}, id).Error
+	return r.db.Unscoped().Delete(&models.Feature{}, id).Error
 }
 
 func (r *FeatureRepository) GetAllFeatures() ([]models.Feature, error) {

@@ -21,6 +21,11 @@ interface Feature {
   parent_feature_id?: number | null;
 }
 
+interface Project {
+  id: number;
+  name: string;
+}
+
 interface User {
   id: number;
   username: string;
@@ -31,7 +36,7 @@ export default function FeaturesPage() {
   const projectId = params.projectId as string;
   const [features, setFeatures] = useState<Feature[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  const [project, setProject] = useState<Project[]>([]);
+  const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showFeatureModal, setShowFeatureModal] = useState(false);
@@ -244,7 +249,7 @@ export default function FeaturesPage() {
   return (
     <div className="p-6 bg-gray-50 min-h-screen max-w-4xl mx-l">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-3xl font-bold">Project[{projectId}]: {project.name} </h1>
+        <h1 className="text-3xl font-bold">Project[{projectId}]: {project?.name} </h1>
         <div className="flex gap-2">
           <button
             className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
@@ -340,7 +345,7 @@ export default function FeaturesPage() {
       </div>
       {/* Feature Group Modal */}
       {showGroupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-10 overflow-y-auto">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-10 overflow-y-auto">
           <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md relative">
             <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600" onClick={() => setShowGroupModal(false)}>&times;</button>
             <h2 className="text-xl font-bold mb-4">Create Feature Group</h2>
@@ -427,7 +432,7 @@ export default function FeaturesPage() {
       )}
       {/* Feature Modal */}
       {showFeatureModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-10 overflow-y-auto">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-10 overflow-y-auto">
           <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md relative">
             <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600" onClick={() => setShowFeatureModal(false)}>&times;</button>
             <h2 className="text-xl font-bold mb-4">Create Feature</h2>

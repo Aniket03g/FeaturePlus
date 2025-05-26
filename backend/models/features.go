@@ -36,5 +36,5 @@ type Feature struct {
 	Project       Project      `gorm:"foreignKey:ProjectID" json:"-"`
 	ParentFeature *Feature     `gorm:"foreignKey:ParentFeatureID" json:"parent_feature,omitempty"`
 	Assignee      User         `gorm:"foreignKey:AssigneeID" json:"assignee"`
-	Tags          []FeatureTag `gorm:"foreignKey:FeatureID" json:"tags"`
+	Tags          []FeatureTag `json:"tags"`
 }

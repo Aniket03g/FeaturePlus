@@ -1,20 +1,23 @@
 "use client";
-import React from "react";
-import { useModal } from "../../hooks/useModal";
-import { Modal } from "../ui/modal";
-import Button from "../ui/button/Button";
-import Input from "../form/input/InputField";
-import Label from "../form/Label";
+import React, { useState } from "react";
+import { useModal } from "../hooks/useModal";
+import { Modal } from "./ui/modal";
+import Button from "./ui/button/Button";
+import Input from "./form/input/InputField";
+import Label from "./form/Label";
+import { Feature, User } from "@/app/types";
+import styles from "./FeatureEditCard.module.css";
 
 
 interface FeatureModalProps {
   feature: Feature | null;
+  isOpen: boolean;
   users: User[];
   onClose: () => void;
   onSave: (feature: Feature) => void;
 }
 
-const FeatureModal = ({ feature, users, onClose, onSave }: FeatureModalProps) => {
+export const FeatureModal = ({ feature, users, onClose, onSave }: FeatureModalProps) => {
   const [formData, setFormData] = useState<Feature | null>(feature);
 
   if (!formData) return null;
@@ -62,6 +65,23 @@ const FeatureModal = ({ feature, users, onClose, onSave }: FeatureModalProps) =>
               onChange={handleChange}
               rows={4}
               placeholder="Describe the feature..."
+            />
+          </div>
+          
+          <div className={styles.formGroup}>
+            <label htmlFor="tags">Tags</label>
+            <input
+              type="text"
+              id="tags"
+              name="tagsInput"
+              value={formData.tags?.map(tag => tag.tag_name).join(', ') || ''}
+              onChange={(e) => {
+                setFormData({
+                  ...formData,
+                  tags: e.target.value.split(/[,;\s]+/).filter(tag => tag !== '').map(tagName => ({ tag_name: tagName, feature_id: formData.id || 0, created_by_user: 0 }))
+                });
+              }}
+              placeholder="Enter tags separated by space, comma, or semicolon"
             />
           </div>
           

@@ -191,6 +191,12 @@
   font-weight: 500;
 }
 
+.actionButtons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .editButton {
   background-color: transparent;
   border: none;
@@ -201,8 +207,35 @@
   border-radius: 3px;
   font-weight: 500;
   transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 8px;
 }
 
 .editButton:hover {
   background-color: #deebff;
+}
+
+.deleteButton {
+  background-color: transparent;
+  border: none;
+  color: #e03131;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.deleteButton:hover {
+  background-color: #ffe3e3;
 } 

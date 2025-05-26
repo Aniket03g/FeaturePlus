@@ -2,31 +2,10 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { FeaturesAPI, TasksAPI } from "@/api/api";
+import API, { FeaturesAPI, TasksAPI } from "@/api/api";
 import { FiEdit2, FiTrash2 } from "react-icons/fi";
-
-interface Feature {
-  id: number;
-  title: string;
-  description?: string;
-  status: string;
-  priority?: string;
-  parent_feature_id?: number | null;
-}
-
-interface Tag {
-  tag_name: string;
-  feature_id: number;
-  created_by_user: number;
-}
-
-interface Task {
-  ID: number;
-  task_type: string;
-  task_name: string;
-  description: string;
-  feature_id: number;
-}
+import { FeatureModal } from "@/components/FeatureEditCard";
+import { Feature, User, Tag, Task } from "@/app/types";
 
 export default function FeatureGroupDetailPage() {
   const params = useParams();
@@ -59,6 +38,9 @@ export default function FeatureGroupDetailPage() {
   });
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
+  const [isSubfeatureModalOpen, setIsSubfeatureModalOpen] = useState(false);
+  const [editingSubfeature, setEditingSubfeature] = useState<Feature | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
 
   const router = useRouter();
 
@@ -69,10 +51,7 @@ export default function FeatureGroupDetailPage() {
         // Fetch feature group details
         const featureRes = await FeaturesAPI.getById(Number(featureId));
         setFeatureGroup(featureRes.data);
-
-        // Fetch tags for this feature
-        const tagsRes = await FeaturesAPI.getTags(Number(featureId));
-        setFeatureTags(tagsRes.data);
+        console.log("Feature data with potentially preloaded tags:", featureRes.data);
 
         // Fetch tasks for this feature
         const tasksRes = await TasksAPI.getByFeature(Number(featureId));
@@ -109,6 +88,11 @@ export default function FeatureGroupDetailPage() {
           tasksCountMap[subRes.data[idx].id] = res.data.length;
         });
         setTasksCountMap(tasksCountMap);
+
+        // Fetch users for the assignee dropdown in the modal
+        const usersRes = await API.get('/users'); // Assuming a /users endpoint exists
+        setUsers(usersRes.data);
+
       } catch (err) {
         // handle error
       } finally {
@@ -231,6 +215,48 @@ export default function FeatureGroupDetailPage() {
     }
   };
 
+  const handleDeleteSubfeature = async (subfeature: Feature) => {
+    if (!subfeature.id) return;
+    
+    if (window.confirm(`Are you sure you want to delete the subfeature "${subfeature.title}"?`)) {
+      try {
+        // Assuming the API endpoint for deleting a feature (which a subfeature is) is /features/:id
+        await API.delete(`/features/${subfeature.id}`);
+        // Update the subfeatures state by filtering out the deleted subfeature
+        setSubfeatures(subfeatures.filter(f => f.id !== subfeature.id));
+        // Optionally, update the main feature's subfeature count if displayed
+        // You might need to refetch the main feature or update its count state.
+      } catch (error) {
+        console.error('Error deleting subfeature:', error);
+        alert('Failed to delete subfeature. Please try again.');
+      }
+    }
+  };
+
+  const handleEditSubfeature = (subfeature: Feature) => {
+    setEditingSubfeature(subfeature);
+    setIsSubfeatureModalOpen(true);
+  };
+
+  const handleCloseSubfeatureModal = () => {
+    setIsSubfeatureModalOpen(false);
+    setEditingSubfeature(null);
+  };
+
+  const handleSaveSubfeature = async (updatedSubfeature: Feature) => {
+    try {
+      // Assuming the API endpoint for updating a feature (which a subfeature is) is PUT /features/:id
+      await API.put(`/features/${updatedSubfeature.id}`, updatedSubfeature);
+      // Update the subfeatures state with the updated subfeature
+      setSubfeatures(subfeatures.map(f => f.id === updatedSubfeature.id ? updatedSubfeature : f));
+      handleCloseSubfeatureModal();
+      // Optionally, update the main feature view if needed
+    } catch (error) {
+      console.error('Error updating subfeature:', error);
+      alert('Failed to update subfeature. Please try again.');
+    }
+  };
+
   // Compute filtered tasks
   const filteredTasks = taskFilter === "All"
     ? featureTasks
@@ -266,9 +292,9 @@ export default function FeatureGroupDetailPage() {
             )}
           </div>
           {/* Tags as chips */}
-          {featureTags.length > 0 && (
+          {featureGroup?.tags && featureGroup.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-2">
-              {featureTags.map((tag) => (
+              {featureGroup.tags.map((tag) => (
                 <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
             ))}
           </div>
@@ -414,35 +440,67 @@ export default function FeatureGroupDetailPage() {
           {subfeatures.map((feature) => (
             <div
               key={feature.id}
-              className="bg-white rounded-lg shadow p-6 border border-gray-200 flex items-start hover:bg-blue-50 transition cursor-pointer"
-              onClick={() => router.push(`/projects/${projectId}/features/${feature.id}`)}
+              className="bg-white rounded-lg shadow p-6 border border-gray-200 flex items-center justify-between hover:bg-blue-50 transition cursor-pointer"
             >
-              {/* Left: Feature ID */}
-              <div className="flex-shrink-0 text-xs text-gray-400 font-mono mr-4 pt-1">F-ID {feature.id}</div>
-              {/* Center: Title & Description */}
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
+              {/* Left section: Feature ID, Title, Description, and Tags */}
+              <div className="flex-1 flex flex-col">
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="flex-shrink-0 text-xs text-gray-400 font-mono">F-ID {feature.id}</div>
                   <span className="text-lg font-semibold text-blue-700">{feature.title}</span>
                   {/* Tasks badge */}
                   <span className="ml-2 text-xs bg-gray-200 text-gray-700 rounded px-2 py-1">
                     {tasksCountMap[feature.id] || 0} tasks
                   </span>
                 </div>
-                <div className="mt-1 text-gray-700 text-base">
-                  {feature.description || "No description provided."}
-                </div>
+                {feature.description && (
+                  <div className="mt-1 text-gray-700 text-base">{feature.description}</div>
+                )}
                 {/* Tags as chips below description, show dummy if none */}
                 {tagsMap[feature.id] && tagsMap[feature.id].length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                    {tagsMap[feature.id].map((tag) => (
-                      <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
-                  ))}
-                </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                      {tagsMap[feature.id].map((tag) => (
+                        <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
+                    ))}
+                  </div>
                 )}
+              </div>
+              {/* Right section: Action buttons */}
+              <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                <button
+                  className="p-1 rounded hover:bg-blue-50 text-gray-500 hover:text-blue-600 transition"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditSubfeature(feature);
+                  }}
+                  title="Edit Subfeature"
+                >
+                  <FiEdit2 size={18} />
+                </button>
+                <button
+                  className="p-1 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteSubfeature(feature);
+                  }}
+                  title="Delete Subfeature"
+                >
+                  <FiTrash2 size={18} />
+                </button>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Feature Edit Modal */}
+      {isSubfeatureModalOpen && editingSubfeature && 'id' in editingSubfeature && (
+        <FeatureModal
+          isOpen={isSubfeatureModalOpen}
+          feature={editingSubfeature}
+          onClose={handleCloseSubfeatureModal}
+          onSave={handleSaveSubfeature}
+          users={users}
+        />
       )}
     </div>
   );

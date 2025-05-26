@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -90,6 +91,9 @@ func (h *FeatureHandler) GetFeature(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "feature not found"})
 		return
 	}
+
+	// Log the feature object with preloaded tags
+	fmt.Printf("Fetched feature with tags in backend: %+v\n", feature)
 
 	c.JSON(http.StatusOK, feature)
 }

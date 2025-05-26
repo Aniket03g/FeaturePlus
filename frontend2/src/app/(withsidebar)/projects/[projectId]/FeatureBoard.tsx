@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import styles from './FeatureBoard.module.css';
-import FeatureCard from './FeatureCard.tsx';
+import FeatureCard from './FeatureCard';
 import { Feature, User, Project } from '@/app/types';
 import API from '@/api/api';
 
@@ -60,6 +60,21 @@ const FeatureBoard = ({ project, onFeatureUpdated }: FeatureBoardProps) => {
     }
   };
 
+  const handleDeleteFeature = async (feature: Feature) => {
+    if (!feature.id) return;
+    
+    if (window.confirm(`Are you sure you want to delete the feature "${feature.title}"?`)) {
+      try {
+        await API.delete(`/features/${feature.id}`);
+        setFeatures(features.filter(f => f.id !== feature.id));
+        onFeatureUpdated();
+      } catch (error) {
+        console.error('Error deleting feature:', error);
+        alert('Failed to delete feature. Please try again.');
+      }
+    }
+  };
+
   const handleCreateFeature = async (newFeature: Omit<Feature, 'id' | 'created_at' | 'updated_at'>) => {
     try {
       const submitData = {
@@ -68,7 +83,8 @@ const FeatureBoard = ({ project, onFeatureUpdated }: FeatureBoardProps) => {
         description: newFeature.description,
         status: newFeature.status,
         priority: newFeature.priority,
-        assignee_id: newFeature.assignee_id || 0
+        assignee_id: newFeature.assignee_id || 0,
+        parent_feature_id: null
       };
       
       console.log("Submitting feature data:", submitData);
@@ -103,6 +119,7 @@ const FeatureBoard = ({ project, onFeatureUpdated }: FeatureBoardProps) => {
             setEditingFeature({
               id: 0,
               project_id: Number(project.id),
+              parent_feature_id: null,
               title: '',
               description: '',
               status: 'todo',
@@ -130,6 +147,7 @@ const FeatureBoard = ({ project, onFeatureUpdated }: FeatureBoardProps) => {
                 key={feature.id}
                 feature={feature}
                 onEdit={handleEditFeature}
+                onDelete={handleDeleteFeature}
               />
             ))}
             {todoFeatures.length === 0 && (
@@ -149,6 +167,7 @@ const FeatureBoard = ({ project, onFeatureUpdated }: FeatureBoardProps) => {
                 key={feature.id}
                 feature={feature}
                 onEdit={handleEditFeature}
+                onDelete={handleDeleteFeature}
               />
             ))}
             {inProgressFeatures.length === 0 && (
@@ -168,6 +187,7 @@ const FeatureBoard = ({ project, onFeatureUpdated }: FeatureBoardProps) => {
                 key={feature.id}
                 feature={feature}
                 onEdit={handleEditFeature}
+                onDelete={handleDeleteFeature}
               />
             ))}
             {doneFeatures.length === 0 && (

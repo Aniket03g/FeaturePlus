@@ -22,7 +22,24 @@ export interface Feature {
   created_at: string;
   updated_at: string;
   parent_feature?: Feature;
+  assignee?: User;
+  tags?: Tag[];
 }
 
 // Re-export SubFeature from its own file
-export type { SubFeature } from './subfeature'; 
+export type { SubFeature } from './subfeature';
+
+// Export Tag and Task interfaces
+export interface Tag {
+  tag_name: string;
+  feature_id: number;
+  created_by_user: number;
+}
+
+export interface Task {
+  ID: number;
+  task_type: string;
+  task_name: string;
+  description: string;
+  feature_id: number;
+} 

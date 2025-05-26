@@ -2,13 +2,15 @@
 import { useState } from 'react';
 import styles from './FeatureCard.module.css';
 import { Feature } from '@/app/types';
+import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 
 interface FeatureCardProps {
   feature: Feature;
   onEdit: (feature: Feature) => void;
+  onDelete: (feature: Feature) => void;
 }
 
-const FeatureCard = ({ feature, onEdit }: FeatureCardProps) => {
+const FeatureCard = ({ feature, onEdit, onDelete }: FeatureCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getPriorityClass = (priority: string) => {
@@ -52,6 +54,28 @@ const FeatureCard = ({ feature, onEdit }: FeatureCardProps) => {
         <div className={`${styles.priority} ${getPriorityClass(feature.priority)}`}>
           {feature.priority.charAt(0).toUpperCase() + feature.priority.slice(1)}
         </div>
+        <div className={styles.actionButtons}>
+          <button 
+            className={styles.editButton} 
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(feature);
+            }}
+            title="Edit Feature"
+          >
+            <FiEdit2 size={18} />
+          </button>
+          <button 
+            className={styles.deleteButton}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(feature);
+            }}
+            title="Delete Feature"
+          >
+            <FiTrash2 size={18} />
+          </button>
+        </div>
       </div>
       
       {isExpanded && (
@@ -85,15 +109,6 @@ const FeatureCard = ({ feature, onEdit }: FeatureCardProps) => {
                 {feature.assignee ? feature.assignee.username : 'Unassigned'}
               </span>
             </div>
-            <button 
-              className={styles.editButton}
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(feature);
-              }}
-            >
-              Edit
-            </button>
           </div>
         </div>
       )}

@@ -61,7 +61,7 @@ const FeatureCard = ({ feature, onEdit }: FeatureCardProps) => {
           <TagList tags={feature.tags} />
         </div>
       )}
-      
+
       {isExpanded && (
         <div className={styles.details}>
           <div className={styles.metadata}>
@@ -76,6 +76,15 @@ const FeatureCard = ({ feature, onEdit }: FeatureCardProps) => {
               <span className={styles.metaLabel}>ID:</span>
               <span className={styles.featureId}>FP-{feature.id}</span>
             </span>
+            <button 
+              className={styles.editButton}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(feature);
+              }}
+            >
+              Edit
+            </button>
           </div>
           
           {feature.description ? (
@@ -93,15 +102,6 @@ const FeatureCard = ({ feature, onEdit }: FeatureCardProps) => {
                 {feature.assignee ? feature.assignee.username : 'Unassigned'}
               </span>
             </div>
-            <button 
-              className={styles.editButton}
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(feature);
-              }}
-            >
-              Edit
-            </button>
           </div>
         </div>
       )}
