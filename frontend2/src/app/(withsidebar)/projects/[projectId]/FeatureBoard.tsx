@@ -2,15 +2,15 @@
 import { useState, useEffect } from 'react';
 import styles from './FeatureBoard.module.css';
 import FeatureCard from './FeatureCard.tsx';
-import { Feature, User } from '@/app/types';
+import { Feature, User, Project } from '@/app/types';
 import API from '@/api/api';
 
 interface FeatureBoardProps {
-  projectId: string | number;
+  project: Project;
   onFeatureUpdated: () => void;
 }
 
-const FeatureBoard = ({ projectId, onFeatureUpdated }: FeatureBoardProps) => {
+const FeatureBoard = ({ project, onFeatureUpdated }: FeatureBoardProps) => {
   const [features, setFeatures] = useState<Feature[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,7 +22,7 @@ const FeatureBoard = ({ projectId, onFeatureUpdated }: FeatureBoardProps) => {
       try {
         setLoading(true);
         const [featuresRes, usersRes] = await Promise.all([
-          API.get(`/features/project/${projectId}`),
+          API.get(`/features/project/${project.id}`),
           API.get('/users')
         ]);
         setFeatures(featuresRes.data);
@@ -35,7 +35,7 @@ const FeatureBoard = ({ projectId, onFeatureUpdated }: FeatureBoardProps) => {
     };
 
     fetchFeatures();
-  }, [projectId]);
+  }, [project.id]);
 
   const handleEditFeature = (feature: Feature) => {
     setEditingFeature(feature);
@@ -63,7 +63,7 @@ const FeatureBoard = ({ projectId, onFeatureUpdated }: FeatureBoardProps) => {
   const handleCreateFeature = async (newFeature: Omit<Feature, 'id' | 'created_at' | 'updated_at'>) => {
     try {
       const submitData = {
-        project_id: Number(projectId),
+        project_id: Number(project.id),
         title: newFeature.title,
         description: newFeature.description,
         status: newFeature.status,
@@ -102,7 +102,7 @@ const FeatureBoard = ({ projectId, onFeatureUpdated }: FeatureBoardProps) => {
           onClick={() => {
             setEditingFeature({
               id: 0,
-              project_id: Number(projectId),
+              project_id: Number(project.id),
               title: '',
               description: '',
               status: 'todo',

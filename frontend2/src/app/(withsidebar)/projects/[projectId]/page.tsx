@@ -9,25 +9,25 @@ import Link from 'next/link';
 
 const ProjectBoardPage = () => {
   const params = useParams();
-  const id = params.id as string;
+  const projectId = params.projectId as string;
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchProject = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await API.get(`/projects/${id}`);
+      const res = await API.get(`/projects/${projectId}`);
       setProject(res.data);
     } catch (error) {
       console.error("Failed to fetch project", error);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [projectId]);
 
   useEffect(() => {
     fetchProject();
-  }, [id, fetchProject]);
+  }, [projectId, fetchProject]);
 
   if (loading) {
     return <div className={styles.loading}>Loading project...</div>;
@@ -42,7 +42,7 @@ const ProjectBoardPage = () => {
       <div className={styles.projectHeader}>
         <h1>{project.name} Board</h1>
       </div>
-      <FeatureBoard projectId={id} onFeatureUpdated={fetchProject} />
+      <FeatureBoard projectId={projectId} project={project} onFeatureUpdated={fetchProject} />
     </div>
   );
 };

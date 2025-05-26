@@ -1,4 +1,5 @@
-node_modules
-frontend2/package-lock.json
+<<<<<<< HEAD
+*node_modules
+*frontend2/package-lock.json
 **/.next
-.vscode
+*.vscode
