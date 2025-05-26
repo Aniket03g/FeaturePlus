@@ -11,6 +11,7 @@ interface Feature {
   description?: string;
   status: string;
   priority?: string;
+  parent_feature_id?: number | null;
 }
 
 interface Tag {
@@ -20,7 +21,7 @@ interface Tag {
 }
 
 interface Task {
-  id: number;
+  ID: number;
   task_type: string;
   task_name: string;
   description: string;
@@ -77,6 +78,15 @@ export default function FeatureGroupDetailPage() {
         const tasksRes = await TasksAPI.getByFeature(Number(featureId));
         setFeatureTasks(tasksRes.data);
         console.log("Fetched tasks:", tasksRes.data);
+
+        // Log received task data to check for 'id'
+        if (Array.isArray(tasksRes.data)) {
+          tasksRes.data.forEach((task: any) => {
+            console.log("Fetched task ID:", task.ID, "Task object:", task);
+          });
+        } else {
+          console.log("Fetched tasks data is not an array:", tasksRes.data);
+        }
 
         // Fetch subfeatures
         const subRes = await FeaturesAPI.getSubfeatures(Number(featureId));
@@ -148,6 +158,11 @@ export default function FeatureGroupDetailPage() {
   };
 
   const openEditTaskForm = (task: Task) => {
+    if (typeof task.ID !== 'number') {
+      console.error("Attempted to edit task with invalid ID:", task);
+      alert("Cannot edit this task due to missing ID.");
+      return;
+    }
     setShowTaskForm(true);
     setIsEditingTask(true);
     setEditingTask(task);
@@ -178,14 +193,24 @@ export default function FeatureGroupDetailPage() {
     try {
       if (isEditingTask && editingTask) {
         // Edit task
-        await TasksAPI.updateTask(Number(featureGroup?.id), editingTask.id, taskForm);
-        setFeatureTasks((prev) => prev.map((t) => t.id === editingTask.id ? { ...t, ...taskForm } : t));
+        if (typeof editingTask.ID !== 'number') {
+          console.error("Invalid task ID for update:", editingTask.ID);
+          setFormError("Failed to save task due to invalid ID.");
+          setFormLoading(false);
+          return;
+        }
+        await TasksAPI.updateTask(Number(featureGroup?.id), editingTask.ID, taskForm);
+        setFeatureTasks((prev) => prev.map((t) => t.ID === editingTask.ID ? { ...t, ...taskForm } : t));
       } else {
         // Add task
         const res = await TasksAPI.createForFeature(Number(featureGroup?.id), taskForm);
         setFeatureTasks((prev) => [...prev, res.data]);
+
+        // Log newly created task data to check for 'id'
+        console.log("Newly created task data:", res.data);
+
+        closeTaskForm();
       }
-      closeTaskForm();
     } catch (err) {
       setFormError("Failed to save task. Please try again.");
     } finally {
@@ -193,10 +218,14 @@ export default function FeatureGroupDetailPage() {
     }
   };
 
-  const handleDeleteTask = async (taskId: number) => {
+  const handleDeleteTask = async (taskID: number) => {
     try {
-      await TasksAPI.deleteTask(Number(featureGroup?.id), taskId);
-      setFeatureTasks((prev) => prev.filter((t) => t.id !== taskId));
+      if (typeof taskID !== 'number') {
+        console.error("Invalid task ID for deletion:", taskID);
+        return;
+      }
+      await TasksAPI.deleteTask(Number(featureGroup?.id), taskID);
+      setFeatureTasks((prev) => prev.filter((t) => t.ID !== taskID));
     } catch (err) {
       // Optionally show error
     }
@@ -248,134 +277,134 @@ export default function FeatureGroupDetailPage() {
       </div>
 
       {/* Tasks Section */}
-      {featureTasks.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center mb-4 gap-4">
-            <h2 className="text-xl font-semibold mb-0">Tasks</h2>
-            <button
-              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white font-semibold text-base shadow hover:bg-blue-700 transition"
-              onClick={openAddTaskForm}
-            >
-              <span className="text-lg">+</span> Add Task
-            </button>
-            <div className="flex gap-2 ml-4">
-              {['All', 'DB', 'UI', 'Backend'].map(type => (
-                <button
-                  key={type}
-                  className={`px-4 py-1 rounded-full border text-sm font-medium transition
-                    ${taskFilter === type ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
-                  onClick={() => setTaskFilter(type)}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-          </div>
-          {showTaskForm && (
-            <div className="mb-6 max-w-xl bg-white rounded-lg shadow p-6 border border-gray-200">
-              <h2 className="text-lg font-semibold mb-4">{isEditingTask ? "Edit Task" : "Add New Task"}</h2>
-              <form onSubmit={handleTaskFormSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1" htmlFor="task_type">Task Type *</label>
-                  <select
-                    id="task_type"
-                    name="task_type"
-                    className="w-full border rounded px-3 py-2 text-sm"
-                    value={taskForm.task_type}
-                    onChange={handleTaskFormChange}
-                    required
-                  >
-                    <option value="UI">UI</option>
-                    <option value="DB">DB</option>
-                    <option value="Backend">Backend</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1" htmlFor="task_name">Task Name *</label>
-                  <input
-                    id="task_name"
-                    name="task_name"
-                    type="text"
-                    className="w-full border rounded px-3 py-2 text-sm"
-                    value={taskForm.task_name}
-                    onChange={handleTaskFormChange}
-                    required
-                    placeholder="Enter task name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1" htmlFor="description">Description</label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    className="w-full border rounded px-3 py-2 text-sm min-h-[80px]"
-                    value={taskForm.description}
-                    onChange={handleTaskFormChange}
-                    placeholder="Describe the task..."
-                  />
-                </div>
-                {formError && <div className="text-red-500 text-sm mb-2">{formError}</div>}
-                <div className="flex justify-end gap-3 mt-4">
-                  <button
-                    type="button"
-                    className="px-4 py-2 rounded border text-gray-700 bg-gray-100 hover:bg-gray-200"
-                    onClick={closeTaskForm}
-                    disabled={formLoading}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700"
-                    disabled={formLoading}
-                  >
-                    {isEditingTask ? "Save" : "Add Task"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-          <div className="space-y-4">
-            {filteredTasks.length === 0 ? (
-              <div className="text-gray-400 text-sm">No tasks for this filter.</div>
-            ) : (
-              filteredTasks.map((task) => {
-                const taskId = task.id;
-                return (
-                  <div key={taskId} className="bg-white rounded-lg shadow p-4 border border-gray-200">
-                    <div className="flex items-start gap-4 mb-2">
-                      <span className="flex-shrink-0 bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs">{task.task_type}</span>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-blue-700 text-base">{task.task_name}</span>
-                        </div>
-                        <div className="text-gray-700 text-sm">
-                          {task.description || "No description provided."}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <button
-                          className="p-1 rounded hover:bg-blue-50 text-gray-500 hover:text-blue-600 transition"
-                          onClick={() => openEditTaskForm(task)}
-                          title="Edit"
-                        >
-                          <FiEdit2 size={18} />
-                        </button>
-                        <button
-                          className="p-1 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition"
-                          onClick={() => { if (typeof taskId === 'number') handleDeleteTask(taskId); }}
-                          title="Delete"
-                        >
-                          <FiTrash2 size={18} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
+      {featureGroup?.parent_feature_id !== null && (
+      <div className="mb-8">
+        <div className="flex items-center mb-4 gap-4">
+          <h2 className="text-xl font-semibold mb-0">Tasks</h2>
+          <button
+            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white font-semibold text-base shadow hover:bg-blue-700 transition"
+            onClick={openAddTaskForm}
+          >
+            <span className="text-lg">+</span> Add Task
+          </button>
+          <div className="flex gap-2 ml-4">
+            {['All', 'DB', 'UI', 'Backend'].map(type => (
+              <button
+                key={type}
+                className={`px-4 py-1 rounded-full border text-sm font-medium transition
+                  ${taskFilter === type ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
+                onClick={() => setTaskFilter(type)}
+              >
+                {type}
+              </button>
+            ))}
           </div>
         </div>
+        {showTaskForm && (
+          <div className="mb-6 max-w-xl bg-white rounded-lg shadow p-6 border border-gray-200">
+            <h2 className="text-lg font-semibold mb-4">{isEditingTask ? "Edit Task" : "Add New Task"}</h2>
+            <form onSubmit={handleTaskFormSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1" htmlFor="task_type">Task Type *</label>
+                <select
+                  id="task_type"
+                  name="task_type"
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={taskForm.task_type}
+                  onChange={handleTaskFormChange}
+                  required
+                >
+                  <option value="UI">UI</option>
+                  <option value="DB">DB</option>
+                  <option value="Backend">Backend</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" htmlFor="task_name">Task Name *</label>
+                <input
+                  id="task_name"
+                  name="task_name"
+                  type="text"
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={taskForm.task_name}
+                  onChange={handleTaskFormChange}
+                  required
+                  placeholder="Enter task name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" htmlFor="description">Description</label>
+                <textarea
+                  id="description"
+                  name="description"
+                  className="w-full border rounded px-3 py-2 text-sm min-h-[80px]"
+                  value={taskForm.description}
+                  onChange={handleTaskFormChange}
+                  placeholder="Describe the task..."
+                />
+              </div>
+              {formError && <div className="text-red-500 text-sm mb-2">{formError}</div>}
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded border text-gray-700 bg-gray-100 hover:bg-gray-200"
+                  onClick={closeTaskForm}
+                  disabled={formLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                  disabled={formLoading}
+                >
+                  {isEditingTask ? "Save" : "Add Task"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+        <div className="space-y-4">
+          {filteredTasks.length === 0 ? (
+            <div className="text-gray-400 text-sm">No tasks for this filter.</div>
+          ) : (
+            filteredTasks.map((task) => {
+              const taskID = task.ID;
+              return (
+                <div key={taskID} className="bg-white rounded-lg shadow p-4 border border-gray-200">
+                  <div className="flex items-start gap-4 mb-2">
+                    <span className="flex-shrink-0 bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs">{task.task_type}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-blue-700 text-base">{task.task_name}</span>
+                      </div>
+                      <div className="text-gray-700 text-sm">
+                        {task.description || "No description provided."}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        className="p-1 rounded hover:bg-blue-50 text-gray-500 hover:text-blue-600 transition"
+                        onClick={() => openEditTaskForm(task)}
+                        title="Edit"
+                      >
+                        <FiEdit2 size={18} />
+                      </button>
+                      <button
+                        className="p-1 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition"
+                        onClick={() => { if (typeof taskID === 'number') handleDeleteTask(taskID); }}
+                        title="Delete"
+                      >
+                        <FiTrash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
       )}
 
       {/* Subfeatures Section (if needed) */}
