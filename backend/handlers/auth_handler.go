@@ -57,7 +57,11 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 	// Return created user ID for confirmation
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "Signup successful",
-		"user_id": user.ID,
+        "auth_info": {
+		    "user_id": user.ID,
+            "user_name": user.Username,
+            "projects": "P-1,P-2", 
+        }
 	})
 }
 
