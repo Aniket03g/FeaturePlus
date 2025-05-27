@@ -1,5 +1,7 @@
-"use client";
-import { useEffect, useState } from "react";
+'use client';
+
+import { useEffect, useState, useContext } from 'react';
+import { AuthContext } from '@/context/AuthContext';
 import Link from "next/link";
 import API from "@/api/api";
 import styles from './page.module.css';
@@ -13,6 +15,19 @@ interface User {
 }
 
 const Home = () => {
+  const { user, project } = useContext(AuthContext);
+  console.log("From authcontext:", user, project);  
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4">Welcome to the App</h1>
+      <p className="text-lg">User: {user?.name || 'Not logged in' }</p>
+      <p className="text-lg">Project: {project?.name || 'No project selected'}</p>
+      <Link href="/login"> Login </Link>
+    </div>
+  );
+}
+
+const Home2 = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -64,3 +79,4 @@ const Home = () => {
 };
 
 export default Home;
+

@@ -19,7 +19,7 @@ func GenerateJWT(userID int) (string, error) {
 	return token.SignedString(jwtKey)
 }
 
-func ParseJWT(tokenString string) (jwt.MapClaims, error) {
+func ValidateToken(tokenString string) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		// Validate the signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
