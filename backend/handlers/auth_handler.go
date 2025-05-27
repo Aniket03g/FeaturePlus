@@ -104,9 +104,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		"token": token,
 		"user": map[string]interface{}{
 			"id":       user.ID,
-			"email":    user.Email,
 			"username": user.Username,
+			"email":    user.Email,
 			"role":     user.Role,
+        },
+        "projects_roles": map[string]interface{}{  
+           "FeaturePlus": "admin,devel,pm",
+           "*": "view",
 		},
 	})
 }
@@ -130,7 +134,7 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	tokenString := parts[1]
 
 	// Verify and parse the token
-	claims, err := utils.ParseJWT(tokenString)
+	claims, err := utils.ValidateToken(tokenString)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 		return
