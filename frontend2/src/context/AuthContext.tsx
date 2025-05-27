@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User>(null);
   const [project, setProject] = useState<Project>(null);
 
-  const login = (luser: User, lproject: Project) => {
+  const saveLoginStatus = (luser: User, lproject: Project) => {
     // In a real app, update state or call API
     setUser(luser); 
     setProject(lproject);

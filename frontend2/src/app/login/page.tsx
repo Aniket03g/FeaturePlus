@@ -17,7 +17,7 @@ export default function LoginPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { login } = useContext(AuthContext);
+  const { saveLoginStatus } = useContext(AuthContext);
 
   // Check for registered=true parameter
   useEffect(() => {
@@ -57,7 +57,7 @@ export default function LoginPage() {
     }
 
     try {
-      login({email: credentials.email, password: credentials.password, project: ""});
+      saveLoginStatus({email: credentials.email, password: credentials.password, project: ""});
       // Redirect to home page
       router.push('/');
 
