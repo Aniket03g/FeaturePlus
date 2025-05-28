@@ -1,0 +1,89 @@
+*** How to save current work (without committing) and switch to another branch temporarily
+(stack of such works which you can push and pop).
+
+To save your current in-progress, uncommitted code in Git, create a new branch to experiment, and then restore the earlier code, follow these steps:
+
+1. **Check Current Status**: Run `git status` to see your uncommitted changes (modified files, staged or unstaged).
+
+2. **Stash Your Changes** (to save in-progress work):
+   ```bash
+   git stash push -m "WIP: saving in-progress work"
+   ```
+   This saves your uncommitted changes (both staged and unstaged) to a stash and resets your working directory to the last commit. The `-m` flag adds a descriptive message.
+
+3. **Create and Switch to a New Branch** (to try out your experiment):
+   ```bash
+   git checkout -b experiment-branch
+   ```
+   This creates a new branch called `experiment-branch` and switches to it. You can now make changes, commit, and test without affecting the original branch.
+
+4. **Work on the New Branch**: Make your experimental changes, commit them as needed (e.g., `git add . && git commit -m "Test changes"`), and test your ideas.
+
+5. **Switch Back to Original Branch**: When done experimenting, switch back to your original branch (e.g., `main` or `master`):
+   ```bash
+   git checkout main
+   ```
+
+6. **Restore the Stashed Changes**: Apply the stashed changes to restore your in-progress work:
+   ```bash
+   git stash pop
+   ```
+   This reapplies the stashed changes to your working directory and removes the stash from the stack. If there are conflicts, Git will notify you to resolve them manually.
+
+7. **(Optional) Delete the Experimental Branch**: If you don’t need the experimental branch anymore:
+   ```bash
+   git branch -d experiment-branch
+   ```
+
+### Notes:
+- If you want to keep the stash without removing it, use `git stash apply` instead of `git stash pop`.
+- To view your stashes: `git stash list`.
+- If you have multiple stashes and need to apply a specific one, use `git stash apply stash@{n}`, where `n` is the stash index from `git stash list`.
+- If you want to commit your in-progress work instead of stashing, you can do:
+  ```bash
+  git add .
+  git commit -m "WIP: in-progress changes"
+  ```
+  Then, after experimenting, reset to the previous commit if needed:
+  ```bash
+  git reset --soft HEAD^1
+  ```
+
+This workflow ensures your in-progress code is safely stored, lets you experiment on a new branch, and allows you to restore your original work seamlessly.
+
+
+
+*** To show remote branches in Git, use the following command:
+
+```bash
+git branch -r
+```
+
+This lists all remote branches, typically prefixed with the remote name (e.g., `origin/main`, `origin/feature-branch`).
+
+### Additional Options:
+- **Show both local and remote branches**:
+  ```bash
+  git branch -a
+  ```
+  This displays all branches, including local and remote (e.g., `remotes/origin/main`).
+
+- **Fetch remote branches** (to ensure your local repository is aware of the latest remote branches):
+  ```bash
+  git fetch origin
+  ```
+  Then run `git branch -r` to see the updated list.
+
+- **Show remote branches with details** (e.g., last commit message):
+  ```bash
+  git branch -r -v
+  ```
+
+- **Check tracking information** (to see which local branches track which remote branches):
+  ```bash
+  git branch -vv
+  ```
+
+### Notes:
+- Replace `origin` with the name of your remote if it’s different (check with `git remote -v`).
+- These commands only list branches; they don’t switch to or download their contents. To work with a remote branch, check it out with `git checkout branch-name` or create a local tracking branch with `git checkout -b local-branch origin/remote-branch`.
