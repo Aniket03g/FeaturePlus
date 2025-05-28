@@ -20,23 +20,25 @@ interface Project {
 }
 
 const Home = () => {
-  const { user, project, logout } = useContext(AuthContext);
-  console.log("From authcontext:", user, project);  
+  const { authInfo, project, logout } = useContext(AuthContext);
+  console.log("From authcontext:", authInfo, project);  
 
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Welcome to the App</h1>
-      {user ? (
+      {authInfo? (
         <>
-          <p className="text-lg">User: {user.username || user.name}</p>
+          <p className="text-lg">User: {authInfo.username || authinfo.name}</p>
           <p className="text-lg">Project: {project?.name || 'No project selected'}</p>
           <button onClick={logout} className="mt-4 px-4 py-2 bg-red-500 text-white rounded">Logout</button>
         </>
       ) : (
-        <p className="text-lg">Please log in.</p>
+        <> 
+          <p className="text-lg">Please log in.</p>
+          <div><Link href="/fflogin"> Login </Link></div>
+        </>
       )}
       
-      {/* <Link href="/fflogin"> Login </Link> */}
     </div>
   );
 }
