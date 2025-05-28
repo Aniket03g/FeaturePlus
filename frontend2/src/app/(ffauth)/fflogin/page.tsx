@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect, useContext } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -18,7 +19,7 @@ export default function LoginPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { login } = useContext(AuthContext); // Get the login function from AuthContext
+  const { registerCredentials } = useContext(AuthContext); // Get the login function from AuthContext
 
   // Check for registered=true parameter
   useEffect(() => {
@@ -59,13 +60,13 @@ export default function LoginPage() {
 
     try {
       const response = await API.post('/auth/login', credentials);
-      const { token, user, projects_roles } = response.data; // Assuming backend returns token, user, and projects_roles
+      const { token, auth_info, projects_roles } = response.data; // Assuming backend returns token, user, and projects_roles
       
       // Create a dummy project object or use a real one if available in the response
       const project = { id: 'dummy-project-id', name: 'Dummy Project' }; // Replace with actual project logic if needed
 
       // Use the login function from AuthContext
-      login(user, project, token);
+      registerCredentials(auth_info, project, token);
       
       // Redirect to homepage after successful login
       router.push('/');
