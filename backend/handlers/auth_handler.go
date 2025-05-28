@@ -106,7 +106,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
-		"user": map[string]interface{}{
+		"auth_info": map[string]interface{}{
 			"id":       user.ID,
 			"username": user.Username,
 			"email":    user.Email,
