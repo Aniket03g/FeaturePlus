@@ -1,9 +1,11 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import API from '@/app/api/api';
+// import API from '@/app/api/api';
+import API from '@/api/api';
 import styles from './page.module.css';
+import { AuthContext } from '@/context/AuthContext';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,6 +17,8 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const { login } = useContext(AuthContext); // Get the login function from AuthContext
 
   // Check for registered=true parameter
   useEffect(() => {
@@ -45,6 +49,8 @@ export default function LoginPage() {
     setSuccessMessage(null);
     setLoading(true);
 
+    console.log("login: Trying to login. Credentials:", credentials);
+
     if (!credentials.email || !credentials.password) {
       setError("Email and password are required");
       setLoading(false);
@@ -53,16 +59,19 @@ export default function LoginPage() {
 
     try {
       const response = await API.post('/auth/login', credentials);
-      const { token } = response.data;
+      const { token, user, projects_roles } = response.data; // Assuming backend returns token, user, and projects_roles
       
-      // Store token in localStorage
-      localStorage.setItem('token', token);
+      // Create a dummy project object or use a real one if available in the response
+      const project = { id: 'dummy-project-id', name: 'Dummy Project' }; // Replace with actual project logic if needed
+
+      // Use the login function from AuthContext
+      login(user, project, token);
       
-      // Add token to API headers for future requests
-      API.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      // Redirect to home page
+      // Redirect to homepage after successful login
       router.push('/');
+      
+      // The AuthContext useEffect will handle the redirect
+
     } catch (error: any) {
       console.error('Login failed:', error);
       if (error.response?.status === 401) {
