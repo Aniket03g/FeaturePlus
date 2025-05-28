@@ -57,11 +57,11 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 	// Return created user ID for confirmation
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "Signup successful",
-        "auth_info": {
-		    "user_id": user.ID,
-            "user_name": user.Username,
-            "projects": "P-1,P-2", 
-        }
+		"auth_info": gin.H{
+			"user_id":   user.ID,
+			"user_name": user.Username,
+			"projects":  "P-1,P-2",
+		},
 	})
 }
 
@@ -111,10 +111,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			"username": user.Username,
 			"email":    user.Email,
 			"role":     user.Role,
-        },
-        "projects_roles": map[string]interface{}{  
-           "FeaturePlus": "admin,devel,pm",
-           "*": "view",
+		},
+		"projects_roles": map[string]interface{}{
+			"FeaturePlus": "admin,devel,pm",
+			"*":           "view",
 		},
 	})
 }

@@ -1,10 +1,10 @@
 "use client";
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import API from '@/app/api/api';
+import API from '@/api/api';
 import styles from './page.module.css';
-import { AuthContext } from '@/context/AuthContext';
+// import { AuthContext } from '@/context/AuthContext';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,7 +17,7 @@ export default function LoginPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { saveLoginStatus } = useContext(AuthContext);
+  // const { saveLoginStatus } = useContext(AuthContext);
 
   // Check for registered=true parameter
   useEffect(() => {
@@ -57,7 +57,15 @@ export default function LoginPage() {
     }
 
     try {
-      saveLoginStatus({email: credentials.email, password: credentials.password, project: ""});
+      const response = await API.post('/auth/login', credentials);
+      const { token } = response.data;
+      
+      // Store token in localStorage
+      localStorage.setItem('token', token);
+      
+      // Add token to API headers for future requests
+      API.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
       // Redirect to home page
       router.push('/');
 

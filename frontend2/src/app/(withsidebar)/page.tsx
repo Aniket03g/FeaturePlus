@@ -6,23 +6,37 @@ import Link from "next/link";
 import API from "@/api/api";
 import styles from './page.module.css';
 
-
 interface User {
   id: number;
   email: string;
   username: string;
   role: string;
+  name: string;
+}
+
+interface Project {
+  id: string;
+  name: string;
 }
 
 const Home = () => {
-  const { user, project } = useContext(AuthContext);
+  const { user, project, logout } = useContext(AuthContext);
   console.log("From authcontext:", user, project);  
+
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Welcome to the App</h1>
-      <p className="text-lg">User: {user?.name || 'Not logged in' }</p>
-      <p className="text-lg">Project: {project?.name || 'No project selected'}</p>
-      <Link href="/login"> Login </Link>
+      {user ? (
+        <>
+          <p className="text-lg">User: {user.username || user.name}</p>
+          <p className="text-lg">Project: {project?.name || 'No project selected'}</p>
+          <button onClick={logout} className="mt-4 px-4 py-2 bg-red-500 text-white rounded">Logout</button>
+        </>
+      ) : (
+        <p className="text-lg">Please log in.</p>
+      )}
+      
+      {/* <Link href="/fflogin"> Login </Link> */}
     </div>
   );
 }
