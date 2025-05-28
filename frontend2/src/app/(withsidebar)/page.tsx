@@ -33,10 +33,12 @@ const Home = () => {
           <button onClick={logout} className="mt-4 px-4 py-2 bg-red-500 text-white rounded">Logout</button>
         </>
       ) : (
-        <p className="text-lg">Please log in.</p>
+        <> 
+          <p className="text-lg">Please log in.</p>
+          <div><Link href="/fflogin"> Login </Link></div>
+        </>
       )}
       
-      {/* <Link href="/fflogin"> Login </Link> */}
     </div>
   );
 }
