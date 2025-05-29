@@ -5,6 +5,7 @@ import { AuthContext } from '@/context/AuthContext';
 import Link from "next/link";
 import API from "@/api/api";
 import styles from './page.module.css';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface User {
   id: number;
@@ -22,6 +23,13 @@ interface Project {
 const Home = () => {
   const { authInfo, project, logout } = useContext(AuthContext);
   console.log("From authcontext:", authInfo, project);  
+  const router=useRouter();
+
+  useEffect(()=> {
+    if (authInfo) {
+       router.push("/projects");
+    }
+  }, [authInfo]);
 
   return (
     <div className="container mx-auto p-4">
