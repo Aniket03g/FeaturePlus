@@ -32,11 +32,7 @@ API.interceptors.response.use(
       // Clear token if unauthorized
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
-        
-        // Redirect to login page if not already there
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
-        }
+        // Remove the redirect to login
       }
     }
     return Promise.reject(error);

@@ -12,8 +12,8 @@ export function middleware(request: NextRequest) {
                       pathname.startsWith('/_next/') || 
                       pathname.startsWith('/api/');
 
-  // If the path is not public and there is no token, redirect to login
-  if (!isPublicPath && !token) {
+  // Only redirect to login if trying to access /projects without token
+  if (pathname === '/projects' && !token) {
     // Create the URL to redirect to login, preserving the original URL to redirect back after login
     const url = new URL('/login', request.url);
     url.searchParams.set('callbackUrl', encodeURI(request.url));

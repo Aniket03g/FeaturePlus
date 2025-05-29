@@ -53,12 +53,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(storedToken); 
     console.log("Token in authProvider.", storedToken);
     setLoading(false); // Set loading to false after checking localStorage
-    // Only redirect if not loading and user or project is null
-    if (token == null) { 
-       // Optional: check if we are already on a login/signup page to avoid infinite redirects
-       if (!pathname.includes('/ffauth/') && !pathname.includes('/login') && !pathname.includes('/signup')) {
-           router.push('/fflogin');
-       }
+    // Only redirect if trying to access /projects without token
+    if (token == null && pathname === '/projects') { 
+      router.push('/fflogin');
     }
   }, [authInfo, project, loading, router, pathname]); 
 
@@ -79,7 +76,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setProject(null);
     setToken(null);
     console.log('Logged out');
-    router.push('/fflogin'); // Redirect to fflogin on logout
+    // Remove the redirect to login
   };
 
   // Optional: Add a loading indicator while checking auth state

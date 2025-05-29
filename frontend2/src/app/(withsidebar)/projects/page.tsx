@@ -5,11 +5,13 @@ import API from '@/api/api';
 import type { Project } from '@/types/project';
 import ProjectCard from './ProjectCard';
 import styles from './Projects.module.css';
+import { useRouter } from 'next/navigation';
 
 export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -17,8 +19,14 @@ export default function Projects() {
         setLoading(true);
         const response = await API.get('/projects');
         setProjects(response.data);
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error fetching projects:', err);
+        setProjects([]);
+        if (err.response?.status === 401) {
+          // Redirect to login if unauthorized
+          router.push('/fflogin');
+          return;
+        }
         setError('Failed to load projects. Please try again later.');
       } finally {
         setLoading(false);
@@ -39,6 +47,13 @@ export default function Projects() {
 
   if (error) {
     return <div className={styles.errorContainer}>{error}</div>;
+  }
+
+  // Add a check to ensure projects is an array before attempting to map
+  if (!Array.isArray(projects)) {
+      console.error("Projects state is not an array:", projects);
+      // We expect a redirect on 401, but this prevents errors in other unexpected cases
+      return <div className={styles.errorContainer}>An unexpected error occurred loading projects.</div>; // Fallback UI
   }
 
   return (
