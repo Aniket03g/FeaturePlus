@@ -42,6 +42,14 @@ export default function FeatureGroupDetailPage() {
   const [isSubfeatureModalOpen, setIsSubfeatureModalOpen] = useState(false);
   const [editingSubfeature, setEditingSubfeature] = useState<Feature | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [isAddingTaskInline, setIsAddingTaskInline] = useState(false);
+  const [newTaskForm, setNewTaskForm] = useState({
+    task_type: "UI",
+    task_name: "",
+    description: "",
+  });
+  const [addFormLoading, setAddFormLoading] = useState(false);
+  const [addFormError, setAddFormError] = useState("");
 
   const router = useRouter();
 
@@ -267,6 +275,28 @@ export default function FeatureGroupDetailPage() {
         return task.task_type.toLowerCase() === taskFilter.toLowerCase();
       });
 
+  // Handler for inline add task form change
+  const handleNewTaskFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    setNewTaskForm({ ...newTaskForm, [e.target.name]: e.target.value });
+  };
+
+  // Handler for inline add task submit
+  const handleNewTaskFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddFormLoading(true);
+    setAddFormError("");
+    try {
+      const res = await TasksAPI.createForFeature(Number(featureGroup?.id), newTaskForm);
+      setFeatureTasks((prev) => [res.data, ...prev]);
+      setIsAddingTaskInline(false);
+      setNewTaskForm({ task_type: "UI", task_name: "", description: "" });
+    } catch (err) {
+      setAddFormError("Failed to add task. Please try again.");
+    } finally {
+      setAddFormLoading(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-6">Loading feature group...</div>;
   }
@@ -311,7 +341,13 @@ export default function FeatureGroupDetailPage() {
           <h2 className="text-xl font-semibold mb-0">Tasks</h2>
           <button
             className="flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white font-semibold text-base shadow hover:bg-blue-700 transition"
-            onClick={openAddTaskForm}
+            onClick={() => {
+              setIsAddingTaskInline(true);
+              setShowTaskForm(false);
+              setIsEditingTask(false);
+              setEditingTask(null);
+              setFormError("");
+            }}
           >
             <span className="text-lg">+</span> Add Task
           </button>
@@ -328,69 +364,63 @@ export default function FeatureGroupDetailPage() {
             ))}
           </div>
         </div>
-        {showTaskForm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-10 overflow-y-auto">
-            <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md relative">
-              <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-600" onClick={closeTaskForm}>&times;</button>
-              <h2 className="text-xl font-bold mb-4">{isEditingTask ? "Edit Task" : "Add New Task"}</h2>
-              <form onSubmit={handleTaskFormSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1" htmlFor="task_type">Task Type *</label>
-                  <select
-                    id="task_type"
-                    name="task_type"
-                    className="w-full border rounded px-3 py-2 text-sm"
-                    value={taskForm.task_type}
-                    onChange={handleTaskFormChange}
-                    required
-                  >
-                    <option value="UI">UI</option>
-                    <option value="DB">DB</option>
-                    <option value="Backend">Backend</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1" htmlFor="task_name">Task Name *</label>
-                  <input
-                    id="task_name"
-                    name="task_name"
-                    type="text"
-                    className="w-full border rounded px-3 py-2 text-sm"
-                    value={taskForm.task_name}
-                    onChange={handleTaskFormChange}
-                    required
-                    placeholder="Enter task name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1" htmlFor="description">Description</label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    className="w-full border rounded px-3 py-2 text-sm min-h-[80px]"
-                    value={taskForm.description}
-                    onChange={handleTaskFormChange}
-                    placeholder="Describe the task..."
-                  />
-                </div>
-                {formError && <div className="text-red-500 text-sm mb-2">{formError}</div>}
-                <div className="flex justify-end gap-3 mt-4">
-                  <button
-                    type="button"
-                    className="px-4 py-2 rounded border text-gray-700 bg-gray-100 hover:bg-gray-200"
-                    onClick={closeTaskForm}
-                    disabled={formLoading}
-                  >
-                    Cancel
-                  </button>
+        {/* Inline Add Task Card */}
+        {isAddingTaskInline && (
+          <div className="bg-white rounded-2xl shadow p-6 border border-blue-300 flex items-start gap-4 transition relative">
+            <div className="absolute top-4 left-4">
+              <select
+                name="task_type"
+                className="text-xs font-semibold px-2 py-1 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 bg-white text-gray-800 shadow-sm"
+                value={newTaskForm.task_type}
+                onChange={handleNewTaskFormChange}
+                style={{ minWidth: 80 }}
+              >
+                <option value="UI">UI</option>
+                <option value="DB">DB</option>
+                <option value="Backend">Backend</option>
+              </select>
+            </div>
+            <div className="flex-1 pl-20">
+              <form onSubmit={handleNewTaskFormSubmit} className="space-y-2">
+                <input
+                  name="task_name"
+                  type="text"
+                  className="w-full border rounded px-3 py-2 text-base font-semibold text-blue-700"
+                  value={newTaskForm.task_name}
+                  onChange={handleNewTaskFormChange}
+                  required
+                  autoFocus
+                  placeholder="Task name"
+                />
+                <textarea
+                  name="description"
+                  className="w-full border rounded px-3 py-2 text-base"
+                  value={newTaskForm.description}
+                  onChange={handleNewTaskFormChange}
+                  placeholder="Describe the task..."
+                />
+                <div className="flex gap-2 mt-2">
                   <button
                     type="submit"
                     className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700"
-                    disabled={formLoading}
+                    disabled={addFormLoading}
                   >
-                    {isEditingTask ? "Save" : "Add Task"}
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded border text-gray-700 bg-gray-100 hover:bg-gray-200"
+                    onClick={() => {
+                      setIsAddingTaskInline(false);
+                      setNewTaskForm({ task_type: "UI", task_name: "", description: "" });
+                      setAddFormError("");
+                    }}
+                    disabled={addFormLoading}
+                  >
+                    Cancel
                   </button>
                 </div>
+                {addFormError && <div className="text-red-500 text-sm mt-1">{addFormError}</div>}
               </form>
             </div>
           </div>
@@ -401,27 +431,95 @@ export default function FeatureGroupDetailPage() {
           ) : (
             filteredTasks.map((task) => {
               const taskID = task.ID;
+              const isEditing = isEditingTask && editingTask && editingTask.ID === taskID;
               return (
                 <div key={taskID} className="bg-white rounded-2xl shadow p-6 border border-gray-200 flex items-start gap-4 hover:shadow-lg transition relative">
                   <div className="absolute top-4 left-4">
-                    <span className={`text-xs font-semibold px-2 py-1 rounded ${task.task_type === 'UI' ? 'bg-blue-100 text-blue-700' : task.task_type === 'DB' ? 'bg-purple-100 text-purple-700' : 'bg-yellow-100 text-yellow-700'}`}>{task.task_type}</span>
+                    {isEditing ? (
+                      <select
+                        name="task_type"
+                        className="text-xs font-semibold px-2 py-1 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 bg-white text-gray-800 shadow-sm"
+                        value={taskForm.task_type}
+                        onChange={handleTaskFormChange}
+                        style={{ minWidth: 80 }}
+                      >
+                        <option value="UI">UI</option>
+                        <option value="DB">DB</option>
+                        <option value="Backend">Backend</option>
+                      </select>
+                    ) : (
+                      <span className={`text-xs font-semibold px-2 py-1 rounded ${task.task_type === 'UI' ? 'bg-blue-100 text-blue-700' : task.task_type === 'DB' ? 'bg-purple-100 text-purple-700' : 'bg-yellow-100 text-yellow-700'}`}>{task.task_type}</span>
+                    )}
                   </div>
                   <div className="flex-1 pl-20">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-blue-700 text-lg cursor-pointer hover:underline">{task.task_name}</span>
-                    </div>
-                    <div className="text-gray-700 text-base mb-2">
-                      {task.description || "No description provided."}
-                    </div>
+                    {isEditing ? (
+                      <form onSubmit={handleTaskFormSubmit} className="space-y-2">
+                        <input
+                          name="task_name"
+                          type="text"
+                          className="w-full border rounded px-3 py-2 text-base font-semibold text-blue-700"
+                          value={taskForm.task_name}
+                          onChange={handleTaskFormChange}
+                          required
+                          autoFocus
+                        />
+                        <textarea
+                          name="description"
+                          className="w-full border rounded px-3 py-2 text-base"
+                          value={taskForm.description}
+                          onChange={handleTaskFormChange}
+                          placeholder="Describe the task..."
+                        />
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            type="submit"
+                            className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                            disabled={formLoading}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="px-4 py-2 rounded border text-gray-700 bg-gray-100 hover:bg-gray-200"
+                            onClick={closeTaskForm}
+                            disabled={formLoading}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        {formError && <div className="text-red-500 text-sm mt-1">{formError}</div>}
+                      </form>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-bold text-blue-700 text-lg cursor-pointer hover:underline">{task.task_name}</span>
+                        </div>
+                        <div className="text-gray-700 text-base mb-2">
+                          {task.description || "No description provided."}
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-2 ml-4 flex-shrink-0">
-                    <button
-                      className="p-1 rounded hover:bg-blue-50 text-gray-500 hover:text-blue-600 transition"
-                      onClick={() => openEditTaskForm(task)}
-                      title="Edit"
-                    >
-                      <FiEdit2 size={18} />
-                    </button>
+                    {!isEditing && (
+                      <button
+                        className="p-1 rounded hover:bg-blue-50 text-gray-500 hover:text-blue-600 transition"
+                        onClick={() => {
+                          setShowTaskForm(false); // Ensure modal is closed
+                          setIsEditingTask(true);
+                          setEditingTask(task);
+                          setTaskForm({
+                            task_type: task.task_type,
+                            task_name: task.task_name,
+                            description: task.description || "",
+                          });
+                          setFormError("");
+                        }}
+                        title="Edit"
+                      >
+                        <FiEdit2 size={18} />
+                      </button>
+                    )}
                     <button
                       className="p-1 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition"
                       onClick={() => { if (typeof taskID === 'number') handleDeleteTask(taskID); }}
