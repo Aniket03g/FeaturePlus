@@ -34,8 +34,8 @@ API.interceptors.response.use(
         localStorage.removeItem('token');
         
         // Redirect to login page if not already there
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
+        if (window.location.pathname !== '/fflogin') {
+          window.location.href = '/fflogin';
         }
       }
     }

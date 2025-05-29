@@ -53,8 +53,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(storedToken); 
     console.log("Token in authProvider.", storedToken);
     setLoading(false); // Set loading to false after checking localStorage
-    // Only redirect if trying to access /projects without token
-    if (token == null && pathname === '/projects') { 
+    // Old logic (backup):
+    // if (token == null && pathname === '/projects') { 
+    //   router.push('/fflogin');
+    // }
+    // New logic:
+    if (!loading && !token && pathname.startsWith('/projects')) {
       router.push('/fflogin');
     }
   }, [authInfo, project, loading, router, pathname]); 

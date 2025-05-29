@@ -1,18 +1,19 @@
 "use client";
 import { useState } from 'react';
 import styles from './FeatureCard.module.css';
-import { Feature } from '@/app/types';
+import { Feature, User } from '@/app/types';
 
 
 interface FeatureCreateEditProps {
   project: Project;
   feature: Feature;
   featureGroups: Feature[];
+  users: User[];
   onEdit: (feature: Feature) => void;
   onCreate: (feature: Feature) => void;
 }
 
-const FeatureCreateEditForm = ({project, feature, featureGroups, onEdit, onCreate}: FeatureCreateEditProps) => {
+const FeatureCreateEditForm = ({project, feature, featureGroups, users, onEdit, onCreate}: FeatureCreateEditProps) => {
 
   const [featureFormLoading, setFeatureFormLoading] = useState(false);
   const [featureFormError, setFeatureFormError] = useState('');

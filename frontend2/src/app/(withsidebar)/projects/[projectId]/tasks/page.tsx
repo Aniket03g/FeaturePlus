@@ -15,7 +15,7 @@ interface Task {
 
 export default function TasksPage() {
   const params = useParams();
-  const projectId = params.id as string;
+  const projectId = params.projectId as string;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);

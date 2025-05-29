@@ -32,7 +32,8 @@ export const FeatureModal = ({ feature, users, onClose, onSave }: FeatureModalPr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    const tagsInput = formData.tags?.map(tag => tag.tag_name).join(',') || '';
+    onSave({ ...formData, tags_input: tagsInput });
   };
 
   return (
