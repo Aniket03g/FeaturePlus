@@ -1,17 +1,17 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import API, { TagsAPI } from '@/api/api';
 import Link from 'next/link';
-import { Feature, Project, User, Tag } from '@/app/types';
+import { Feature } from '@/types';
 
 export default function FeaturesPage() {
   const params = useParams();
   const projectId = params.projectId as string;
   const [features, setFeatures] = useState<Feature[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [project, setProject] = useState<Project | null>(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [project, setProject] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showFeatureModal, setShowFeatureModal] = useState(false);
@@ -40,6 +40,7 @@ export default function FeaturesPage() {
   const [childFeatures, setChildFeatures] = useState<Feature[]>([]);
   const [featureShowTagSuggestions, setFeatureShowTagSuggestions] = useState(false);
   const [featureSelectedTags, setFeatureSelectedTags] = useState<string[]>([]);
+  const router = useRouter();
 
   useEffect(() => {
     const fetchFeatures = async () => {
@@ -52,8 +53,8 @@ export default function FeaturesPage() {
           API.get(`/projects/${projectId}`),
         ]);
         setFeatureGroups(groupsRes.data as Feature[]);
-        setUsers(usersRes.data as User[]);
-        setProject(projectRes.data as Project);
+        setUsers(usersRes.data);
+        setProject(projectRes.data);
         // Fetch all features for this project
         const allFeaturesRes = await API.get(`/features/project/${projectId}`);
         setFeatures(allFeaturesRes.data as Feature[]);
@@ -273,28 +274,66 @@ export default function FeaturesPage() {
         {selectedGroupId === 'all' ? (
           // Show all feature groups and all child features
           [...featureGroups, ...features.filter(f => f.parent_feature_id !== null)].map(item => (
-            <Link key={item.id} href={`/projects/${projectId}/features/${item.id}`} className="block">
-              <div className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition cursor-pointer">
-                <div className="flex items-center justify-between">
-                  <span className="text-xl font-semibold text-blue-700">{item.title}</span>
-                  <span className="text-blue-500 hover:underline text-sm">View</span>
-                </div>
-                <div className="mt-2 text-gray-700 text-base">
-                  {item.description || 'No description provided.'}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(item.tags ?? []).length > 0 && (item.tags ?? []).map((tag) => (
-                    <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
-                  ))}
-                </div>
-                <div className="mt-4 flex space-x-4 text-sm">
-                  <span className="font-medium">Status:</span>
-                  <span className="capitalize text-gray-600">{item.status}</span>
-                  <span className="font-medium ml-4">Priority:</span>
-                  <span className="capitalize text-gray-600">{item.priority || '-'}</span>
-                </div>
-                  </div>
-            </Link>
+            <div
+              key={item.id}
+              className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition cursor-pointer"
+              onClick={() => {
+                console.log('Card clicked, navigating to feature info page:', item.id);
+                router.push(`/projects/${projectId}/features/${item.id}`);
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xl font-semibold text-blue-700">{item.title}</span>
+                <button
+                  className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
+                  onClick={e => {
+                    e.stopPropagation();
+                    console.log('Edit button clicked for feature:', item);
+                    setFeatureForm({
+                      title: item.title,
+                      parent_feature_id: item.parent_feature_id ? String(item.parent_feature_id) : '',
+                      description: item.description || '',
+                      tags: (item.tags || []).map(t => t.tag_name).join(', '),
+                      status: item.status,
+                      priority: item.priority || 'medium',
+                      assignee_id: (item as any).assignee && (item as any).assignee.id ? String((item as any).assignee.id) : '',
+                    });
+                    setShowFeatureModal(true);
+                  }}
+                >
+                  Edit
+                </button>
+              </div>
+              <div className="mt-2 text-gray-700 text-base">
+                {item.description || 'No description provided.'}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(Array.isArray(item.tags) && item.tags.length > 0) ? (
+                  item.tags.map((tag) => (
+                    <button
+                      key={tag.tag_name + '-' + tag.feature_id}
+                      type="button"
+                      className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs hover:bg-gray-200 transition-colors focus:outline-none"
+                      onClick={e => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        router.push(`/tags/${encodeURIComponent(tag.tag_name)}`);
+                      }}
+                    >
+                      {tag.tag_name}
+                    </button>
+                  ))
+                ) : (
+                  <span className="text-gray-400 text-xs italic">No tags</span>
+                )}
+              </div>
+              <div className="mt-4 flex space-x-4 text-sm">
+                <span className="font-medium">Status:</span>
+                <span className="capitalize text-gray-600">{item.status}</span>
+                <span className="font-medium ml-4">Priority:</span>
+                <span className="capitalize text-gray-600">{item.priority || '-'}</span>
+              </div>
+            </div>
           ))
         ) : (
           // Show only the selected feature group and its child features
@@ -302,27 +341,66 @@ export default function FeaturesPage() {
             ...featureGroups.filter(g => g.id === selectedGroupId),
             ...features.filter(f => f.parent_feature_id === selectedGroupId)
           ].map(item => (
-            <Link key={item.id} href={`/projects/${projectId}/features/${item.id}`} className="block">
-              <div className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition cursor-pointer">
-                <div className="flex items-center justify-between">
-                  <span className="text-xl font-semibold text-blue-700">{item.title}</span>
-                </div>
-                <div className="mt-2 text-gray-700 text-base">
-                  {item.description || 'No description provided.'}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(item.tags ?? []).length > 0 && (item.tags ?? []).map((tag) => (
-                    <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
-                  ))}
-                </div>
-                <div className="mt-4 flex space-x-4 text-sm">
-                  <span className="font-medium">Status:</span>
-                  <span className="capitalize text-gray-600">{item.status}</span>
-                  <span className="font-medium ml-4">Priority:</span>
-                  <span className="capitalize text-gray-600">{item.priority || '-'}</span>
-                </div>
+            <div
+              key={item.id}
+              className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition cursor-pointer"
+              onClick={() => {
+                console.log('Card clicked, navigating to feature info page:', item.id);
+                router.push(`/projects/${projectId}/features/${item.id}`);
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xl font-semibold text-blue-700">{item.title}</span>
+                <button
+                  className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
+                  onClick={e => {
+                    e.stopPropagation();
+                    console.log('Edit button clicked for feature:', item);
+                    setFeatureForm({
+                      title: item.title,
+                      parent_feature_id: item.parent_feature_id ? String(item.parent_feature_id) : '',
+                      description: item.description || '',
+                      tags: (item.tags || []).map(t => t.tag_name).join(', '),
+                      status: item.status,
+                      priority: item.priority || 'medium',
+                      assignee_id: (item as any).assignee && (item as any).assignee.id ? String((item as any).assignee.id) : '',
+                    });
+                    setShowFeatureModal(true);
+                  }}
+                >
+                  Edit
+                </button>
               </div>
-            </Link>
+              <div className="mt-2 text-gray-700 text-base">
+                {item.description || 'No description provided.'}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(Array.isArray(item.tags) && item.tags.length > 0) ? (
+                  item.tags.map((tag) => (
+                    <button
+                      key={tag.tag_name + '-' + tag.feature_id}
+                      type="button"
+                      className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs hover:bg-gray-200 transition-colors focus:outline-none"
+                      onClick={e => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        router.push(`/tags/${encodeURIComponent(tag.tag_name)}`);
+                      }}
+                    >
+                      {tag.tag_name}
+                    </button>
+                  ))
+                ) : (
+                  <span className="text-gray-400 text-xs italic">No tags</span>
+                )}
+              </div>
+              <div className="mt-4 flex space-x-4 text-sm">
+                <span className="font-medium">Status:</span>
+                <span className="capitalize text-gray-600">{item.status}</span>
+                <span className="font-medium ml-4">Priority:</span>
+                <span className="capitalize text-gray-600">{item.priority || '-'}</span>
+              </div>
+            </div>
           ))
         )}
       </div>
