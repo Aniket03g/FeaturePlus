@@ -1,8 +1,9 @@
 package repositories
 
 import (
-	"FeaturePlus/models"
 	"strings"
+
+	"github.com/FeaturePlus/backend/models"
 
 	"gorm.io/gorm"
 )

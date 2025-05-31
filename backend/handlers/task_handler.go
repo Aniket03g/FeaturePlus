@@ -1,10 +1,11 @@
 package handlers
 
 import (
-	"FeaturePlus/models"
-	"FeaturePlus/repositories"
 	"net/http"
 	"strconv"
+
+	"github.com/FeaturePlus/backend/models"
+	"github.com/FeaturePlus/backend/repositories"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,12 +26,48 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		return
 	}
 
+	if task.TaskType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "task_type is required"})
+		return
+	}
+
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
 	task.CreatedByUser = userID.(uint)
+
+	// Strict validation for task_type against project config
+	var projectID int
+	if task.FeatureID != 0 {
+		// Fetch the feature to get the project ID
+		featureRepo := repositories.NewFeatureRepository(h.taskRepo.GetDB())
+		feature, err := featureRepo.GetFeatureByID(int(task.FeatureID))
+		if err == nil {
+			projectID = feature.ProjectID
+		}
+	}
+	if projectID != 0 {
+		projectRepo := repositories.NewProjectRepository(h.taskRepo.GetDB())
+		project, err := projectRepo.GetProjectByID(projectID)
+		if err == nil {
+			types, ok := project.Config["task_types"].([]interface{})
+			if ok {
+				validType := false
+				for _, t := range types {
+					if tStr, ok := t.(string); ok && tStr == task.TaskType {
+						validType = true
+						break
+					}
+				}
+				if !validType {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "task_type must be one of the allowed task_types values in project config"})
+					return
+				}
+			}
+		}
+	}
 
 	if err := h.taskRepo.Create(&task); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create task"})
@@ -109,8 +146,44 @@ func (h *TaskHandler) CreateTaskForFeature(c *gin.Context) {
 		return
 	}
 
+	if task.TaskType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "task_type is required"})
+		return
+	}
+
 	task.FeatureID = uint(featureID)
 	task.CreatedByUser = userID.(uint)
+
+	// Strict validation for task_type against project config
+	var projectID int
+	if task.FeatureID != 0 {
+		// Fetch the feature to get the project ID
+		featureRepo := repositories.NewFeatureRepository(h.taskRepo.GetDB())
+		feature, err := featureRepo.GetFeatureByID(int(task.FeatureID))
+		if err == nil {
+			projectID = feature.ProjectID
+		}
+	}
+	if projectID != 0 {
+		projectRepo := repositories.NewProjectRepository(h.taskRepo.GetDB())
+		project, err := projectRepo.GetProjectByID(projectID)
+		if err == nil {
+			types, ok := project.Config["task_types"].([]interface{})
+			if ok {
+				validType := false
+				for _, t := range types {
+					if tStr, ok := t.(string); ok && tStr == task.TaskType {
+						validType = true
+						break
+					}
+				}
+				if !validType {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "task_type must be one of the allowed task_types values in project config"})
+					return
+				}
+			}
+		}
+	}
 
 	if err := h.taskRepo.Create(&task); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create task"})
@@ -138,6 +211,11 @@ func (h *TaskHandler) UpdateTaskForFeature(c *gin.Context) {
 	var task models.Task
 	if err := c.ShouldBindJSON(&task); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if task.TaskType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "task_type is required"})
 		return
 	}
 
@@ -200,6 +278,11 @@ func (h *TaskHandler) CreateTaskForSubFeature(c *gin.Context) {
 		return
 	}
 
+	if task.TaskType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "task_type is required"})
+		return
+	}
+
 	task.SubFeatureID = uint(subFeatureID)
 	task.CreatedByUser = userID.(uint)
 
@@ -229,6 +312,11 @@ func (h *TaskHandler) UpdateTaskForSubFeature(c *gin.Context) {
 	var task models.Task
 	if err := c.ShouldBindJSON(&task); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if task.TaskType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "task_type is required"})
 		return
 	}
 

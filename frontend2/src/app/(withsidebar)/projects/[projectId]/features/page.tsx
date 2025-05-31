@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import API, { TagsAPI } from '@/api/api';
 import Link from 'next/link';
-import { Feature } from '@/types';
+import { Feature, Tag } from '@/app/types';
+import { FiEdit2 } from 'react-icons/fi';
 
 export default function FeaturesPage() {
   const params = useParams();
@@ -20,12 +21,13 @@ export default function FeaturesPage() {
   const [groupFormError, setGroupFormError] = useState('');
   const [featureForm, setFeatureForm] = useState({
     title: '',
-    parent_feature_id: '',
     description: '',
     tags: '',
     status: 'todo',
     priority: 'medium',
     assignee_id: '',
+    category: '',
+    id: undefined as number | undefined,
   });
   const [featureFormLoading, setFeatureFormLoading] = useState(false);
   const [featureFormError, setFeatureFormError] = useState('');
@@ -40,6 +42,7 @@ export default function FeaturesPage() {
   const [childFeatures, setChildFeatures] = useState<Feature[]>([]);
   const [featureShowTagSuggestions, setFeatureShowTagSuggestions] = useState(false);
   const [featureSelectedTags, setFeatureSelectedTags] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const router = useRouter();
 
   useEffect(() => {
@@ -195,23 +198,24 @@ export default function FeaturesPage() {
     try {
       await API.post('/features', {
         project_id: Number(projectId),
-        parent_feature_id: Number(featureForm.parent_feature_id),
         title: featureForm.title,
         description: featureForm.description,
         tags_input: featureSelectedTags.join(','),
         status: featureForm.status,
         priority: featureForm.priority,
         assignee_id: featureForm.assignee_id ? Number(featureForm.assignee_id) : 0,
+        category: featureForm.category,
       });
       setShowFeatureModal(false);
       setFeatureForm({
         title: '',
-        parent_feature_id: '',
         description: '',
         tags: '',
         status: 'todo',
         priority: 'medium',
         assignee_id: '',
+        category: '',
+        id: undefined,
       });
       setFeatureSelectedTags([]);
       const [groupsRes, allFeaturesRes] = await Promise.all([
@@ -226,6 +230,12 @@ export default function FeaturesPage() {
       setFeatureFormLoading(false);
     }
   };
+
+  const featureCategories = project?.config?.feature_category || [];
+
+  const filteredFeatures: Feature[] = selectedCategory === 'All'
+    ? features
+    : features.filter(f => 'category' in f && f.category === selectedCategory);
 
   if (loading) {
     return <div className="p-6">Loading features...</div>;
@@ -253,156 +263,83 @@ export default function FeaturesPage() {
       {/* Filter Chips Row */}
       <div className="flex gap-2 mb-8">
         <button
-          className={`px-4 py-1 rounded-full border text-sm font-medium transition ${selectedGroupId === 'all' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
-          onClick={() => setSelectedGroupId('all')}
+          className={`px-4 py-1 rounded-full border text-sm font-medium transition ${selectedCategory === 'All' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
+          onClick={() => setSelectedCategory('All')}
         >
           All
         </button>
-        {featureGroups.map(group => (
+        {featureCategories.map((cat: string) => (
           <button
-            key={group.id}
-            className={`px-4 py-1 rounded-full border text-sm font-medium transition ${selectedGroupId === group.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
-            onClick={() => setSelectedGroupId(group.id)}
+            key={cat}
+            className={`px-4 py-1 rounded-full border text-sm font-medium transition ${selectedCategory === cat ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'}`}
+            onClick={() => setSelectedCategory(cat)}
           >
-            {group.title}
+            {cat}
           </button>
         ))}
       </div>
       {/* Feature List */}
-        <div className="space-y-6">
-        {/* Filtering logic for chips */}
-        {selectedGroupId === 'all' ? (
-          // Show all feature groups and all child features
-          [...featureGroups, ...features.filter(f => f.parent_feature_id !== null)].map(item => (
-            <div
-              key={item.id}
-              className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition cursor-pointer"
-              onClick={() => {
-                console.log('Card clicked, navigating to feature info page:', item.id);
-                router.push(`/projects/${projectId}/features/${item.id}`);
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xl font-semibold text-blue-700">{item.title}</span>
-                <button
-                  className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
-                  onClick={e => {
-                    e.stopPropagation();
-                    console.log('Edit button clicked for feature:', item);
-                    setFeatureForm({
-                      title: item.title,
-                      parent_feature_id: item.parent_feature_id ? String(item.parent_feature_id) : '',
-                      description: item.description || '',
-                      tags: (item.tags || []).map(t => t.tag_name).join(', '),
-                      status: item.status,
-                      priority: item.priority || 'medium',
-                      assignee_id: (item as any).assignee && (item as any).assignee.id ? String((item as any).assignee.id) : '',
-                    });
-                    setShowFeatureModal(true);
-                  }}
-                >
-                  Edit
-                </button>
-              </div>
-              <div className="mt-2 text-gray-700 text-base">
-                {item.description || 'No description provided.'}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(Array.isArray(item.tags) && item.tags.length > 0) ? (
-                  item.tags.map((tag) => (
-                    <button
-                      key={tag.tag_name + '-' + tag.feature_id}
-                      type="button"
-                      className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs hover:bg-gray-200 transition-colors focus:outline-none"
-                      onClick={e => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        router.push(`/tags/${encodeURIComponent(tag.tag_name)}`);
-                      }}
-                    >
-                      {tag.tag_name}
-                    </button>
-                  ))
-                ) : (
-                  <span className="text-gray-400 text-xs italic">No tags</span>
-                )}
-              </div>
-              <div className="mt-4 flex space-x-4 text-sm">
-                <span className="font-medium">Status:</span>
-                <span className="capitalize text-gray-600">{item.status}</span>
-                <span className="font-medium ml-4">Priority:</span>
-                <span className="capitalize text-gray-600">{item.priority || '-'}</span>
-              </div>
+      <div className="space-y-6">
+        {filteredFeatures.map(item => (
+          <div
+            key={item.id}
+            className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition cursor-pointer"
+            onClick={() => router.push(`/projects/${projectId}/features/${item.id}`)}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xl font-semibold text-blue-700">{item.title}</span>
+              <button
+                className="ml-2 p-2 rounded-full hover:bg-blue-100 transition"
+                title="Edit Feature"
+                onClick={e => {
+                  e.stopPropagation();
+                  setFeatureForm({
+                    title: item.title,
+                    description: item.description || '',
+                    tags: (item.tags || []).map((t: Tag) => t.tag_name).join(', '),
+                    status: item.status,
+                    priority: item.priority || 'medium',
+                    assignee_id: (item as any).assignee && (item as any).assignee.id ? String((item as any).assignee.id) : '',
+                    category: 'category' in item && item.category ? String(item.category) : '',
+                    id: item.id,
+                  });
+                  setShowFeatureModal(true);
+                }}
+              >
+                <FiEdit2 size={18} />
+              </button>
             </div>
-          ))
-        ) : (
-          // Show only the selected feature group and its child features
-          [
-            ...featureGroups.filter(g => g.id === selectedGroupId),
-            ...features.filter(f => f.parent_feature_id === selectedGroupId)
-          ].map(item => (
-            <div
-              key={item.id}
-              className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition cursor-pointer"
-              onClick={() => {
-                console.log('Card clicked, navigating to feature info page:', item.id);
-                router.push(`/projects/${projectId}/features/${item.id}`);
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xl font-semibold text-blue-700">{item.title}</span>
-                <button
-                  className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
-                  onClick={e => {
-                    e.stopPropagation();
-                    console.log('Edit button clicked for feature:', item);
-                    setFeatureForm({
-                      title: item.title,
-                      parent_feature_id: item.parent_feature_id ? String(item.parent_feature_id) : '',
-                      description: item.description || '',
-                      tags: (item.tags || []).map(t => t.tag_name).join(', '),
-                      status: item.status,
-                      priority: item.priority || 'medium',
-                      assignee_id: (item as any).assignee && (item as any).assignee.id ? String((item as any).assignee.id) : '',
-                    });
-                    setShowFeatureModal(true);
-                  }}
-                >
-                  Edit
-                </button>
-              </div>
-              <div className="mt-2 text-gray-700 text-base">
-                {item.description || 'No description provided.'}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(Array.isArray(item.tags) && item.tags.length > 0) ? (
-                  item.tags.map((tag) => (
-                    <button
-                      key={tag.tag_name + '-' + tag.feature_id}
-                      type="button"
-                      className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs hover:bg-gray-200 transition-colors focus:outline-none"
-                      onClick={e => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        router.push(`/tags/${encodeURIComponent(tag.tag_name)}`);
-                      }}
-                    >
-                      {tag.tag_name}
-                    </button>
-                  ))
-                ) : (
-                  <span className="text-gray-400 text-xs italic">No tags</span>
-                )}
-              </div>
-              <div className="mt-4 flex space-x-4 text-sm">
-                <span className="font-medium">Status:</span>
-                <span className="capitalize text-gray-600">{item.status}</span>
-                <span className="font-medium ml-4">Priority:</span>
-                <span className="capitalize text-gray-600">{item.priority || '-'}</span>
-              </div>
+            <div className="mt-2 text-gray-700 text-base">
+              {item.description || 'No description provided.'}
             </div>
-          ))
-        )}
+            <div className="mt-3 flex flex-wrap gap-2 items-center">
+              {(Array.isArray(item.tags) && item.tags.length > 0) ? (
+                item.tags.map((tag: Tag) => (
+                  <button
+                    key={tag.tag_name + '-' + tag.feature_id}
+                    type="button"
+                    className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs hover:bg-gray-200 transition-colors focus:outline-none"
+                    onClick={e => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      router.push(`/tags/${encodeURIComponent(tag.tag_name)}`);
+                    }}
+                  >
+                    {tag.tag_name}
+                  </button>
+                ))
+              ) : (
+                <span className="text-gray-400 text-xs italic">No tags</span>
+              )}
+            </div>
+            <div className="mt-4 flex space-x-4 text-sm">
+              <span className="font-medium">Status:</span>
+              <span className="capitalize text-gray-600">{item.status}</span>
+              <span className="font-medium ml-4">Priority:</span>
+              <span className="capitalize text-gray-600">{item.priority || '-'}</span>
+            </div>
+          </div>
+        ))}
       </div>
       {/* Feature Group Modal */}
       {showGroupModal && (
@@ -511,21 +448,6 @@ export default function FeaturesPage() {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-1">Parent Feature</label>
-                <select
-                  name="parent_feature_id"
-                  value={featureForm.parent_feature_id}
-                  onChange={handleFeatureFormChange}
-                  className="w-full border rounded px-3 py-2"
-                  required
-                >
-                  <option value="" disabled>Select a feature group</option>
-                  {featureGroups.map((fg) => (
-                    <option key={fg.id} value={fg.id}>{fg.title}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-4">
                 <label className="block text-sm font-medium mb-1">Description</label>
                 <textarea
                   name="description"
@@ -610,6 +532,21 @@ export default function FeaturesPage() {
                   <option value="">Unassigned</option>
                   {users.map((user) => (
                     <option key={user.id} value={user.id}>{user.username}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Category</label>
+                <select
+                  name="category"
+                  value={featureForm.category}
+                  onChange={handleFeatureFormChange}
+                  className="w-full border rounded px-3 py-2"
+                  required
+                >
+                  <option value="" disabled>Select category</option>
+                  {featureCategories.map((cat: string) => (
+                    <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
               </div>

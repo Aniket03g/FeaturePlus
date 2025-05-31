@@ -1,7 +1,7 @@
 package repositories
 
 import (
-	"FeaturePlus/models"
+	"github.com/FeaturePlus/backend/models"
 
 	"gorm.io/gorm"
 )
@@ -15,6 +15,7 @@ type TaskRepository interface {
 	GetBySubFeatureID(subFeatureID uint) ([]models.Task, error)
 	GetAllWithFeatureTitle() ([]map[string]interface{}, error)
 	GetByProjectID(projectID uint) ([]map[string]interface{}, error)
+	GetDB() *gorm.DB
 }
 
 type taskRepository struct {
@@ -72,4 +73,8 @@ func (r *taskRepository) GetByProjectID(projectID uint) ([]map[string]interface{
 		Where("features.project_id = ?", projectID).
 		Scan(&results).Error
 	return results, err
+}
+
+func (r *taskRepository) GetDB() *gorm.DB {
+	return r.db
 }

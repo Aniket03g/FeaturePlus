@@ -5,19 +5,21 @@ import (
 	"net/http"
 	"strconv"
 
-	"FeaturePlus/models"
-	"FeaturePlus/repositories"
+	"github.com/FeaturePlus/backend/models"
+	"github.com/FeaturePlus/backend/repositories"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type FeatureHandler struct {
 	repo    *repositories.FeatureRepository
 	tagRepo *repositories.TagRepository
+	DB      *gorm.DB
 }
 
-func NewFeatureHandler(repo *repositories.FeatureRepository, tagRepo *repositories.TagRepository) *FeatureHandler {
-	return &FeatureHandler{repo: repo, tagRepo: tagRepo}
+func NewFeatureHandler(repo *repositories.FeatureRepository, tagRepo *repositories.TagRepository, db *gorm.DB) *FeatureHandler {
+	return &FeatureHandler{repo: repo, tagRepo: tagRepo, DB: db}
 }
 
 type FeatureWithTags struct {
@@ -41,6 +43,35 @@ func (h *FeatureHandler) CreateFeature(c *gin.Context) {
 
 	if !isValidStatus(feature.Status) || !isValidPriority(feature.Priority) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status or priority"})
+		return
+	}
+
+	if feature.Category == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "category is required"})
+		return
+	}
+
+	// Strict validation for category against project config
+	projectRepo := repositories.NewProjectRepository(h.DB)
+	project, err := projectRepo.GetProjectByID(feature.ProjectID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid project ID for category validation"})
+		return
+	}
+	categories, ok := project.Config["feature_category"].([]interface{})
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "project config missing feature_category"})
+		return
+	}
+	validCategory := false
+	for _, cat := range categories {
+		if catStr, ok := cat.(string); ok && catStr == feature.Category {
+			validCategory = true
+			break
+		}
+	}
+	if !validCategory {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "category must be one of the allowed feature_category values in project config"})
 		return
 	}
 

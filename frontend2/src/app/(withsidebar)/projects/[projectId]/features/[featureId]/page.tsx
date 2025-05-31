@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from 'next/link';
 import API, { FeaturesAPI, TasksAPI } from "@/api/api";
 import { FiEdit2, FiTrash2 } from "react-icons/fi";
 import { FeatureModal } from "@/components/FeatureEditCard";
@@ -42,14 +41,6 @@ export default function FeatureGroupDetailPage() {
   const [isSubfeatureModalOpen, setIsSubfeatureModalOpen] = useState(false);
   const [editingSubfeature, setEditingSubfeature] = useState<Feature | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [isAddingTaskInline, setIsAddingTaskInline] = useState(false);
-  const [newTaskForm, setNewTaskForm] = useState({
-    task_type: "UI",
-    task_name: "",
-    description: "",
-  });
-  const [addFormLoading, setAddFormLoading] = useState(false);
-  const [addFormError, setAddFormError] = useState("");
 
   const router = useRouter();
 
@@ -194,7 +185,6 @@ export default function FeatureGroupDetailPage() {
         }
         await TasksAPI.updateTask(Number(featureGroup?.id), editingTask.ID, taskForm);
         setFeatureTasks((prev) => prev.map((t) => t.ID === editingTask.ID ? { ...t, ...taskForm } : t));
-        closeTaskForm();
       } else {
         // Add task
         const res = await TasksAPI.createForFeature(Number(featureGroup?.id), taskForm);
@@ -275,28 +265,6 @@ export default function FeatureGroupDetailPage() {
         return task.task_type.toLowerCase() === taskFilter.toLowerCase();
       });
 
-  // Handler for inline add task form change
-  const handleNewTaskFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setNewTaskForm({ ...newTaskForm, [e.target.name]: e.target.value });
-  };
-
-  // Handler for inline add task submit
-  const handleNewTaskFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAddFormLoading(true);
-    setAddFormError("");
-    try {
-      const res = await TasksAPI.createForFeature(Number(featureGroup?.id), newTaskForm);
-      setFeatureTasks((prev) => [res.data, ...prev]);
-      setIsAddingTaskInline(false);
-      setNewTaskForm({ task_type: "UI", task_name: "", description: "" });
-    } catch (err) {
-      setAddFormError("Failed to add task. Please try again.");
-    } finally {
-      setAddFormLoading(false);
-    }
-  };
-
   if (loading) {
     return <div className="p-6">Loading feature group...</div>;
   }
@@ -341,13 +309,7 @@ export default function FeatureGroupDetailPage() {
           <h2 className="text-xl font-semibold mb-0">Tasks</h2>
           <button
             className="flex items-center gap-2 px-5 py-2 rounded-lg bg-blue-600 text-white font-semibold text-base shadow hover:bg-blue-700 transition"
-            onClick={() => {
-              setIsAddingTaskInline(true);
-              setShowTaskForm(false);
-              setIsEditingTask(false);
-              setEditingTask(null);
-              setFormError("");
-            }}
+            onClick={openAddTaskForm}
           >
             <span className="text-lg">+</span> Add Task
           </button>
@@ -364,65 +326,68 @@ export default function FeatureGroupDetailPage() {
             ))}
           </div>
         </div>
-        {/* Inline Add Task Card */}
-        {isAddingTaskInline && (
-          <div className="bg-white rounded-2xl shadow p-6 border border-blue-300 flex items-start gap-4 transition relative">
-            <div className="absolute top-4 left-4">
-              <select
-                name="task_type"
-                className="text-xs font-semibold px-2 py-1 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 bg-white text-gray-800 shadow-sm"
-                value={newTaskForm.task_type}
-                onChange={handleNewTaskFormChange}
-                style={{ minWidth: 80 }}
-              >
-                <option value="UI">UI</option>
-                <option value="DB">DB</option>
-                <option value="Backend">Backend</option>
-              </select>
-            </div>
-            <div className="flex-1 pl-20">
-              <form onSubmit={handleNewTaskFormSubmit} className="space-y-2">
+        {showTaskForm && (
+          <div className="mb-6 max-w-xl bg-white rounded-lg shadow p-6 border border-gray-200">
+            <h2 className="text-lg font-semibold mb-4">{isEditingTask ? "Edit Task" : "Add New Task"}</h2>
+            <form onSubmit={handleTaskFormSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1" htmlFor="task_type">Task Type *</label>
+                <select
+                  id="task_type"
+                  name="task_type"
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={taskForm.task_type}
+                  onChange={handleTaskFormChange}
+                  required
+                >
+                  <option value="UI">UI</option>
+                  <option value="DB">DB</option>
+                  <option value="Backend">Backend</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" htmlFor="task_name">Task Name *</label>
                 <input
+                  id="task_name"
                   name="task_name"
                   type="text"
-                  className="w-full border rounded px-3 py-2 text-base font-semibold text-blue-700"
-                  value={newTaskForm.task_name}
-                  onChange={handleNewTaskFormChange}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={taskForm.task_name}
+                  onChange={handleTaskFormChange}
                   required
-                  autoFocus
-                  placeholder="Task name"
+                  placeholder="Enter task name"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1" htmlFor="description">Description</label>
                 <textarea
+                  id="description"
                   name="description"
-                  className="w-full border rounded px-3 py-2 text-base"
-                  value={newTaskForm.description}
-                  onChange={handleNewTaskFormChange}
+                  className="w-full border rounded px-3 py-2 text-sm min-h-[80px]"
+                  value={taskForm.description}
+                  onChange={handleTaskFormChange}
                   placeholder="Describe the task..."
                 />
-                <div className="flex gap-2 mt-2">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700"
-                    disabled={addFormLoading}
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    className="px-4 py-2 rounded border text-gray-700 bg-gray-100 hover:bg-gray-200"
-                    onClick={() => {
-                      setIsAddingTaskInline(false);
-                      setNewTaskForm({ task_type: "UI", task_name: "", description: "" });
-                      setAddFormError("");
-                    }}
-                    disabled={addFormLoading}
-                  >
-                    Cancel
-                  </button>
-                </div>
-                {addFormError && <div className="text-red-500 text-sm mt-1">{addFormError}</div>}
-              </form>
-            </div>
+              </div>
+              {formError && <div className="text-red-500 text-sm mb-2">{formError}</div>}
+              <div className="flex justify-end gap-3 mt-4">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded border text-gray-700 bg-gray-100 hover:bg-gray-200"
+                  onClick={closeTaskForm}
+                  disabled={formLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                  disabled={formLoading}
+                >
+                  {isEditingTask ? "Save" : "Add Task"}
+                </button>
+              </div>
+            </form>
           </div>
         )}
         <div className="space-y-4">
@@ -431,102 +396,34 @@ export default function FeatureGroupDetailPage() {
           ) : (
             filteredTasks.map((task) => {
               const taskID = task.ID;
-              const isEditing = isEditingTask && editingTask && editingTask.ID === taskID;
               return (
-                <div key={taskID} className="bg-white rounded-2xl shadow p-6 border border-gray-200 flex items-start gap-4 hover:shadow-lg transition relative">
-                  <div className="absolute top-4 left-4">
-                    {isEditing ? (
-                      <select
-                        name="task_type"
-                        className="text-xs font-semibold px-2 py-1 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 bg-white text-gray-800 shadow-sm"
-                        value={taskForm.task_type}
-                        onChange={handleTaskFormChange}
-                        style={{ minWidth: 80 }}
-                      >
-                        <option value="UI">UI</option>
-                        <option value="DB">DB</option>
-                        <option value="Backend">Backend</option>
-                      </select>
-                    ) : (
-                      <span className={`text-xs font-semibold px-2 py-1 rounded ${task.task_type === 'UI' ? 'bg-blue-100 text-blue-700' : task.task_type === 'DB' ? 'bg-purple-100 text-purple-700' : 'bg-yellow-100 text-yellow-700'}`}>{task.task_type}</span>
-                    )}
-                  </div>
-                  <div className="flex-1 pl-20">
-                    {isEditing ? (
-                      <form onSubmit={handleTaskFormSubmit} className="space-y-2">
-                        <input
-                          name="task_name"
-                          type="text"
-                          className="w-full border rounded px-3 py-2 text-base font-semibold text-blue-700"
-                          value={taskForm.task_name}
-                          onChange={handleTaskFormChange}
-                          required
-                          autoFocus
-                        />
-                        <textarea
-                          name="description"
-                          className="w-full border rounded px-3 py-2 text-base"
-                          value={taskForm.description}
-                          onChange={handleTaskFormChange}
-                          placeholder="Describe the task..."
-                        />
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            type="submit"
-                            className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700"
-                            disabled={formLoading}
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            className="px-4 py-2 rounded border text-gray-700 bg-gray-100 hover:bg-gray-200"
-                            onClick={closeTaskForm}
-                            disabled={formLoading}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                        {formError && <div className="text-red-500 text-sm mt-1">{formError}</div>}
-                      </form>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-blue-700 text-lg cursor-pointer hover:underline">{task.task_name}</span>
-                        </div>
-                        <div className="text-gray-700 text-base mb-2">
-                          {task.description || "No description provided."}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-2 ml-4 flex-shrink-0">
-                    {!isEditing && (
+                <div key={taskID} className="bg-white rounded-lg shadow p-4 border border-gray-200">
+                  <div className="flex items-start gap-4 mb-2">
+                    <span className="flex-shrink-0 bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs">{task.task_type}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-blue-700 text-base">{task.task_name}</span>
+                      </div>
+                      <div className="text-gray-700 text-sm">
+                        {task.description || "No description provided."}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <button
                         className="p-1 rounded hover:bg-blue-50 text-gray-500 hover:text-blue-600 transition"
-                        onClick={() => {
-                          setShowTaskForm(false); // Ensure modal is closed
-                          setIsEditingTask(true);
-                          setEditingTask(task);
-                          setTaskForm({
-                            task_type: task.task_type,
-                            task_name: task.task_name,
-                            description: task.description || "",
-                          });
-                          setFormError("");
-                        }}
+                        onClick={() => openEditTaskForm(task)}
                         title="Edit"
                       >
                         <FiEdit2 size={18} />
                       </button>
-                    )}
-                    <button
-                      className="p-1 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition"
-                      onClick={() => { if (typeof taskID === 'number') handleDeleteTask(taskID); }}
-                      title="Delete"
-                    >
-                      <FiTrash2 size={18} />
-                    </button>
+                      <button
+                        className="p-1 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition"
+                        onClick={() => { if (typeof taskID === 'number') handleDeleteTask(taskID); }}
+                        title="Delete"
+                      >
+                        <FiTrash2 size={18} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -541,57 +438,56 @@ export default function FeatureGroupDetailPage() {
         <div className="space-y-6">
           <h2 className="text-xl font-semibold mb-4">Features</h2>
           {subfeatures.map((feature) => (
-            <Link key={feature.id} href={`/projects/${projectId}/features/${feature.id}`} className="block">
-              <div
-                className="bg-white rounded-lg shadow p-6 border border-gray-200 flex items-center justify-between hover:bg-blue-50 transition cursor-pointer"
-              >
-                {/* Left section: Feature ID, Title, Description, and Tags */}
-                <div className="flex-1 flex flex-col">
-                  <div className="flex items-center gap-4 mb-2">
-                    <div className="flex-shrink-0 text-xs text-gray-400 font-mono">F-ID {feature.id}</div>
-                    <span className="text-lg font-semibold text-blue-700">{feature.title}</span>
-                    {/* Tasks badge */}
-                    <span className="ml-2 text-xs bg-gray-200 text-gray-700 rounded px-2 py-1">
-                      {tasksCountMap[feature.id] || 0} tasks
-                    </span>
+            <div
+              key={feature.id}
+              className="bg-white rounded-lg shadow p-6 border border-gray-200 flex items-center justify-between hover:bg-blue-50 transition cursor-pointer"
+            >
+              {/* Left section: Feature ID, Title, Description, and Tags */}
+              <div className="flex-1 flex flex-col">
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="flex-shrink-0 text-xs text-gray-400 font-mono">F-ID {feature.id}</div>
+                  <span className="text-lg font-semibold text-blue-700">{feature.title}</span>
+                  {/* Tasks badge */}
+                  <span className="ml-2 text-xs bg-gray-200 text-gray-700 rounded px-2 py-1">
+                    {tasksCountMap[feature.id] || 0} tasks
+                  </span>
+                </div>
+                {feature.description && (
+                  <div className="mt-1 text-gray-700 text-base">{feature.description}</div>
+                )}
+                {/* Tags as chips below description, show dummy if none */}
+                {tagsMap[feature.id] && tagsMap[feature.id].length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                      {tagsMap[feature.id].map((tag) => (
+                        <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
+                    ))}
                   </div>
-                  {feature.description && (
-                    <div className="mt-1 text-gray-700 text-base">{feature.description}</div>
-                  )}
-                  {/* Tags as chips below description, show dummy if none */}
-                  {tagsMap[feature.id] && tagsMap[feature.id].length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                        {tagsMap[feature.id].map((tag) => (
-                          <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {/* Right section: Action buttons */}
-                <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-                  <button
-                    className="p-1 rounded hover:bg-blue-50 text-gray-500 hover:text-blue-600 transition"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEditSubfeature(feature);
-                    }}
-                    title="Edit Subfeature"
-                  >
-                    <FiEdit2 size={18} />
-                  </button>
-                  <button
-                    className="p-1 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteSubfeature(feature);
-                    }}
-                    title="Delete Subfeature"
-                  >
-                    <FiTrash2 size={18} />
-                  </button>
-                </div>
+                )}
               </div>
-            </Link>
+              {/* Right section: Action buttons */}
+              <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                <button
+                  className="p-1 rounded hover:bg-blue-50 text-gray-500 hover:text-blue-600 transition"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEditSubfeature(feature);
+                  }}
+                  title="Edit Subfeature"
+                >
+                  <FiEdit2 size={18} />
+                </button>
+                <button
+                  className="p-1 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteSubfeature(feature);
+                  }}
+                  title="Delete Subfeature"
+                >
+                  <FiTrash2 size={18} />
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       )}

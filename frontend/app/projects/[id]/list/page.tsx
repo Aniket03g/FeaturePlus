@@ -42,7 +42,7 @@ const ProjectListPage = () => {
         <h1>{project.name} Feature Groups</h1>
       </div>
       <div className={styles.projectContent}>
-        <FeatureList projectId={id} onFeatureUpdated={fetchProject} />
+        <FeatureList projectId={id} onFeatureUpdated={fetchProject} categories={project.config?.feature_category || []} />
       </div>
     </div>
   );

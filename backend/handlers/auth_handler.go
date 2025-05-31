@@ -1,11 +1,12 @@
 package handlers
 
 import (
-	"FeaturePlus/models"
-	"FeaturePlus/utils"
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/FeaturePlus/backend/models"
+	"github.com/FeaturePlus/backend/utils"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

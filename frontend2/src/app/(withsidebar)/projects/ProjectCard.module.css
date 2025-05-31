@@ -19,6 +19,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
+  position: relative;
 }
 
 .statusBadge {
@@ -201,4 +202,27 @@
 
 .viewIcon {
   margin-right: 0.25rem;
+}
+
+.settingsButton {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 50%;
+  transition: background 0.15s;
+  z-index: 2;
+}
+
+.settingsButton:hover {
+  background: #f3f4f6;
+}
+
+.settingsIcon {
+  width: 20px;
+  height: 20px;
+  display: block;
 } 

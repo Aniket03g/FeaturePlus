@@ -31,6 +31,7 @@ type Feature struct {
 	CreatedAt       time.Time       `json:"created_at"`
 	UpdatedAt       time.Time       `json:"updated_at"`
 	DeletedAt       gorm.DeletedAt  `gorm:"index" json:"-"`
+	Category        string          `gorm:"type:varchar(100)" json:"category"`
 
 	// Associations
 	Project       Project      `gorm:"foreignKey:ProjectID" json:"-"`

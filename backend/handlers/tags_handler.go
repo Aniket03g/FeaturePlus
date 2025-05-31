@@ -1,9 +1,10 @@
 package handlers
 
 import (
-	"FeaturePlus/repositories"
 	"net/http"
 	"strconv"
+
+	"github.com/FeaturePlus/backend/repositories"
 
 	"github.com/gin-gonic/gin"
 )

@@ -1,6 +1,8 @@
 package database
 
 import (
+	"github.com/FeaturePlus/backend/models"
+
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -14,6 +16,9 @@ func InitDB() (*Database, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Auto-migrate updated models
+	db.AutoMigrate(&models.Project{}, &models.Feature{})
 
 	return &Database{DB: db}, nil
 }

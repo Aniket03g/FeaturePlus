@@ -14,15 +14,17 @@ declare module '@/app/types' {
     parent_feature_id?: number | null;
     parent_feature?: Feature;
     tags_input?: string;
+    category?: string;
   }
 }
 
 interface FeatureListProps {
   projectId: string | number;
   onFeatureUpdated: () => void;
+  categories: string[];
 }
 
-const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
+const FeatureList = ({ projectId, onFeatureUpdated, categories }: FeatureListProps) => {
   const router = useRouter();
   const [features, setFeatures] = useState<Feature[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -652,6 +654,9 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                             <TagList tags={feature.tags} navigateOnClick={true} />
                           </div>
                         )}
+                        <button className={styles.editIconButton} onClick={() => handleEditFeature(feature)} title="Edit Feature">
+                          <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                        </button>
                       </div>
                     </td>
                     <td className={styles.statusCell}>
@@ -679,7 +684,8 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                     </td>
                     <td className={styles.actionsCell}>
                       <div className={styles.actionButtons}>
-                        <button
+                        {/* Remove the 'Edit' button from feature cards */}
+                        {/* <button
                           className={styles.actionButton}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -691,7 +697,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                           </svg>
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                   </tr>
@@ -715,6 +721,7 @@ const FeatureList = ({ projectId, onFeatureUpdated }: FeatureListProps) => {
                 onClose={handleModalClose}
                 onSubmit={editingFeature?.id ? handleSaveFeature : handleCreateFeature}
                 modalType={modalType}
+                categories={categories}
               />
             </div>
           </div>
@@ -973,9 +980,10 @@ interface FeatureFormProps {
   onClose: () => void;
   onSubmit: (feature: Feature) => void;
   modalType: 'featureGroup' | 'feature';
+  categories: string[];
 }
 
-const FeatureForm = ({ feature, users, features = [], onClose, onSubmit, modalType }: FeatureFormProps) => {
+const FeatureForm = ({ feature, users, features = [], onClose, onSubmit, modalType, categories }: FeatureFormProps) => {
   const [formData, setFormData] = useState<Feature | null>(feature);
   const [tagsInput, setTagsInput] = useState(feature?.tags_input || '');
   const [existingTags, setExistingTags] = useState<string[]>(feature?.tags?.map(tag => tag.tag_name) || []);
@@ -1039,6 +1047,11 @@ const FeatureForm = ({ feature, users, features = [], onClose, onSubmit, modalTy
           parent_feature_id: parseInt(value, 10)
         });
       }
+      return;
+    }
+    
+    if (name === 'category') {
+      setFormData({ ...formData, category: value });
       return;
     }
     
@@ -1121,6 +1134,22 @@ const FeatureForm = ({ feature, users, features = [], onClose, onSubmit, modalTy
           rows={4}
           placeholder="Describe the feature..."
         />
+      </div>
+      
+      <div className={styles.formGroup}>
+        <label htmlFor="category">Category</label>
+        <select
+          id="category"
+          name="category"
+          value={formData.category || ''}
+          onChange={handleChange}
+          required
+        >
+          <option value="" disabled>Select category</option>
+          {categories.map((cat: string) => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
       </div>
       
       <div className={styles.formGroup}>

@@ -24,6 +24,7 @@ export interface Feature {
   parent_feature?: Feature;
   assignee?: User;
   tags?: Tag[];
+  category?: string;
 }
 
 // Re-export SubFeature from its own file
