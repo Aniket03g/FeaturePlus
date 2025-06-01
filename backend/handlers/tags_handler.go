@@ -1,25 +1,30 @@
 package handlers
 
 import (
-	"FeaturePlus/repositories"
 	"net/http"
 	"strconv"
 
+	"github.com/FeaturePlus/backend/repositories"
+
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type TagHandler struct {
 	tagRepo     *repositories.TagRepository
 	featureRepo *repositories.FeatureRepository
+	DB          *gorm.DB
 }
 
 func NewTagHandler(
 	tagRepo *repositories.TagRepository,
 	featureRepo *repositories.FeatureRepository,
+	db *gorm.DB,
 ) *TagHandler {
 	return &TagHandler{
 		tagRepo:     tagRepo,
 		featureRepo: featureRepo,
+		DB:          db,
 	}
 }
 

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"FeaturePlus/models"
+	"github.com/FeaturePlus/backend/models"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

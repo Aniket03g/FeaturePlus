@@ -1,20 +1,23 @@
 package handlers
 
 import (
-	"FeaturePlus/models"
-	"FeaturePlus/repositories"
 	"net/http"
 	"strconv"
 
+	"github.com/FeaturePlus/backend/models"
+	"github.com/FeaturePlus/backend/repositories"
+
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type TaskHandler struct {
 	taskRepo repositories.TaskRepository
+	DB       *gorm.DB
 }
 
-func NewTaskHandler(taskRepo repositories.TaskRepository) *TaskHandler {
-	return &TaskHandler{taskRepo}
+func NewTaskHandler(taskRepo repositories.TaskRepository, db *gorm.DB) *TaskHandler {
+	return &TaskHandler{taskRepo: taskRepo, DB: db}
 }
 
 // CreateTask creates a standalone task not tied to a specific feature
@@ -25,12 +28,48 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		return
 	}
 
+	if task.TaskType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "task_type is required"})
+		return
+	}
+
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
 	task.CreatedByUser = userID.(uint)
+
+	// Strict validation for task_type against project config
+	var projectID int
+	if task.FeatureID != 0 {
+		// Fetch the feature to get the project ID
+		featureRepo := repositories.NewFeatureRepository(h.DB)
+		feature, err := featureRepo.GetFeatureByID(int(task.FeatureID))
+		if err == nil {
+			projectID = feature.ProjectID
+		}
+	}
+	if projectID != 0 {
+		projectRepo := repositories.NewProjectRepository(h.DB)
+		project, err := projectRepo.GetProjectByID(projectID)
+		if err == nil {
+			types, ok := project.Config["task_types"].([]interface{})
+			if ok {
+				validType := false
+				for _, t := range types {
+					if tStr, ok := t.(string); ok && tStr == task.TaskType {
+						validType = true
+						break
+					}
+				}
+				if !validType {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "task_type must be one of the allowed task_types values in project config"})
+					return
+				}
+			}
+		}
+	}
 
 	if err := h.taskRepo.Create(&task); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create task"})

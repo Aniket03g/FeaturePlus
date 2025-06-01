@@ -1,16 +1,17 @@
 package main
 
 import (
-	"FeaturePlus/database"
-	"FeaturePlus/handlers"
-	"FeaturePlus/middleware"
-	"FeaturePlus/models"
-	"FeaturePlus/repositories"
-	"FeaturePlus/routes"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/FeaturePlus/backend/database"
+	"github.com/FeaturePlus/backend/handlers"
+	"github.com/FeaturePlus/backend/middleware"
+	"github.com/FeaturePlus/backend/models"
+	"github.com/FeaturePlus/backend/repositories"
+	"github.com/FeaturePlus/backend/routes"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,9 +38,9 @@ func main() {
 	// Create handlers
 	userHandler := handlers.NewUserHandler(userRepo)
 	projectHandler := handlers.NewProjectHandler(projectRepo)
-	featureHandler := handlers.NewFeatureHandler(featureRepo, tagRepo)
-	taskHandler := handlers.NewTaskHandler(taskRepo)
-	tagHandler := handlers.NewTagHandler(tagRepo, featureRepo)
+	featureHandler := handlers.NewFeatureHandler(featureRepo, tagRepo, db.DB)
+	taskHandler := handlers.NewTaskHandler(taskRepo, db.DB)
+	tagHandler := handlers.NewTagHandler(tagRepo, featureRepo, db.DB)
 
 	router := gin.Default()
 

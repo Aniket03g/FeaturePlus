@@ -25,6 +25,7 @@ type Feature struct {
 	ParentFeatureID *uint           `gorm:"index" json:"parent_feature_id"`
 	Title           string          `gorm:"type:varchar(255);not null" json:"title"`
 	Description     string          `gorm:"type:text" json:"description"`
+	Category        string          `gorm:"type:varchar(50);not null;default:'general'" json:"category"`
 	Status          FeatureStatus   `gorm:"type:varchar(50);not null;default:'todo'" json:"status"`
 	Priority        FeaturePriority `gorm:"type:varchar(50);not null;default:'medium'" json:"priority"`
 	AssigneeID      uint            `gorm:"default:0" json:"assignee_id"`

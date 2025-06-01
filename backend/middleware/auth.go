@@ -1,10 +1,12 @@
 package middleware
 
 import (
+	"net/http"
+	"strings"
+
+	"github.com/FeaturePlus/backend/utils"
+
 	"github.com/gin-gonic/gin"
-    "net/http"
-    "strings"
-    "FeaturePlus/utils"
 )
 
 // AuthMiddleware validates JWT tokens and sets user_id in the context
@@ -15,7 +17,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		c.Next()
 		// Original authentication code (commented out for now)
 
-        if (true) {
+		if true {
 
 			authHeader := c.GetHeader("Authorization")
 			if authHeader == "" {
@@ -32,8 +34,8 @@ func AuthMiddleware() gin.HandlerFunc {
 				return
 			}
 
-            c.Set("user_id", claims["user_id"])
+			c.Set("user_id", claims["user_id"])
 			c.Next()
-       }
+		}
 	}
 }

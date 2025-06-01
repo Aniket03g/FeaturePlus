@@ -1,4 +1,4 @@
-module FeaturePlus
+module github.com/FeaturePlus/backend
 
 go 1.23.5
 

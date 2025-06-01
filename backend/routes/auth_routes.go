@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"FeaturePlus/handlers"
+	"github.com/FeaturePlus/backend/handlers"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

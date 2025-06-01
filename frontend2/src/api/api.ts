@@ -50,11 +50,21 @@ const TagsAPI = {
   getFeaturesByTag: (tagName: string) => API.get(`/tags/${encodeURIComponent(tagName)}/features`),
 };
 
+// Add endpoints for projects with config
+const ProjectsAPI = {
+  getById: (projectId: number) => API.get(`/projects/${projectId}`),
+  getConfig: (projectId: number) => API.get(`/projects/${projectId}/config`),
+  updateConfig: (projectId: number, config: any) => API.put(`/projects/${projectId}/config`, config),
+};
+
 // Add endpoints for features, subfeatures, tags, and tasks
 const FeaturesAPI = {
   getById: (featureId: number) => API.get(`/features/${featureId}`),
   getSubfeatures: (featureId: number) => API.get(`/features/${featureId}/subfeatures`),
   getTags: (featureId: number) => API.get(`/features/${featureId}/tags`),
+  create: (data: any) => API.post('/features', data),
+  update: (featureId: number, data: any) => API.put(`/features/${featureId}`, data),
+  delete: (featureId: number) => API.delete(`/features/${featureId}`),
 };
 
 const TasksAPI = {
@@ -62,7 +72,9 @@ const TasksAPI = {
   createForFeature: (featureId: number, data: any) => API.post(`/features/${featureId}/tasks`, data),
   deleteTask: (featureId: number, taskId: number) => API.delete(`/features/${featureId}/task/${taskId}`),
   updateTask: (featureId: number, taskId: number, data: any) => API.put(`/features/${featureId}/task/${taskId}`, data),
+  getAll: () => API.get('/tasks'),
+  getByProject: (projectId: number) => API.get(`/projects/${projectId}/tasks`),
 };
 
-export { TagsAPI, FeaturesAPI, TasksAPI };
+export { TagsAPI, FeaturesAPI, TasksAPI, ProjectsAPI };
 export default API;

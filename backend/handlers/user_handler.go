@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"FeaturePlus/models"
-	"FeaturePlus/repositories"
+	"github.com/FeaturePlus/backend/models"
+	"github.com/FeaturePlus/backend/repositories"
 
 	"github.com/gin-gonic/gin"
 )
