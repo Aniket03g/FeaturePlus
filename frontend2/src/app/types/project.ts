@@ -10,4 +10,5 @@ export interface Project {
   user?: User;
   created_at: string;
   updated_at: string;
+  config?: Record<string, any>;
 } 
