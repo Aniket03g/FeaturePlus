@@ -5,7 +5,7 @@ import { AuthContext } from '@/context/AuthContext';
 import Link from "next/link";
 import API from "@/api/api";
 import styles from './page.module.css';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 interface User {
   id: number;
@@ -44,6 +44,7 @@ const Home = () => {
         <> 
           <p className="text-lg">Please log in.</p>
           <div><Link href="/fflogin"> Login </Link></div>
+          <button onClick={logout} className="mt-4 px-4 py-2 bg-red-500 text-white rounded">Logout</button>
         </>
       )}
       
