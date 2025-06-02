@@ -32,7 +32,7 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType>({
   authInfo: null, 
   project: null, 
-  token: null, // Initial state for token
+  token: null, // Server provided token 
   registerCredentials: () => {},
   logout: () => {},
 });
@@ -47,18 +47,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true); // Add loading state
 
-  // Check for token and user/project in localStorage on mount
+  // Using only info stored in page. (token in localstorage only if user closes browser and comes back later. 
   useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    setToken(storedToken); 
-    console.log("Token in authProvider.", storedToken);
+    // const storedToken = localStorage.getItem('token');
+    // setToken(storedToken); 
+    console.log("AuthProvider: authInfo=", authInfo, " token=", token);
     setLoading(false); // Set loading to false after checking localStorage
-    // Old logic (backup):
-    // if (token == null && pathname === '/projects') { 
-    //   router.push('/fflogin');
-    // }
-    // New logic:
-    if (!loading && !token && pathname.startsWith('/projects')) {
+    if (!loading && !token ) {
+      // && pathname.startsWith('/projects'))
       router.push('/fflogin');
     }
   }, [authInfo, project, loading, router, pathname]); 
