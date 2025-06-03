@@ -24,6 +24,9 @@ const ProjectSettingsPage = () => {
   const addTaskTypeInputRef = useRef<HTMLInputElement>(null);
   const addFeatureCategoryInputRef = useRef<HTMLInputElement>(null);
 
+  const [showTaskTypeInput, setShowTaskTypeInput] = useState(false);
+  const [showFeatureCategoryInput, setShowFeatureCategoryInput] = useState(false);
+
   useEffect(() => {
     const fetchProject = async () => {
       try {
@@ -97,36 +100,34 @@ const ProjectSettingsPage = () => {
           Description
           <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} style={{ width: '100%', padding: 8, marginTop: 4, borderRadius: 4, border: '1px solid #ddd' }} />
         </label>
-        <label>
-          Task Types
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '8px 0' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, minHeight: 36 }}>
-              {taskTypes.map((type, idx) => (
-                <div key={type} style={{ display: 'flex', alignItems: 'center', background: '#f3f4f6', borderRadius: 999, padding: '6px 16px', boxShadow: '0 1px 3px #eee', fontWeight: 500, fontSize: 15, position: 'relative', transition: 'all 0.2s' }}>
-                  <span>{type}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeTaskType(idx)}
-                    style={{
-                      color: '#dc2626',
-                      background: 'none',
-                      border: 'none',
-                      fontSize: 18,
-                      marginLeft: 8,
-                      cursor: 'pointer',
-                      opacity: 0.7,
-                      transition: 'opacity 0.15s',
-                    }}
-                    onMouseOver={e => (e.currentTarget.style.opacity = '1')}
-                    onMouseOut={e => (e.currentTarget.style.opacity = '0.7')}
-                    aria-label={`Remove ${type}`}
-                  >
-                    &times;
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 500 }}>Task Types</span>
+            <button
+              type="button"
+              onClick={() => setShowTaskTypeInput((v) => !v)}
+              style={{
+                background: '#e0e7ff',
+                color: '#4f46e5',
+                border: 'none',
+                borderRadius: '50%',
+                width: 24,
+                height: 24,
+                fontSize: 18,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+              }}
+              aria-label="Add Task Type"
+            >
+              +
+            </button>
+          </div>
+          {showTaskTypeInput && (
+            <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
               <input
                 ref={addTaskTypeInputRef}
                 value={newTaskType}
@@ -137,38 +138,62 @@ const ProjectSettingsPage = () => {
               />
               <button type="button" onClick={addTaskType} style={{ background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 999, padding: '0 20px', fontWeight: 500, fontSize: 15, boxShadow: '0 1px 3px #eee' }}>Add</button>
             </div>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, minHeight: 36 }}>
+            {taskTypes.map((type, idx) => (
+              <div key={type} style={{ display: 'flex', alignItems: 'center', background: '#f3f4f6', borderRadius: 999, padding: '6px 16px', boxShadow: '0 1px 3px #eee', fontWeight: 500, fontSize: 15, position: 'relative', transition: 'all 0.2s' }}>
+                <span>{type}</span>
+                <button
+                  type="button"
+                  onClick={() => removeTaskType(idx)}
+                  style={{
+                    color: '#dc2626',
+                    background: 'none',
+                    border: 'none',
+                    fontSize: 18,
+                    marginLeft: 8,
+                    cursor: 'pointer',
+                    opacity: 0.7,
+                    transition: 'opacity 0.15s',
+                  }}
+                  onMouseOver={e => (e.currentTarget.style.opacity = '1')}
+                  onMouseOut={e => (e.currentTarget.style.opacity = '0.7')}
+                  aria-label={`Remove ${type}`}
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
           </div>
-        </label>
-        <label>
-          Feature Categories
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '8px 0' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, minHeight: 36 }}>
-              {featureCategories.map((cat, idx) => (
-                <div key={cat} style={{ display: 'flex', alignItems: 'center', background: '#f3f4f6', borderRadius: 999, padding: '6px 16px', boxShadow: '0 1px 3px #eee', fontWeight: 500, fontSize: 15, position: 'relative', transition: 'all 0.2s' }}>
-                  <span>{cat}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeFeatureCategory(idx)}
-                    style={{
-                      color: '#dc2626',
-                      background: 'none',
-                      border: 'none',
-                      fontSize: 18,
-                      marginLeft: 8,
-                      cursor: 'pointer',
-                      opacity: 0.7,
-                      transition: 'opacity 0.15s',
-                    }}
-                    onMouseOver={e => (e.currentTarget.style.opacity = '1')}
-                    onMouseOut={e => (e.currentTarget.style.opacity = '0.7')}
-                    aria-label={`Remove ${cat}`}
-                  >
-                    &times;
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 500 }}>Feature Categories</span>
+            <button
+              type="button"
+              onClick={() => setShowFeatureCategoryInput((v) => !v)}
+              style={{
+                background: '#e0e7ff',
+                color: '#4f46e5',
+                border: 'none',
+                borderRadius: '50%',
+                width: 24,
+                height: 24,
+                fontSize: 18,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+              }}
+              aria-label="Add Feature Category"
+            >
+              +
+            </button>
+          </div>
+          {showFeatureCategoryInput && (
+            <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
               <input
                 ref={addFeatureCategoryInputRef}
                 value={newFeatureCategory}
@@ -179,8 +204,34 @@ const ProjectSettingsPage = () => {
               />
               <button type="button" onClick={addFeatureCategory} style={{ background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 999, padding: '0 20px', fontWeight: 500, fontSize: 15, boxShadow: '0 1px 3px #eee' }}>Add</button>
             </div>
+          )}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, minHeight: 36 }}>
+            {featureCategories.map((cat, idx) => (
+              <div key={cat} style={{ display: 'flex', alignItems: 'center', background: '#f3f4f6', borderRadius: 999, padding: '6px 16px', boxShadow: '0 1px 3px #eee', fontWeight: 500, fontSize: 15, position: 'relative', transition: 'all 0.2s' }}>
+                <span>{cat}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFeatureCategory(idx)}
+                  style={{
+                    color: '#dc2626',
+                    background: 'none',
+                    border: 'none',
+                    fontSize: 18,
+                    marginLeft: 8,
+                    cursor: 'pointer',
+                    opacity: 0.7,
+                    transition: 'opacity 0.15s',
+                  }}
+                  onMouseOver={e => (e.currentTarget.style.opacity = '1')}
+                  onMouseOut={e => (e.currentTarget.style.opacity = '0.7')}
+                  aria-label={`Remove ${cat}`}
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
           </div>
-        </label>
+        </div>
         <button type="submit" disabled={saving} style={{ background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 4, padding: '10px 0', fontWeight: 500, marginTop: 16 }}>
           {saving ? 'Saving...' : 'Save'}
         </button>
