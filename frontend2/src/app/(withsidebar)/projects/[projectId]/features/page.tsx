@@ -4,19 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import API, { TagsAPI } from '@/api/api';
 import Link from 'next/link';
-
-type Feature = {
-  id: number;
-  title: string;
-  description?: string;
-  parent_feature_id?: number | null;
-  category: string;
-  status: string;
-  priority: string;
-  assignee_id?: number;
-  tags?: { tag_name: string; feature_id: number }[];
-  assignee?: { id: number; username: string };
-};
+import { Feature, User } from "@/app/types";
 
 export default function FeaturesPage() {
   const params = useParams();
@@ -55,18 +43,6 @@ export default function FeaturesPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const router = useRouter();
-  const [editingFeatureId, setEditingFeatureId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({
-    title: '',
-    description: '',
-    category: '',
-    tags: '',
-    status: 'todo',
-    priority: 'medium',
-  });
-  const [editTags, setEditTags] = useState<string[]>([]);
-  const [editTagSuggestions, setEditTagSuggestions] = useState<string[]>([]);
-  const [showEditTagSuggestions, setShowEditTagSuggestions] = useState(false);
   const [showInlineFeatureForm, setShowInlineFeatureForm] = useState(false);
 
   useEffect(() => {
@@ -491,208 +467,28 @@ export default function FeaturesPage() {
       <div className="space-y-6">
         {filteredFeatures.map(item => {
           const isChild = item.parent_feature_id !== null && item.parent_feature_id !== undefined;
-          const isEditing = editingFeatureId === item.id;
-          if (isEditing) {
-            return (
-              <div key={item.id} className="bg-white rounded-lg shadow p-6 border border-gray-200">
-                <div className="flex items-center justify-between mb-2">
-                  <input
-                    className="text-xl font-semibold text-blue-700 w-full border-b border-gray-300 focus:outline-none focus:border-blue-500"
-                    value={editForm.title}
-                    onChange={e => setEditForm({ ...editForm, title: e.target.value })}
-                    placeholder="Feature title"
-                  />
-                </div>
-                <textarea
-                  className="w-full border rounded px-3 py-2 mb-2"
-                  rows={2}
-                  value={editForm.description}
-                  onChange={e => setEditForm({ ...editForm, description: e.target.value })}
-                  placeholder="Description"
-                />
-                <div className="mb-2">
-                  <label className="block text-sm font-medium mb-1">Feature Category</label>
-                  <select
-                    className="w-full border rounded px-3 py-2"
-                    value={editForm.category}
-                    onChange={e => setEditForm({ ...editForm, category: e.target.value })}
-                    required
-                  >
-                    <option value="" disabled>Select a category</option>
-                    {categories.map((cat: string) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="mb-2">
-                  <label className="block text-sm font-medium mb-1">Tags</label>
-                  <input
-                    type="text"
-                    value={editForm.tags}
-                    onChange={e => {
-                      setEditForm({ ...editForm, tags: e.target.value });
-                      if (e.target.value.length >= 2) {
-                        const filtered = featureAllTags.filter(tag => tag.toLowerCase().includes(e.target.value.toLowerCase()) && !editTags.includes(tag));
-                        setEditTagSuggestions(filtered);
-                        setShowEditTagSuggestions(true);
-                      } else {
-                        setShowEditTagSuggestions(false);
-                      }
-                    }}
-                    onKeyDown={e => {
-                      if ((e.key === 'Enter' || e.key === ',' || e.key === ';' || e.key === ' ') && editForm.tags.trim()) {
-                        e.preventDefault();
-                        if (!editTags.includes(editForm.tags.trim())) {
-                          setEditTags([...editTags, editForm.tags.trim()]);
-                        }
-                        setEditForm({ ...editForm, tags: '' });
-                        setShowEditTagSuggestions(false);
-                      }
-                    }}
-                    className="w-full border rounded px-3 py-2"
-                    placeholder="Enter tags separated by space, comma, or semicolon"
-                    autoComplete="off"
-                  />
-                  {showEditTagSuggestions && editTagSuggestions.length > 0 && (
-                    <div className="absolute bg-white border rounded shadow mt-1 z-50 w-full">
-                      {editTagSuggestions.map((tag: string, idx: number) => (
-                        <div
-                          key={idx}
-                          className="px-3 py-2 cursor-pointer hover:bg-blue-100"
-                          onClick={() => {
-                            setEditTags([...editTags, tag]);
-                            setEditForm({ ...editForm, tags: '' });
-                            setShowEditTagSuggestions(false);
-                          }}
-                        >
-                          {tag}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {editTags.map((tag, idx) => (
-                      <span key={idx} className="bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs flex items-center">
-                        {tag}
-                        <button type="button" className="ml-1 text-xs text-gray-500 hover:text-red-500" onClick={() => setEditTags(editTags.filter(t => t !== tag))}>&times;</button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                <div className="mb-2">
-                  <label className="block text-sm font-medium mb-1">Status</label>
-                  <select
-                    className="w-full border rounded px-3 py-2"
-                    value={editForm.status}
-                    onChange={e => setEditForm({ ...editForm, status: e.target.value })}
-                    required
-                  >
-                    <option value="todo">To Do</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="done">Done</option>
-                  </select>
-                </div>
-                <div className="mb-2">
-                  <label className="block text-sm font-medium mb-1">Priority</label>
-                  <select
-                    className="w-full border rounded px-3 py-2"
-                    value={editForm.priority}
-                    onChange={e => setEditForm({ ...editForm, priority: e.target.value })}
-                    required
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <button
-                    className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 shadow"
-                    onClick={async () => {
-                      if (!editForm.category) {
-                        alert('Feature category is required.');
-                        return;
-                      }
-                      const statusToSend = editForm.status || 'todo';
-                      await API.put(`/features/${item.id}`, {
-                        title: editForm.title,
-                        description: editForm.description,
-                        category: editForm.category,
-                        tags_input: editTags.join(','),
-                        status: statusToSend,
-                        priority: editForm.priority,
-                        project_id: Number(projectId),
-                        parent_feature_id: item.parent_feature_id ?? null,
-                      });
-                      // Refresh features
-                      const allFeaturesRes = await API.get(`/features/project/${projectId}`);
-                      setFeatures(allFeaturesRes.data as Feature[]);
-                      setEditingFeatureId(null);
-                    }}
-                  >
-                    Save
-                  </button>
-                  <button
-                    className="px-4 py-2 rounded border border-gray-300 text-gray-700 bg-white hover:bg-gray-100"
-                    onClick={() => setEditingFeatureId(null)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            );
-          }
           return (
             <div
               key={item.id}
-              className={`bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition ${isChild ? 'cursor-pointer' : 'cursor-default'}`}
-              {...(isChild ? { onClick: () => { router.push(`/projects/${projectId}/features/${item.id}`); } } : {})}
+              className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition cursor-pointer"
+              onClick={() => {
+                if (projectId && item.id) {
+                  router.push(`/projects/${projectId}/features/${item.id}`);
+                }
+              }}
             >
               <div className="flex items-center justify-between">
                 <span className="text-xl font-semibold text-blue-700">{item.title}</span>
-                <button
-                  className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setEditingFeatureId(item.id);
-                    setEditForm({
-                      title: item.title,
-                      description: item.description || '',
-                      category: item.category || '',
-                      tags: '',
-                      status: item.status,
-                      priority: item.priority || 'medium',
-                    });
-                    setEditTags((item.tags || []).map((t: any) => t.tag_name));
-                  }}
-                >
-                  Edit
-                </button>
               </div>
               <div className="mt-2 text-gray-700 text-base">
                 {item.description || 'No description provided.'}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                {(Array.isArray(item.tags) && item.tags.length > 0) ? (
-                  item.tags.map((t: any) => (
-                    <button
-                      key={t.tag_name + '-' + t.feature_id}
-                      type="button"
-                      className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs hover:bg-gray-200 transition-colors focus:outline-none"
-                      onClick={e => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        router.push(`/tags/${encodeURIComponent(t.tag_name)}`);
-                      }}
-                    >
-                      {t.tag_name}
-                    </button>
-                  ))
-                ) : (
-                  <span className="text-gray-400 text-xs italic">No tags</span>
-                )}
+                {(item.tags ?? []).length > 0 && (item.tags ?? []).map((tag) => (
+                  <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">{tag.tag_name}</span>
+                ))}
               </div>
-              <div className="mt-4 flex space-x-4 text-sm">
+              <div className="mt-2 flex gap-4 text-sm">
                 <span className="font-medium">Status:</span>
                 <span className="capitalize text-gray-600">{item.status}</span>
                 <span className="font-medium ml-4">Priority:</span>
