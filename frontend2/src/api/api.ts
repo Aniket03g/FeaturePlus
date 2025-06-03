@@ -64,6 +64,8 @@ const FeaturesAPI = {
   getTags: (featureId: number) => API.get(`/features/${featureId}/tags`),
   create: (data: any) => API.post('/features', data),
   update: (featureId: number, data: any) => API.put(`/features/${featureId}`, data),
+  updateField: (featureId: number, field: string, value: any) => 
+    API.patch(`/features/${featureId}/field`, { field, value }),
   delete: (featureId: number) => API.delete(`/features/${featureId}`),
 };
 

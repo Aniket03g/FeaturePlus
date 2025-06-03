@@ -4,19 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import API, { TagsAPI } from '@/api/api';
 import Link from 'next/link';
-
-type Feature = {
-  id: number;
-  title: string;
-  description?: string;
-  parent_feature_id?: number | null;
-  category: string;
-  status: string;
-  priority: string;
-  assignee_id?: number;
-  tags?: { tag_name: string; feature_id: number }[];
-  assignee?: { id: number; username: string };
-};
+import { Feature, User } from "@/app/types";
+import { FeaturesAPI } from '@/api/api';
 
 export default function FeaturesPage() {
   const params = useParams();
@@ -68,6 +57,7 @@ export default function FeaturesPage() {
   const [editTagSuggestions, setEditTagSuggestions] = useState<string[]>([]);
   const [showEditTagSuggestions, setShowEditTagSuggestions] = useState(false);
   const [showInlineFeatureForm, setShowInlineFeatureForm] = useState(false);
+  const [editingField, setEditingField] = useState<{featureId: number, field: string} | null>(null);
 
   useEffect(() => {
     const fetchFeatures = async () => {
@@ -261,6 +251,29 @@ export default function FeaturesPage() {
   const filteredFeatures = selectedCategory === 'All'
     ? features
     : features.filter(f => 'category' in f && f.category === selectedCategory);
+
+  // Add new handlers for inline editing
+  const handleFieldEdit = async (featureId: number, field: string, value: string) => {
+    try {
+      await FeaturesAPI.updateField(featureId, field, value);
+      const response = await API.get(`/features/project/${projectId}`);
+      setFeatures(response.data);
+      setEditingField(null);
+    } catch (error) {
+      console.error('Error updating feature:', error);
+    }
+  };
+
+  const handleTagsEdit = async (featureId: number, tags: string) => {
+    try {
+      await FeaturesAPI.updateField(featureId, 'tags', tags);
+      const response = await API.get(`/features/project/${projectId}`);
+      setFeatures(response.data);
+      setEditingField(null);
+    } catch (error) {
+      console.error('Error updating feature tags:', error);
+    }
+  };
 
   if (loading) {
     return <div className="p-6">Loading features...</div>;
@@ -645,59 +658,165 @@ export default function FeaturesPage() {
           return (
             <div
               key={item.id}
-              className={`bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition ${isChild ? 'cursor-pointer' : 'cursor-default'}`}
-              {...(isChild ? { onClick: () => { router.push(`/projects/${projectId}/features/${item.id}`); } } : {})}
+              className="bg-white rounded-lg shadow p-6 border border-gray-200 hover:bg-blue-50 transition"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xl font-semibold text-blue-700">{item.title}</span>
-                <button
-                  className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 transition"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setEditingFeatureId(item.id);
-                    setEditForm({
-                      title: item.title,
-                      description: item.description || '',
-                      category: item.category || '',
-                      tags: '',
-                      status: item.status,
-                      priority: item.priority || 'medium',
-                    });
-                    setEditTags((item.tags || []).map((t: any) => t.tag_name));
-                  }}
-                >
-                  Edit
-                </button>
+                {editingField?.featureId === item.id && editingField.field === 'title' ? (
+                  <input
+                    type="text"
+                    className="text-xl font-semibold text-blue-700 border rounded px-2 py-1 w-full"
+                    value={item.title}
+                    onChange={(e) => {
+                      const newFeatures = features.map(f => 
+                        f.id === item.id ? { ...f, title: e.target.value } : f
+                      );
+                      setFeatures(newFeatures);
+                    }}
+                    onBlur={() => handleFieldEdit(item.id, 'title', item.title)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleFieldEdit(item.id, 'title', item.title);
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    autoFocus
+                  />
+                ) : (
+                  <span 
+                    className="text-xl font-semibold text-blue-700 hover:bg-blue-100 px-2 py-1 rounded cursor-text"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingField({ featureId: item.id, field: 'title' });
+                    }}
+                  >
+                    {item.title}
+                  </span>
+                )}
               </div>
               <div className="mt-2 text-gray-700 text-base">
-                {item.description || 'No description provided.'}
+                {editingField?.featureId === item.id && editingField.field === 'description' ? (
+                  <textarea
+                    className="w-full border rounded px-2 py-1"
+                    value={item.description}
+                    onChange={(e) => {
+                      const newFeatures = features.map(f => 
+                        f.id === item.id ? { ...f, description: e.target.value } : f
+                      );
+                      setFeatures(newFeatures);
+                    }}
+                    onBlur={() => handleFieldEdit(item.id, 'description', item.description)}
+                    onClick={(e) => e.stopPropagation()}
+                    autoFocus
+                  />
+                ) : (
+                  <div 
+                    className="hover:bg-blue-100 px-2 py-1 rounded cursor-text"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingField({ featureId: item.id, field: 'description' });
+                    }}
+                  >
+                    {item.description || 'No description provided.'}
+                  </div>
+                )}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                {(Array.isArray(item.tags) && item.tags.length > 0) ? (
-                  item.tags.map((t: any) => (
-                    <button
-                      key={t.tag_name + '-' + t.feature_id}
-                      type="button"
-                      className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs hover:bg-gray-200 transition-colors focus:outline-none"
-                      onClick={e => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        router.push(`/tags/${encodeURIComponent(t.tag_name)}`);
-                      }}
-                    >
-                      {t.tag_name}
-                    </button>
-                  ))
+                {editingField?.featureId === item.id && editingField.field === 'tags' ? (
+                  <input
+                    type="text"
+                    className="w-full border rounded px-2 py-1"
+                    value={(item.tags ?? []).map(t => t.tag_name).join(', ')}
+                    onChange={(e) => handleTagsEdit(item.id, e.target.value)}
+                    onBlur={() => setEditingField(null)}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="Enter tags separated by commas"
+                    autoFocus
+                  />
                 ) : (
-                  <span className="text-gray-400 text-xs italic">No tags</span>
+                  <div 
+                    className="flex flex-wrap gap-2 hover:bg-blue-100 px-2 py-1 rounded cursor-text w-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingField({ featureId: item.id, field: 'tags' });
+                    }}
+                  >
+                    {(item.tags ?? []).length > 0 ? (item.tags ?? []).map((tag) => (
+                      <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">
+                        {tag.tag_name}
+                      </span>
+                    )) : (
+                      <span className="text-gray-500 text-sm">No tags</span>
+                    )}
+                  </div>
                 )}
               </div>
               <div className="mt-4 flex space-x-4 text-sm">
                 <span className="font-medium">Status:</span>
-                <span className="capitalize text-gray-600">{item.status}</span>
+                {editingField?.featureId === item.id && editingField.field === 'status' ? (
+                  <select
+                    className="capitalize text-gray-600 border rounded px-1"
+                    value={item.status}
+                    onChange={(e) => handleFieldEdit(item.id, 'status', e.target.value)}
+                    onBlur={() => setEditingField(null)}
+                    onClick={(e) => e.stopPropagation()}
+                    autoFocus
+                  >
+                    <option value="todo">To Do</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="done">Done</option>
+                  </select>
+                ) : (
+                  <span 
+                    className="capitalize text-gray-600 hover:bg-blue-100 px-2 py-1 rounded cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingField({ featureId: item.id, field: 'status' });
+                    }}
+                  >
+                    {item.status}
+                  </span>
+                )}
                 <span className="font-medium ml-4">Priority:</span>
-                <span className="capitalize text-gray-600">{item.priority || '-'}</span>
+                {editingField?.featureId === item.id && editingField.field === 'priority' ? (
+                  <select
+                    className="capitalize text-gray-600 border rounded px-1"
+                    value={item.priority}
+                    onChange={(e) => handleFieldEdit(item.id, 'priority', e.target.value)}
+                    onBlur={() => setEditingField(null)}
+                    onClick={(e) => e.stopPropagation()}
+                    autoFocus
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                ) : (
+                  <span 
+                    className="capitalize text-gray-600 hover:bg-blue-100 px-2 py-1 rounded cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingField({ featureId: item.id, field: 'priority' });
+                    }}
+                  >
+                    {item.priority || '-'}
+                  </span>
+                )}
               </div>
+              <div 
+                className="absolute inset-0 cursor-pointer"
+                onClick={() => {
+                  console.log("Feature card clicked:", {
+                    projectId,
+                    featureId: item.id,
+                    editingField,
+                    item
+                  });
+                  if (projectId && item.id && !editingField) {
+                    console.log("Navigating to:", `/projects/${projectId}/features/${item.id}`);
+                    router.push(`/projects/${projectId}/features/${item.id}`);
+                  }
+                }}
+              />
             </div>
           );
         })}

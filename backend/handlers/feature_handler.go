@@ -289,6 +289,150 @@ func (h *FeatureHandler) GetAllFeatures(c *gin.Context) {
 	c.JSON(http.StatusOK, features)
 }
 
+// UpdateFeatureField updates a single field of a feature
+func (h *FeatureHandler) UpdateFeatureField(c *gin.Context) {
+	fmt.Printf("Received PATCH request to update feature field\n")
+	fmt.Printf("Headers: %+v\n", c.Request.Header)
+	fmt.Printf("Method: %s\n", c.Request.Method)
+
+	idStr := c.Param("id")
+	fmt.Printf("Feature ID: %s\n", idStr)
+
+	featureID, err := strconv.Atoi(idStr)
+	if err != nil {
+		fmt.Printf("Error converting ID: %v\n", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid feature ID"})
+		return
+	}
+
+	var updateData struct {
+		Field string      `json:"field" binding:"required"`
+		Value interface{} `json:"value"`
+	}
+	if err := c.ShouldBindJSON(&updateData); err != nil {
+		fmt.Printf("Error binding JSON: %v\n", err)
+		fmt.Printf("Request body: %+v\n", c.Request.Body)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	fmt.Printf("Update data: %+v\n", updateData)
+
+	existingFeature, err := h.repo.GetFeatureByID(featureID)
+	if err != nil {
+		fmt.Printf("Error getting feature: %v\n", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "feature not found"})
+		return
+	}
+
+	fmt.Printf("Existing feature: %+v\n", existingFeature)
+
+	// Validate and update the specific field
+	switch updateData.Field {
+	case "title":
+		if title, ok := updateData.Value.(string); ok {
+			existingFeature.Title = title
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid title value"})
+			return
+		}
+	case "description":
+		if desc, ok := updateData.Value.(string); ok {
+			existingFeature.Description = desc
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid description value"})
+			return
+		}
+	case "status":
+		if status, ok := updateData.Value.(string); ok {
+			newStatus := models.FeatureStatus(status)
+			if !isValidStatus(newStatus) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status value"})
+				return
+			}
+			existingFeature.Status = newStatus
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status value"})
+			return
+		}
+	case "priority":
+		if priority, ok := updateData.Value.(string); ok {
+			newPriority := models.FeaturePriority(priority)
+			if !isValidPriority(newPriority) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid priority value"})
+				return
+			}
+			existingFeature.Priority = newPriority
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid priority value"})
+			return
+		}
+	case "category":
+		if category, ok := updateData.Value.(string); ok {
+			// Validate category against project config
+			projectRepo := repositories.NewProjectRepository(h.DB)
+			project, err := projectRepo.GetProjectByID(existingFeature.ProjectID)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid project ID for category validation"})
+				return
+			}
+			categories, ok := project.Config["feature_category"].([]interface{})
+			if !ok {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "project config missing feature_category"})
+				return
+			}
+			validCategory := false
+			for _, cat := range categories {
+				if catStr, ok := cat.(string); ok && catStr == category {
+					validCategory = true
+					break
+				}
+			}
+			if !validCategory {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "category must be one of the allowed feature_category values in project config"})
+				return
+			}
+			existingFeature.Category = category
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category value"})
+			return
+		}
+	case "tags":
+		if tags, ok := updateData.Value.(string); ok {
+			var createdByUser uint = 1 // Default to admin if not available
+			if userID, exists := c.Get("user_id"); exists {
+				createdByUser = userID.(uint)
+			}
+			if err := h.tagRepo.UpdateFeatureTags(existingFeature.ID, createdByUser, tags); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update tags"})
+				return
+			}
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tags value"})
+			return
+		}
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported field"})
+		return
+	}
+
+	if err := h.repo.UpdateFeature(existingFeature); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// If we updated tags, fetch the feature again to include updated tags
+	if updateData.Field == "tags" {
+		existingFeature, err = h.repo.GetFeatureByID(featureID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch updated feature"})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, existingFeature)
+}
+
 // Helper functions
 func isValidStatus(status models.FeatureStatus) bool {
 	switch status {
