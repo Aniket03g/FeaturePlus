@@ -1,4 +1,5 @@
 "use client";
+import React from 'react';
 import { FeatureTag } from '@/app/types';
 import styles from './TagChip.module.css';
 import { useRouter } from 'next/navigation';
@@ -27,9 +28,9 @@ const TagChip = ({ tag, onClick, navigateOnClick = false }: TagChipProps) => {
     <div 
       className={styles.tagChip} 
       onClick={handleClick}
-      title={`Tag: ${tag.tag_name}`}
+      title={`Tag: #${tag.tag_name}`}
     >
-      {tag.tag_name}
+      {'#' + tag.tag_name}
     </div>
   );
 };

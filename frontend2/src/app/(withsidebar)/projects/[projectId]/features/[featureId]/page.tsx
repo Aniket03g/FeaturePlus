@@ -486,7 +486,7 @@ export default function FeatureGroupDetailPage() {
             >
               {selectedTags.map((tag) => (
                 <span key={tag} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs flex items-center mb-1">
-                  {tag}
+                  {'#' + tag}
                   <button type="button" className="ml-1 text-xs text-gray-500 hover:text-red-500" onClick={() => handleRemoveTag(tag)} tabIndex={-1}>&times;</button>
                 </span>
               ))}
@@ -543,7 +543,7 @@ export default function FeatureGroupDetailPage() {
               {featureGroup?.tags && featureGroup.tags.length > 0 ? (
                 featureGroup.tags.map((tag) => (
                   <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">
-                    {tag.tag_name}
+                    {'#' + tag.tag_name}
                   </span>
                 ))
               ) : (
@@ -855,7 +855,7 @@ export default function FeatureGroupDetailPage() {
                     {tagsMap[feature.id] && tagsMap[feature.id].length > 0 ? (
                       tagsMap[feature.id].map((tag) => (
                         <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">
-                          {tag.tag_name}
+                          {'#' + tag.tag_name}
                         </span>
                       ))
                     ) : (
