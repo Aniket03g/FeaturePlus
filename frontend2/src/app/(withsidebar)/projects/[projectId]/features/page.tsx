@@ -6,6 +6,7 @@ import API from '@/api/api';
 import React from 'react';
 import { TagsAPI } from '@/api/api';
 import { FiTrash2 } from 'react-icons/fi';
+import { TasksAPI } from '@/api/api';
 
 interface Feature {
   id: number;
@@ -46,6 +47,7 @@ export default function FeaturesPage() {
   const [inlineTagInput, setInlineTagInput] = useState('');
   const inlineCreateRef = useRef<HTMLDivElement>(null);
   const [softDeletedIds, setSoftDeletedIds] = useState<number[]>([]);
+  const [taskCounts, setTaskCounts] = useState<{ [featureId: number]: number }>({});
 
   useEffect(() => {
     const fetchFeatures = async () => {
@@ -78,6 +80,23 @@ export default function FeaturesPage() {
       });
     }
   }, [showInlineCreate]);
+
+  useEffect(() => {
+    async function fetchTaskCounts() {
+      if (!features.length) return;
+      const counts: { [featureId: number]: number } = {};
+      await Promise.all(features.map(async (feature) => {
+        try {
+          const res = await TasksAPI.getByFeature(feature.id);
+          counts[feature.id] = Array.isArray(res.data) ? res.data.length : 0;
+        } catch {
+          counts[feature.id] = 0;
+        }
+      }));
+      setTaskCounts(counts);
+    }
+    fetchTaskCounts();
+  }, [features]);
 
   const handleInlineTagInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInlineTagInput(e.target.value);
@@ -313,7 +332,12 @@ export default function FeaturesPage() {
               <FiTrash2 size={20} />
             </button>
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-blue-700">{feature.title}</h2>
+              <h2 className="text-xl font-semibold text-blue-700 flex items-center gap-2">
+                {feature.title}
+                <span className="ml-2 px-2 py-0.5 rounded bg-gray-100 text-gray-500 text-xs font-medium align-middle whitespace-nowrap" style={{fontWeight:400}}>
+                  {(taskCounts[feature.id] ?? 0) + (taskCounts[feature.id] === 1 ? ' Task' : ' Tasks')}
+                </span>
+              </h2>
               <span className={`px-3 py-1 rounded-full text-sm ${
                 feature.status === 'done' ? 'bg-green-100 text-green-800' :
                 feature.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
@@ -343,8 +367,11 @@ export default function FeaturesPage() {
                 {feature.tags.map((tag) => (
                   <span
                     key={`${tag.tag_name}-${tag.feature_id}`}
-                    className="feature-tag-chip bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs cursor-default"
-                    onClick={e => e.stopPropagation()}
+                    className="feature-tag-chip bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs cursor-pointer hover:bg-blue-100 transition"
+                    onClick={e => {
+                      e.stopPropagation();
+                      router.push(`/projects/${projectId}/tags/${encodeURIComponent(tag.tag_name)}`);
+                    }}
                   >
                     {'#' + tag.tag_name}
                   </span>
