@@ -13,9 +13,8 @@
   <rect x="61" y="46" width="4" height="8" rx="2" fill="#1F2937"/>
   
   <!-- Company name -->
-  <text x="168" y="62" font-family="Arial, sans-serif" font-size="30" font-weight="bold" fill="#FFFFFF" text-anchor="middle">FeaturePlus</text>
+  <text x="150" y="58" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#FFFFFF" text-anchor="middle">FeaturePlus</text>
   
-  <!-- Subtle accent dot Earlier #60A5FA -->
-  <circle cx="87" cy="70" r="3" fill="red" opacity="0.8"/>
-  <circle cx="195" cy="70" r="3" fill="red" opacity="0.8"/>
+  <!-- Subtle accent dot -->
+  <circle cx="250" cy="35" r="3" fill="#60A5FA" opacity="0.8"/>
 </svg>
