@@ -3,10 +3,11 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from 'next/link';
-import API, { FeaturesAPI, TasksAPI } from "@/api/api";
+import API, { FeaturesAPI, TasksAPI, TagsAPI } from "@/api/api";
 import { FiEdit2, FiTrash2 } from "react-icons/fi";
 import { FeatureModal } from "@/components/FeatureEditCard";
 import { Feature, User, Tag, Task } from "@/app/types";
+import CheckLine from '@/icons/check-line.svg';
 
 export default function FeatureGroupDetailPage() {
   const params = useParams();
@@ -53,6 +54,10 @@ export default function FeatureGroupDetailPage() {
   const [editingField, setEditingField] = useState<{featureId: number, field: string} | null>(null);
   const [editedFeature, setEditedFeature] = useState<Feature | null>(null);
   const [editingTags, setEditingTags] = useState<string>('');
+  const [allTags, setAllTags] = useState<string[]>([]);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   const router = useRouter();
 
@@ -113,6 +118,52 @@ export default function FeatureGroupDetailPage() {
     }
     fetchData();
   }, [featureId]);
+
+  useEffect(() => {
+    TagsAPI.getAll().then(res => {
+      const tags = res.data.map((t: any) => t.tag_name);
+      setAllTags(tags);
+    });
+  }, []);
+
+  const handleTagInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditingTags(e.target.value);
+    if (e.target.value.length >= 2) {
+      const filtered = allTags.filter(tag => tag.toLowerCase().includes(e.target.value.toLowerCase()) && !selectedTags.includes(tag));
+      setTagSuggestions(filtered);
+      setShowTagSuggestions(true);
+    } else {
+      setShowTagSuggestions(false);
+    }
+  };
+
+  const handleTagSelect = (tag: string) => {
+    setSelectedTags([...selectedTags, tag]);
+    setEditingTags('');
+    setShowTagSuggestions(false);
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if ((e.key === 'Enter' || e.key === ',' || e.key === ';' || e.key === ' ') && editingTags.trim()) {
+      e.preventDefault();
+      if (!selectedTags.includes(editingTags.trim())) {
+        setSelectedTags([...selectedTags, editingTags.trim()]);
+      }
+      setEditingTags('');
+      setShowTagSuggestions(false);
+    }
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setSelectedTags(selectedTags.filter(t => t !== tag));
+  };
+
+  useEffect(() => {
+    if (editingField?.featureId === featureGroup?.id && editingField?.field === 'tags') {
+      setSelectedTags((featureGroup?.tags ?? []).map(t => t.tag_name));
+      setEditingTags('');
+    }
+  }, [editingField, featureGroup]);
 
   const openAddTaskModal = () => {
     setAddTaskModalOpen(true);
@@ -330,24 +381,19 @@ export default function FeatureGroupDetailPage() {
   };
 
   // Add logging to handleTagsEdit
-  const handleTagsEdit = async (featureId: number, tags: string) => {
+  const handleTagsEdit = async (featureId: number, tags: string[] | string) => {
     try {
-      console.log('Starting tags edit:', {
-        featureId,
-        tags,
-        editingField
-      });
-      
-      const response = await FeaturesAPI.updateField(Number(featureId), 'tags', tags);
-      console.log('Tags edit response:', response);
-      
-      console.log('Fetching updated feature data...');
+      // Accept either array or string for flexibility
+      let tagArr: string[] = Array.isArray(tags) ? tags : tags.split(',');
+      // Deduplicate and trim tags, remove empty
+      tagArr = Array.from(new Set(tagArr.map(t => t.trim()).filter(Boolean)));
+      const tagString = tagArr.join(',');
+      // Send to backend as { tags: "a,c,d" }
+      await API.put(`/features/${featureId}/tags`, { tags: tagString });
+      // Refresh feature data
       const featureRes = await FeaturesAPI.getById(Number(featureId));
-      console.log('Updated feature data:', featureRes);
-      
       setFeatureGroup(featureRes.data);
       setEditingField(null);
-      console.log('Tags edit complete, editingField set to null');
     } catch (error: any) {
       console.log('Full error object:', error);
       console.log('Error response:', error?.response);
@@ -429,21 +475,60 @@ export default function FeatureGroupDetailPage() {
           </div>
           {/* Tags as chips */}
           {editingField?.featureId === featureGroup?.id && editingField?.field === 'tags' ? (
-            <div className="flex flex-wrap gap-2 mt-2">
-              <input
-                type="text"
-                className="w-full border rounded px-2 py-1"
-                value={editingTags}
-                onChange={(e) => setEditingTags(e.target.value)}
-                onBlur={() => featureGroup?.id && handleTagsEdit(featureGroup.id, editingTags)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && featureGroup?.id) {
-                    handleTagsEdit(featureGroup.id, editingTags);
-                  }
+            <div className="flex flex-wrap gap-2 mt-2 relative items-center bg-gray-50 px-2 py-2 rounded border border-gray-200 shadow-sm" tabIndex={0}
+              onBlur={e => {
+                if (!e.currentTarget.contains(e.relatedTarget)) {
+                  featureGroup?.id && handleTagsEdit(featureGroup.id, selectedTags);
+                  setEditingField(null);
+                }
+              }}
+              style={{ minHeight: 44 }}
+            >
+              {selectedTags.map((tag) => (
+                <span key={tag} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs flex items-center mb-1">
+                  {'#' + tag}
+                  <button type="button" className="ml-1 text-xs text-gray-500 hover:text-red-500" onClick={() => handleRemoveTag(tag)} tabIndex={-1}>&times;</button>
+                </span>
+              ))}
+              <div className="relative flex items-center mb-1">
+                <input
+                  type="text"
+                  className="border rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  value={editingTags}
+                  onChange={handleTagInput}
+                  onKeyDown={handleTagKeyDown}
+                  placeholder="Add tag..."
+                  autoFocus
+                  style={{ minWidth: 120, marginRight: 4 }}
+                  tabIndex={0}
+                />
+                {showTagSuggestions && tagSuggestions.length > 0 && (
+                  <div className="absolute left-0 top-full mt-1 bg-white border rounded shadow z-50 w-48 max-h-40 overflow-auto">
+                    {tagSuggestions.map((tag, idx) => (
+                      <div
+                        key={idx}
+                        className="px-3 py-2 cursor-pointer hover:bg-blue-100"
+                        onClick={() => handleTagSelect(tag)}
+                      >
+                        {tag}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                className="ml-2 px-2 py-1 rounded flex items-center border border-gray-300 bg-white hover:bg-gray-100"
+                onClick={() => {
+                  featureGroup?.id && handleTagsEdit(featureGroup.id, selectedTags);
+                  setEditingField(null);
                 }}
-                placeholder="Enter tags separated by commas"
-                autoFocus
-              />
+                type="button"
+                tabIndex={0}
+                title="Save tags"
+                style={{ height: 28 }}
+              >
+                <CheckLine width={18} height={18} style={{ color: 'black' }} />
+              </button>
             </div>
           ) : (
             <div 
@@ -458,7 +543,7 @@ export default function FeatureGroupDetailPage() {
               {featureGroup?.tags && featureGroup.tags.length > 0 ? (
                 featureGroup.tags.map((tag) => (
                   <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">
-                    {tag.tag_name}
+                    {'#' + tag.tag_name}
                   </span>
                 ))
               ) : (
@@ -470,7 +555,6 @@ export default function FeatureGroupDetailPage() {
       </div>
 
       {/* Tasks Section */}
-      {featureGroup?.parent_feature_id !== null && (
       <div className="mb-8">
         <div className="flex items-center mb-4 gap-4">
           <h2 className="text-xl font-semibold mb-0">Tasks</h2>
@@ -669,7 +753,6 @@ export default function FeatureGroupDetailPage() {
           )}
         </div>
       </div>
-      )}
 
       {/* Subfeatures Section (if needed) */}
       {subfeatures.length > 0 && (
@@ -770,7 +853,7 @@ export default function FeatureGroupDetailPage() {
                     {tagsMap[feature.id] && tagsMap[feature.id].length > 0 ? (
                       tagsMap[feature.id].map((tag) => (
                         <span key={tag.tag_name + '-' + tag.feature_id} className="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">
-                          {tag.tag_name}
+                          {'#' + tag.tag_name}
                         </span>
                       ))
                     ) : (
