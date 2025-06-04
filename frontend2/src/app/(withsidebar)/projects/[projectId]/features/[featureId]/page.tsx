@@ -555,7 +555,6 @@ export default function FeatureGroupDetailPage() {
       </div>
 
       {/* Tasks Section */}
-      {featureGroup?.parent_feature_id !== null && (
       <div className="mb-8">
         <div className="flex items-center mb-4 gap-4">
           <h2 className="text-xl font-semibold mb-0">Tasks</h2>
@@ -754,7 +753,6 @@ export default function FeatureGroupDetailPage() {
           )}
         </div>
       </div>
-      )}
 
       {/* Subfeatures Section (if needed) */}
       {subfeatures.length > 0 && (
