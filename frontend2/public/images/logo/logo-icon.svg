@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 100" width="300" height="100">
+  <!-- Background circle for the plus icon -->
+  <circle cx="50" cy="50" r="30" fill="#4F46E5" stroke="none"/>
+  
+  <!-- Plus symbol -->
+  <rect x="42" y="35" width="16" height="4" rx="2" fill="white"/>
+  <rect x="42" y="61" width="16" height="4" rx="2" fill="white"/>
+  <rect x="42" y="48" width="16" height="4" rx="2" fill="white"/>
+  <rect x="35" y="46" width="4" height="8" rx="2" fill="white"/>
+  <rect x="61" y="46" width="4" height="8" rx="2" fill="white"/>
+</svg>

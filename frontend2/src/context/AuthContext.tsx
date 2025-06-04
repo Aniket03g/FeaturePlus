@@ -49,12 +49,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Using only info stored in page. (token in localstorage only if user closes browser and comes back later. 
   useEffect(() => {
-    // const storedToken = localStorage.getItem('token');
-    // setToken(storedToken); 
-    console.log("AuthProvider: authInfo=", authInfo, " token=", token);
+    setLoading(true); // Set loading to false after checking localStorage
+    setToken(localStorage.getItem('token'));
+    setAuthInfo(localStorage.getItem('authInfo'));
+    setProject(localStorage.getItem('project'));
+    console.log("AuthProvider: path=", pathname, " authInfo=", authInfo, " token=", token);
     setLoading(false); // Set loading to false after checking localStorage
     if (!loading && !token ) {
-      // && pathname.startsWith('/projects'))
       router.push('/fflogin');
     }
   }, [authInfo, project, loading, router, pathname]); 

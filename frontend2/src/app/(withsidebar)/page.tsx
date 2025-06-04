@@ -36,7 +36,7 @@ const Home = () => {
       <h1 className="text-2xl font-bold mb-4">Welcome to the App</h1>
       {authInfo? (
         <>
-          <p className="text-lg">User: {authInfo.username || authinfo.name}</p>
+          <p className="text-lg">User: {authInfo.username || authInfo.name}</p>
           <p className="text-lg">Project: {project?.name || 'No project selected'}</p>
           <button onClick={logout} className="mt-4 px-4 py-2 bg-red-500 text-white rounded">Logout</button>
         </>

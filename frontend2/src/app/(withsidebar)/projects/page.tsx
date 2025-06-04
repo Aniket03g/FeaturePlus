@@ -16,6 +16,7 @@ export default function Projects() {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
+        console.log("/projects: Fetching projects.");
         setLoading(true);
         const response = await API.get('/projects');
         setProjects(response.data);
@@ -32,7 +33,6 @@ export default function Projects() {
         setLoading(false);
       }
     };
-
     fetchProjects();
   }, []);
 
