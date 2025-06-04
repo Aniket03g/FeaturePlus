@@ -9,16 +9,22 @@ import styles from './page.module.css';
 import { AuthContext } from '@/context/AuthContext';
 
 export default () => {
-  const { authInfo, project, logout } = useContext(AuthContext);
+  const { token, authInfo, project, forgetCredentials} = useContext(AuthContext);
   console.log("From authcontext:", authInfo, project);  
   const router=useRouter();
 
   useEffect(()=> {
-      logout();
+    if (authInfo || token) {
+      forgetCredentials();
+    }
+    router.push("/fflogin");
   });
+
   return (
     <div className={styles.container}>
-       <button onClick={logout} className="mt-4 px-4 py-2 bg-red-500 text-white rounded">Logout</button>
+    <Link href="/fflogin">
+      <button>Logout</button>
+    </Link>
     </div>
   );
 } 

@@ -64,8 +64,6 @@ export default function LoginPage() {
       
       // Create a dummy project object or use a real one if available in the response
       const project = { id: 'dummy-project-id', name: 'Dummy Project' }; // Replace with actual project logic if needed
-
-      console.log("In fflogin: Registering credentials: response, auth_info, project:", response.data, auth_info, project);
       // Use the login function from AuthContext
       registerCredentials(auth_info, project, token);
       

@@ -3,6 +3,7 @@
 import { ReactNode, useState, createContext} from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
+import API from "@/api/api";
 
 interface AuthInfo {
   id: string;
@@ -21,20 +22,21 @@ interface Project {
 
 // Auth context type
 interface AuthContextType {
+  token: string | null; // Add token to context state
   authInfo: AuthInfo | null;
   project: Project | null;
-  token: string | null; // Add token to context state
   registerCredentials: (authInfo: AuthInfo, project: Project, token: string) => void; // Update login signature
-  logout: () => void;
+  forgetCredentials: () => void;
+  verifyCredentials: () => void;
 }
 
 // Mock initial state (in a real app, this might come from an API)
 export const AuthContext = createContext<AuthContextType>({
+  token: null, // Server provided token 
   authInfo: null, 
   project: null, 
-  token: null, // Server provided token 
   registerCredentials: () => {},
-  logout: () => {},
+  forgetCredentials: () => {},
 });
 
 // Mock auth provider (simulates auth state)
@@ -48,37 +50,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true); // Add loading state
 
   // Using only info stored in page. (token in localstorage only if user closes browser and comes back later. 
-  useEffect(() => {
+  useEffect( () => {
+    console.log("AuthProvider called for path:", pathname);
     setLoading(true); // Set loading to false after checking localStorage
-    setToken(localStorage.getItem('token'));
-    setAuthInfo(localStorage.getItem('authInfo'));
-    setProject(localStorage.getItem('project'));
-    console.log("AuthProvider: path=", pathname, " authInfo=", authInfo, " token=", token);
+    console.log("AuthProvider: useEffect: Retrieving from localStorage()"); 
+    const l_token=localStorage.getItem('token');
+    const l_authInfo=localStorage.getItem('authInfo');
+    const l_project=localStorage.getItem('project');
+    setToken(l_token);
+    setAuthInfo(l_authInfo);
+    setProject(l_project);
     setLoading(false); // Set loading to false after checking localStorage
-    if (!loading && !token ) {
+    console.log("AuthProvider: useEffect (pageload): token=", token, " AuthInfo=", authInfo); 
+    console.log("AuthProvider: Fetched:", l_token, l_authInfo, l_project); 
+    /* We can't assume token etc. are set here. Use local variables. */ 
+    if ( !l_token ) {
+      console.log("AuthProvider: Loggin in, token is nil."); 
       router.push('/fflogin');
-    }
-  }, [authInfo, project, loading, router, pathname]); 
+    } 
+  }, []); 
 
   const registerCredentials = (l_authInfo: AuthInfo, l_project: Project, l_token: string) => {
+    console.log("AuthProvider: registerCredentials: Adding to localStorage()"); 
     localStorage.setItem('token', l_token);
-    console.log("Logged in successfully: registering token:", l_token);
+    localStorage.setItem('authInfo', l_authInfo);
+    localStorage.setItem('project', l_project);
     setToken(l_token);
-    console.log("In registerCredentials: authInfo", l_authInfo, " project=", l_project);
     setAuthInfo(l_authInfo); 
     setProject(l_project);
+    console.log("In registerCredentials: Saved authInfo", authInfo, " project=", project, " token=", token);
   };
 
-  const logout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('token');
-    }
+  const forgetCredentials = () => {
+    console.log("AuthProvider: forgetCredentials: cleaning up localStorage");
+    localStorage.removeItem('token');
+    localStorage.removeItem('authInfo');
+    localStorage.removeItem('project');
     setAuthInfo(null);
     setProject(null);
     setToken(null);
-    console.log('Logged out');
-    // Remove the redirect to login
+    API.get('/logout');
+    console.log('AuthContext: Removed credentials.');
   };
+
+  const verifyCredentials = () => {
+    const l_token=localStorage.getItem('token');
+    const l_authInfo=localStorage.getItem('authInfo');
+    const l_project=localStorage.getItem('project');
+    console.log("AuthContext: verifyCredentials:", l_authInfo, l_project, l_token);
+  }
+
 
   // Optional: Add a loading indicator while checking auth state
    if (loading) {
@@ -86,7 +107,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
    }
 
   return (
-    <AuthContext.Provider value={{ authInfo, project, token, registerCredentials, logout }}>
+    <AuthContext.Provider value={{ token, authInfo, project, registerCredentials, forgetCredentials, verifyCredentials}}>
       {children}
     </AuthContext.Provider>
   );
