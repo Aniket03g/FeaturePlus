@@ -39,13 +39,13 @@ func (r *taskRepository) Delete(taskID uint) error {
 
 func (r *taskRepository) GetByID(taskID uint) (*models.Task, error) {
 	var task models.Task
-	err := r.db.Unscoped().First(&task, taskID).Error
+	err := r.db.Unscoped().Preload("Attachments").First(&task, taskID).Error
 	return &task, err
 }
 
 func (r *taskRepository) GetByFeatureID(featureID uint) ([]models.Task, error) {
 	var tasks []models.Task
-	err := r.db.Unscoped().Where("feature_id = ?", featureID).Find(&tasks).Error
+	err := r.db.Unscoped().Preload("Attachments").Where("feature_id = ?", featureID).Find(&tasks).Error
 	return tasks, err
 }
 

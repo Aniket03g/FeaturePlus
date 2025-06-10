@@ -6,7 +6,9 @@ import Link from 'next/link';
 import API, { FeaturesAPI, TasksAPI, TagsAPI } from "@/api/api";
 import { FiEdit2, FiTrash2 } from "react-icons/fi";
 import { FeatureModal } from "@/components/FeatureEditCard";
-import { Feature, User, Tag, Task } from "@/app/types";
+import { Feature, User, Tag } from "@/app/types";
+import { Task, TaskAttachment } from "@/app/types/task";
+import { TaskCard } from "@/components/TaskCard";
 import CheckLine from '@/icons/check-line.svg';
 
 export default function FeatureGroupDetailPage() {
@@ -648,108 +650,46 @@ export default function FeatureGroupDetailPage() {
           {filteredTasks.length === 0 ? (
             <div className="text-gray-400 text-sm">No tasks for this filter.</div>
           ) : (
-            filteredTasks.map((task) => {
-              const taskID = task.ID;
-              const isEditing = isEditingTask && editingTask && editingTask.ID === taskID;
-              return (
-                <div key={taskID} className="bg-white rounded-2xl shadow p-6 border border-gray-200 flex items-start gap-4 hover:shadow-lg transition relative">
-                  <div className="absolute top-4 left-4">
-                    {isEditing ? (
-                      <select
-                        name="task_type"
-                        className="text-xs font-semibold px-2 py-1 rounded border border-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-200 bg-white text-gray-800 shadow-sm"
-                        value={taskForm.task_type}
-                        onChange={handleTaskFormChange}
-                        style={{ minWidth: 80 }}
-                      >
-                        <option value="UI">UI</option>
-                        <option value="DB">DB</option>
-                        <option value="Backend">Backend</option>
-                      </select>
-                    ) : (
-                      <span className={`text-xs font-semibold px-2 py-1 rounded ${task.task_type === 'UI' ? 'bg-blue-100 text-blue-700' : task.task_type === 'DB' ? 'bg-purple-100 text-purple-700' : 'bg-yellow-100 text-yellow-700'}`}>{task.task_type}</span>
-                    )}
-                  </div>
-                  <div className="flex-1 pl-20">
-                    {isEditing ? (
-                      <form onSubmit={handleTaskFormSubmit} className="space-y-2">
-                        <input
-                          name="task_name"
-                          type="text"
-                          className="w-full border rounded px-3 py-2 text-base font-semibold text-blue-700"
-                          value={taskForm.task_name}
-                          onChange={handleTaskFormChange}
-                          required
-                          autoFocus
-                        />
-                        <textarea
-                          name="description"
-                          className="w-full border rounded px-3 py-2 text-base"
-                          value={taskForm.description}
-                          onChange={handleTaskFormChange}
-                          placeholder="Describe the task..."
-                        />
-                        <div className="flex gap-2 mt-2">
-                          <button
-                            type="submit"
-                            className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700"
-                            disabled={formLoading}
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            className="px-4 py-2 rounded border text-gray-700 bg-gray-100 hover:bg-gray-200"
-                            onClick={closeTaskForm}
-                            disabled={formLoading}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                        {formError && <div className="text-red-500 text-sm mt-1">{formError}</div>}
-                      </form>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-blue-700 text-lg cursor-pointer hover:underline">{task.task_name}</span>
-                        </div>
-                        <div className="text-gray-700 text-base mb-2">
-                          {task.description || "No description provided."}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-2 ml-4 flex-shrink-0">
-                    {!isEditing && (
-                      <button
-                        className="p-1 rounded hover:bg-blue-50 text-gray-500 hover:text-blue-600 transition"
-                        onClick={() => {
-                          setShowTaskForm(false); // Ensure modal is closed
-                          setIsEditingTask(true);
-                          setEditingTask(task);
-                          setTaskForm({
-                            task_type: task.task_type,
-                            task_name: task.task_name,
-                            description: task.description || "",
-                          });
-                          setFormError("");
-                        }}
-                        title="Edit"
-                      >
-                        <FiEdit2 size={18} />
-                      </button>
-                    )}
-                    <button
-                      className="p-1 rounded hover:bg-red-50 text-gray-500 hover:text-red-600 transition"
-                      onClick={() => { if (typeof taskID === 'number') handleDeleteTask(taskID); }}
-                      title="Delete"
-                    >
-                      <FiTrash2 size={18} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })
+            filteredTasks.map((task) => (
+              <TaskCard
+                key={task.ID}
+                task={task}
+                onEdit={(task: Task) => {
+                  setShowTaskForm(false);
+                  setIsEditingTask(true);
+                  setEditingTask(task);
+                  setTaskForm({
+                    task_type: task.task_type,
+                    task_name: task.task_name,
+                    description: task.description || "",
+                  });
+                  setFormError("");
+                }}
+                onDelete={handleDeleteTask}
+                onAttachmentAdded={(taskId: number, attachment: TaskAttachment) => {
+                  setFeatureTasks(tasks => tasks.map(t => {
+                    if (t.ID === taskId) {
+                      return {
+                        ...t,
+                        attachments: [...(t.attachments || []), attachment],
+                      };
+                    }
+                    return t;
+                  }));
+                }}
+                onAttachmentDeleted={(taskId: number, attachmentId: number) => {
+                  setFeatureTasks(tasks => tasks.map(t => {
+                    if (t.ID === taskId) {
+                      return {
+                        ...t,
+                        attachments: (t.attachments || []).filter((a: TaskAttachment) => a.ID !== attachmentId),
+                      };
+                    }
+                    return t;
+                  }));
+                }}
+              />
+            ))
           )}
         </div>
       </div>

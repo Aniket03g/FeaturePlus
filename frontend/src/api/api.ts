@@ -76,6 +76,16 @@ const TasksAPI = {
   updateTask: (featureId: number, taskId: number, data: any) => API.put(`/features/${featureId}/task/${taskId}`, data),
   getAll: () => API.get('/tasks'),
   getByProject: (projectId: number) => API.get(`/projects/${projectId}/tasks`),
+  uploadAttachment: (taskId: number, formData: FormData) => API.post(`/tasks/${taskId}/attachments`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      'Accept': 'application/json',
+    },
+  }),
+  downloadAttachment: (taskId: number, fileName: string) => API.get(`/tasks/${taskId}/attachments/${fileName}`, {
+    responseType: 'blob',
+  }),
+  deleteAttachment: (taskId: number, attachmentId: number) => API.delete(`/tasks/${taskId}/attachments/${attachmentId}`),
 };
 
 export { TagsAPI, FeaturesAPI, TasksAPI, ProjectsAPI };

@@ -12,19 +12,33 @@ import (
 	"github.com/FeaturePlus/backend/models"
 	"github.com/FeaturePlus/backend/repositories"
 	"github.com/FeaturePlus/backend/routes"
+	"github.com/jilio/sqlitefs"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	// Initialize DBcd b
+	// Initialize DB
 	db, err := database.InitDB()
 	if err != nil {
 		panic("failed to connect database")
 	}
 
+	// Get the underlying *sql.DB from GORM
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		panic("failed to get database connection: " + err.Error())
+	}
+
+	// Initialize SQLiteFS with the *sql.DB
+	sqliteFS, err := sqlitefs.NewSQLiteFS(sqlDB)
+	if err != nil {
+		panic("failed to initialize SQLiteFS: " + err.Error())
+	}
+	defer sqliteFS.Close()
+
 	// Migrate all schemas
-	if err := db.Migrate(&models.User{}, &models.Project{}, &models.Feature{}, &models.SubFeature{}, &models.Task{}, &models.FeatureTag{}); err != nil {
+	if err := db.Migrate(&models.User{}, &models.Project{}, &models.Feature{}, &models.SubFeature{}, &models.Task{}, &models.FeatureTag{}, &models.TaskAttachment{}); err != nil {
 		panic("failed to migrate database: " + err.Error())
 	}
 
@@ -34,6 +48,7 @@ func main() {
 	featureRepo := repositories.NewFeatureRepository(db.DB)
 	taskRepo := repositories.NewTaskRepository(db.DB)
 	tagRepo := repositories.NewTagRepository(db.DB)
+	attachmentRepo := repositories.NewTaskAttachmentRepository(db.DB, sqliteFS)
 
 	// Create handlers
 	userHandler := handlers.NewUserHandler(userRepo)
@@ -41,8 +56,15 @@ func main() {
 	featureHandler := handlers.NewFeatureHandler(featureRepo, tagRepo, db.DB)
 	taskHandler := handlers.NewTaskHandler(taskRepo, db.DB)
 	tagHandler := handlers.NewTagHandler(tagRepo, featureRepo, db.DB)
+	attachmentHandler := handlers.NewTaskAttachmentHandler(attachmentRepo, sqliteFS)
 
 	router := gin.Default()
+
+	// Configure multipart form handling
+	router.MaxMultipartMemory = 8 << 20 // 8 MiB
+
+	// Add logging middleware
+	router.Use(middleware.LoggingMiddleware())
 
 	// CORS middleware
 	router.Use(func(c *gin.Context) {
@@ -108,8 +130,8 @@ func main() {
 	// Public route for project features (for frontend access)
 	router.GET("/api/features/project/:project_id", featureHandler.GetProjectFeatures)
 
-	// General task routes
-	taskRoutes := router.Group("/api/tasks")
+	// General task routes - protected
+	taskRoutes := router.Group("/api/tasks", middleware.AuthMiddleware())
 	{
 		taskRoutes.GET("", taskHandler.GetAllTasks)
 		taskRoutes.POST("", taskHandler.CreateTask)
@@ -119,6 +141,12 @@ func main() {
 
 		// New route to get tasks by project ID
 		taskRoutes.GET("/project/:project_id", taskHandler.GetTasksByProject)
+
+		// Task attachment routes
+		taskRoutes.POST("/:id/attachments", attachmentHandler.UploadAttachment)
+		taskRoutes.GET("/:id/attachments", attachmentHandler.GetTaskAttachments)
+		taskRoutes.GET("/:id/attachments/:filename", attachmentHandler.DownloadAttachment)
+		taskRoutes.DELETE("/:id/attachments/:attachmentId", attachmentHandler.DeleteAttachment)
 	}
 
 	// Sub-feature routes

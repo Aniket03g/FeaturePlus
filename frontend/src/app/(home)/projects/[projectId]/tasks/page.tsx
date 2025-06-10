@@ -1,17 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import API from '@/api/api';
-
-interface Task {
-  id: number;
-  task_type: string;
-  task_name: string;
-  description: string;
-  feature_id: number;
-  feature_title: string; // Added to include feature name
-}
+import { Task, TaskAttachment } from '@/app/types/task';
+import { TaskCard } from '@/components/TaskCard';
 
 export default function TasksPage() {
   const params = useParams();
@@ -27,7 +20,7 @@ export default function TasksPage() {
         setLoading(true);
         const response = await API.get(`/tasks/project/${projectId}`);
         setTasks(response.data);
-        setFilteredTasks(response.data); // Initially show all tasks
+        setFilteredTasks(response.data);
       } catch (error) {
         console.error('Error fetching tasks:', error);
       } finally {
@@ -45,51 +38,87 @@ export default function TasksPage() {
     }
   }, [tasks, selectedTaskType]);
 
+  const handleEditTask = async (task: Task) => {
+    // Implement edit task functionality
+    console.log('Edit task:', task);
+  };
+
+  const handleDeleteTask = async (taskId: number) => {
+    try {
+      await API.delete(`/tasks/${taskId}`);
+      setTasks(tasks.filter(task => task.ID !== taskId));
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
+  };
+
+  const handleAttachmentAdded = async (taskId: number, attachment: TaskAttachment) => {
+    setTasks(tasks.map(task => {
+      if (task.ID === taskId) {
+        return {
+          ...task,
+          attachments: [...(task.attachments || []), attachment],
+        };
+      }
+      return task;
+    }));
+  };
+
+  const handleAttachmentDeleted = async (taskId: number, attachmentId: number) => {
+    setTasks(tasks.map(task => {
+      if (task.ID === taskId) {
+        return {
+          ...task,
+          attachments: (task.attachments || []).filter(a => a.ID !== attachmentId),
+        };
+      }
+      return task;
+    }));
+  };
+
+  const taskTypes = ['All', 'UI', 'Backend', 'DB'];
+
   if (loading) {
     return <div className="p-6">Loading tasks...</div>;
   }
 
-  const taskTypes = ['All', 'UI', 'Backend', 'DB']; // Define available task types
-
   return (
-    <div className="p-6 bg-gray-50 min-h-screen max-w-4xl mx-l">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-3xl font-bold">Project Tasks: {projectId}</h1>
+    <div className="p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-900">Tasks</h1>
+        <div className="flex gap-2">
+          {taskTypes.map((type) => (
+            <button
+              key={type}
+              onClick={() => setSelectedTaskType(type.toLowerCase())}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                selectedTaskType === type.toLowerCase()
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {type}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Filter Chips Row */}
-      <div className="flex gap-2 mb-8">
-        {taskTypes.map(type => (
-          <button
-            key={type}
-            className={`px-4 py-1 rounded-full border text-sm font-medium transition ${
-              (selectedTaskType === type.toLowerCase() || (selectedTaskType === 'all' && type === 'All')) ? 
-              'bg-blue-600 text-white border-blue-600' : 
-              'bg-white text-gray-700 border-gray-300 hover:bg-blue-50'
-            }`}
-            onClick={() => setSelectedTaskType(type.toLowerCase())}
-          >
-            {type}
-          </button>
+      <div className="space-y-4">
+        {filteredTasks.map((task) => (
+          <TaskCard
+            key={task.ID}
+            task={task}
+            onEdit={handleEditTask}
+            onDelete={handleDeleteTask}
+            onAttachmentAdded={handleAttachmentAdded}
+            onAttachmentDeleted={handleAttachmentDeleted}
+          />
         ))}
-      </div>
-
-      {/* Task List */}
-      <div className="space-y-6">
-        {filteredTasks.map(task => (
-          <div key={task.id} className="bg-white rounded-lg shadow p-6 border border-gray-200">
-            <div className="flex items-start gap-4 mb-2">
-              <span className="flex-shrink-0 bg-gray-200 text-gray-800 px-2 py-1 rounded text-xs">{task.task_type}</span>
-              <div className="flex-1">
-                <h2 className="text-xl font-semibold text-blue-700">{task.task_name}</h2>
-                <p className="text-gray-600 text-sm">Feature: {task.feature_title}</p>
-              </div>
-            </div>
-            <div className="text-gray-700 text-base pl-12">
-              {task.description || 'No description provided.'}
-            </div>
+        {filteredTasks.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            No tasks found
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
