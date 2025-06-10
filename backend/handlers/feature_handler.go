@@ -82,12 +82,13 @@ func (h *FeatureHandler) CreateFeature(c *gin.Context) {
 
 	// Handle tags if provided
 	if featureWithTags.TagsInput != "" {
-		var createdByUser uint = 1 // Default to admin if not available
-		if userID, exists := c.Get("user_id"); exists {
-			createdByUser = userID.(uint)
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			return
 		}
 
-		err := h.tagRepo.UpdateFeatureTags(feature.ID, createdByUser, featureWithTags.TagsInput)
+		err := h.tagRepo.UpdateFeatureTags(feature.ID, userID.(uint), featureWithTags.TagsInput)
 		if err != nil {
 			// Log the error but don't fail the whole request
 			// We already created the feature successfully
@@ -399,11 +400,12 @@ func (h *FeatureHandler) UpdateFeatureField(c *gin.Context) {
 		}
 	case "tags":
 		if tags, ok := updateData.Value.(string); ok {
-			var createdByUser uint = 1 // Default to admin if not available
-			if userID, exists := c.Get("user_id"); exists {
-				createdByUser = userID.(uint)
+			userID, exists := c.Get("user_id")
+			if !exists {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+				return
 			}
-			if err := h.tagRepo.UpdateFeatureTags(existingFeature.ID, createdByUser, tags); err != nil {
+			if err := h.tagRepo.UpdateFeatureTags(existingFeature.ID, userID.(uint), tags); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update tags"})
 				return
 			}
