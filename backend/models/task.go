@@ -4,8 +4,8 @@ import "gorm.io/gorm"
 
 type Task struct {
 	gorm.Model
-	TaskType      string           `json:"task_type" binding:"required"`
-	TaskName      string           `json:"task_name" binding:"required"`
+	TaskType      string           `json:"task_type" validate:"required"`
+	TaskName      string           `json:"task_name" validate:"required"`
 	Description   string           `json:"description"`
 	FeatureID     uint             `json:"feature_id"`
 	SubFeatureID  uint             `json:"sub_feature_id"`

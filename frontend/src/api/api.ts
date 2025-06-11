@@ -86,6 +86,14 @@ const TasksAPI = {
     responseType: 'blob',
   }),
   deleteAttachment: (taskId: number, attachmentId: number) => API.delete(`/tasks/${taskId}/attachments/${attachmentId}`),
+  // Comment endpoints
+  getTaskComments: (taskId: number) => API.get(`/tasks/${taskId}/comments`),
+  createComment: (taskId: number, data: { content: string; attachment_id?: number }) => 
+    API.post(`/tasks/${taskId}/comments`, data),
+  updateComment: (commentId: number, data: { content: string }) => 
+    API.put(`/comments/${commentId}`, data),
+  deleteComment: (commentId: number) => API.delete(`/comments/${commentId}`),
+  getAttachmentComments: (attachmentId: number) => API.get(`/attachments/${attachmentId}/comments`),
 };
 
 export { TagsAPI, FeaturesAPI, TasksAPI, ProjectsAPI };

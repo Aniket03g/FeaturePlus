@@ -656,15 +656,15 @@ export default function FeatureGroupDetailPage() {
                 task={task}
                 onEdit={(task: Task) => {
                   setShowTaskForm(false);
-                  setIsEditingTask(true);
-                  setEditingTask(task);
-                  setTaskForm({
-                    task_type: task.task_type,
-                    task_name: task.task_name,
-                    description: task.description || "",
-                  });
-                  setFormError("");
-                }}
+                          setIsEditingTask(true);
+                          setEditingTask(task);
+                          setTaskForm({
+                            task_type: task.task_type,
+                            task_name: task.task_name,
+                            description: task.description || "",
+                          });
+                          setFormError("");
+                        }}
                 onDelete={handleDeleteTask}
                 onAttachmentAdded={(taskId: number, attachment: TaskAttachment) => {
                   setFeatureTasks(tasks => tasks.map(t => {

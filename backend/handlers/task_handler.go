@@ -6,18 +6,24 @@ import (
 
 	"github.com/FeaturePlus/backend/models"
 	"github.com/FeaturePlus/backend/repositories"
+	"github.com/go-playground/validator/v10"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 type TaskHandler struct {
-	taskRepo repositories.TaskRepository
-	DB       *gorm.DB
+	taskRepo  repositories.TaskRepository
+	DB        *gorm.DB
+	validator *validator.Validate
 }
 
 func NewTaskHandler(taskRepo repositories.TaskRepository, db *gorm.DB) *TaskHandler {
-	return &TaskHandler{taskRepo: taskRepo, DB: db}
+	return &TaskHandler{
+		taskRepo:  taskRepo,
+		DB:        db,
+		validator: validator.New(),
+	}
 }
 
 // CreateTask creates a standalone task not tied to a specific feature
@@ -28,8 +34,9 @@ func (h *TaskHandler) CreateTask(c *gin.Context) {
 		return
 	}
 
-	if task.TaskType == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "task_type is required"})
+	// Validate task fields
+	if err := h.validator.Struct(task); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

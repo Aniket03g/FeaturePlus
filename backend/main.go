@@ -38,7 +38,7 @@ func main() {
 	defer sqliteFS.Close()
 
 	// Migrate all schemas
-	if err := db.Migrate(&models.User{}, &models.Project{}, &models.Feature{}, &models.SubFeature{}, &models.Task{}, &models.FeatureTag{}, &models.TaskAttachment{}); err != nil {
+	if err := db.Migrate(&models.User{}, &models.Project{}, &models.Feature{}, &models.SubFeature{}, &models.Task{}, &models.FeatureTag{}, &models.TaskAttachment{}, &models.Comment{}); err != nil {
 		panic("failed to migrate database: " + err.Error())
 	}
 
@@ -49,6 +49,7 @@ func main() {
 	taskRepo := repositories.NewTaskRepository(db.DB)
 	tagRepo := repositories.NewTagRepository(db.DB)
 	attachmentRepo := repositories.NewTaskAttachmentRepository(db.DB, sqliteFS)
+	commentRepo := repositories.NewCommentRepository(db.DB)
 
 	// Create handlers
 	userHandler := handlers.NewUserHandler(userRepo)
@@ -57,6 +58,7 @@ func main() {
 	taskHandler := handlers.NewTaskHandler(taskRepo, db.DB)
 	tagHandler := handlers.NewTagHandler(tagRepo, featureRepo, db.DB)
 	attachmentHandler := handlers.NewTaskAttachmentHandler(attachmentRepo, sqliteFS)
+	commentHandler := handlers.NewCommentHandler(commentRepo, attachmentRepo)
 
 	router := gin.Default()
 
@@ -130,23 +132,41 @@ func main() {
 	// Public route for project features (for frontend access)
 	router.GET("/api/features/project/:project_id", featureHandler.GetProjectFeatures)
 
-	// General task routes - protected
+	// Task routes - split into separate groups for clarity
 	taskRoutes := router.Group("/api/tasks", middleware.AuthMiddleware())
 	{
+		// Core task operations
 		taskRoutes.GET("", taskHandler.GetAllTasks)
 		taskRoutes.POST("", taskHandler.CreateTask)
-		taskRoutes.GET("/:id", taskHandler.GetTask)
-		taskRoutes.PUT("/:id", taskHandler.UpdateTask)
-		taskRoutes.DELETE("/:id", taskHandler.DeleteTask)
-
-		// New route to get tasks by project ID
 		taskRoutes.GET("/project/:project_id", taskHandler.GetTasksByProject)
 
+		// Individual task operations
+		taskRoutes.GET("/:task_id", taskHandler.GetTask)
+		taskRoutes.PUT("/:task_id", taskHandler.UpdateTask)
+		taskRoutes.DELETE("/:task_id", taskHandler.DeleteTask)
+
 		// Task attachment routes
-		taskRoutes.POST("/:id/attachments", attachmentHandler.UploadAttachment)
-		taskRoutes.GET("/:id/attachments", attachmentHandler.GetTaskAttachments)
-		taskRoutes.GET("/:id/attachments/:filename", attachmentHandler.DownloadAttachment)
-		taskRoutes.DELETE("/:id/attachments/:attachmentId", attachmentHandler.DeleteAttachment)
+		taskRoutes.POST("/:task_id/attachments", attachmentHandler.UploadAttachment)
+		taskRoutes.GET("/:task_id/attachments", attachmentHandler.GetTaskAttachments)
+		taskRoutes.GET("/:task_id/attachments/:filename", attachmentHandler.DownloadAttachment)
+		taskRoutes.DELETE("/:task_id/attachments/:attachmentId", attachmentHandler.DeleteAttachment)
+
+		// Task comment routes
+		taskRoutes.POST("/:task_id/comments", commentHandler.CreateComment)
+		taskRoutes.GET("/:task_id/comments", commentHandler.GetTaskComments)
+	}
+
+	// Comment routes
+	commentRoutes := router.Group("/api/comments", middleware.AuthMiddleware())
+	{
+		commentRoutes.PUT("/:comment_id", commentHandler.UpdateComment)
+		commentRoutes.DELETE("/:comment_id", commentHandler.DeleteComment)
+	}
+
+	// Attachment comment routes
+	attachmentRoutes := router.Group("/api/attachments", middleware.AuthMiddleware())
+	{
+		attachmentRoutes.GET("/:attachment_id/comments", commentHandler.GetAttachmentComments)
 	}
 
 	// Sub-feature routes

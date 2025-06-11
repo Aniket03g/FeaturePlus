@@ -88,20 +88,20 @@ export default function TasksPage() {
         <h1 className="text-2xl font-semibold text-gray-900">Tasks</h1>
         <div className="flex gap-2">
           {taskTypes.map((type) => (
-            <button
-              key={type}
+          <button
+            key={type}
               onClick={() => setSelectedTaskType(type.toLowerCase())}
               className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                 selectedTaskType === type.toLowerCase()
                   ? 'bg-blue-100 text-blue-800'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
+            }`}
+          >
+            {type}
+          </button>
+        ))}
       </div>
+              </div>
 
       <div className="space-y-4">
         {filteredTasks.map((task) => (

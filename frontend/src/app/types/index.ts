@@ -42,7 +42,7 @@ export interface Task {
   task_name: string;
   description: string;
   feature_id: number;
-}
+} 
 
 export * from './task';
 export * from './feature';

@@ -25,29 +25,15 @@ func NewTaskAttachmentHandler(repo repositories.TaskAttachmentRepository, sqlite
 }
 
 func (h *TaskAttachmentHandler) UploadAttachment(c *gin.Context) {
-	taskID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	taskID, err := strconv.ParseUint(c.Param("task_id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid task ID: %v", err)})
 		return
 	}
 
-	// Use Gin's FormFile which handles multipart form data properly
-	form, err := c.MultipartForm()
+	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid form data: %v", err)})
-		return
-	}
-
-	files := form.File["file"]
-	if len(files) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No file uploaded"})
-		return
-	}
-
-	header := files[0]
-	file, err := header.Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to open uploaded file: %v", err)})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed to get file: %v", err)})
 		return
 	}
 	defer file.Close()
@@ -82,17 +68,11 @@ func (h *TaskAttachmentHandler) UploadAttachment(c *gin.Context) {
 	}
 
 	// Return the created attachment with its ID
-	c.JSON(http.StatusCreated, gin.H{
-		"ID":        attachment.ID,
-		"task_id":   attachment.TaskID,
-		"file_name": attachment.FileName,
-		"file_size": attachment.FileSize,
-		"mime_type": attachment.MimeType,
-	})
+	c.JSON(http.StatusCreated, attachment)
 }
 
 func (h *TaskAttachmentHandler) GetTaskAttachments(c *gin.Context) {
-	taskID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	taskID, err := strconv.ParseUint(c.Param("task_id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task ID"})
 		return

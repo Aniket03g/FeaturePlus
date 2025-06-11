@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Task, TaskAttachment } from '@/app/types/task';
 import { FiEdit2, FiTrash2, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { TaskAttachments } from './TaskAttachments';
+import { TaskComments } from './TaskComments';
 
 interface TaskCardProps {
   task: Task;
@@ -19,6 +20,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onAttachmentDeleted,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const [selectedAttachmentId, setSelectedAttachmentId] = useState<number | undefined>();
 
   const getTaskTypeColor = (type: string): string => {
     switch (type.toLowerCase()) {
@@ -85,6 +87,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               attachments={task.attachments || []}
               onAttachmentAdded={(attachment) => onAttachmentAdded(task.ID, attachment)}
               onAttachmentDeleted={(attachmentId) => onAttachmentDeleted(task.ID, attachmentId)}
+              onAttachmentSelected={(attachmentId) => setSelectedAttachmentId(attachmentId)}
+            />
+
+            <TaskComments
+              taskId={task.ID}
+              attachmentId={selectedAttachmentId}
             />
           </div>
         )}

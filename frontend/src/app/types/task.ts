@@ -1,3 +1,5 @@
+import { User } from './user';
+
 export interface TaskAttachment {
   ID: number;
   task_id: number;
@@ -13,9 +15,24 @@ export interface Task {
   task_type: string;
   task_name: string;
   description: string;
-  feature_id: number;
+  feature_id?: number;
+  sub_feature_id?: number;
   created_by_user: number;
   created_at: string;
   updated_at: string;
+  deleted_at?: string;
   attachments?: TaskAttachment[];
+  comments?: TaskComment[];
+}
+
+export interface TaskComment {
+  id: number;
+  task_id: number;
+  attachment_id?: number;
+  user_id: number;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  user?: User;
+  attachment?: TaskAttachment;
 } 
