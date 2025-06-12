@@ -96,5 +96,14 @@ const TasksAPI = {
   getAttachmentComments: (attachmentId: number) => API.get(`/attachments/${attachmentId}/comments`),
 };
 
+// Add endpoints for auth
+const AuthAPI = {
+  signup: (data: { email: string; username: string; password: string }) => 
+    API.post('/auth/signup', data),
+  login: (data: { email: string; password: string }) => 
+    API.post('/auth/login', data),
+  getCurrentUser: () => API.get('/auth/me'),
+};
+
 export { TagsAPI, FeaturesAPI, TasksAPI, ProjectsAPI };
 export default API;

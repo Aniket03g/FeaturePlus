@@ -5,6 +5,7 @@ import './globals.css';
 import { ReactNode, createContext} from 'react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { Toaster } from 'react-hot-toast';
 
 import { SidebarProvider } from '@/context/SidebarContext';
 import { ThemeProvider } from '@/context/ThemeContext';
@@ -25,6 +26,7 @@ export default function RootLayout({ children, }: Readonly<{ children: React.Rea
              </AuthProvider>
           </SidebarProvider>
         </ThemeProvider>
+        <Toaster position="top-right" />
       </body>
     </html>
   );
