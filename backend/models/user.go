@@ -18,6 +18,7 @@ type User struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	// Add project association
 	Projects []Project `gorm:"foreignKey:OwnerID" json:"projects,omitempty"`
+	Name     string    `json:"name"`
 }
 
 // BeforeUpdate cleans password field before update operations if it's empty

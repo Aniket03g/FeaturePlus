@@ -15,6 +15,7 @@ export default function SignUpForm() {
   const [isChecked, setIsChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
+    name: "",
     email: "",
     username: "",
     password: "",
@@ -76,6 +77,21 @@ export default function SignUpForm() {
         </div>
         <form onSubmit={handleSubmit}>
           <div className="space-y-5">
+            {/* <!-- Name --> */}
+            <div>
+              <Label>
+                Name<span className="text-error-500">*</span>
+              </Label>
+              <Input
+                type="text"
+                id="name"
+                name="name"
+                defaultValue={formData.name}
+                onChange={handleChange}
+                placeholder="Enter your name"
+                required
+              />
+            </div>
             {/* <!-- Email --> */}
             <div>
               <Label>

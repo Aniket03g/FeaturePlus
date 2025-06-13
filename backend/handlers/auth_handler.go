@@ -157,7 +157,7 @@ func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 
 	// Get user from database
 	var user models.User
-	if err := h.DB.Select("id, username, email, role").Where("id = ?", userIDInt).First(&user).Error; err != nil {
+	if err := h.DB.Select("id, username, email, role, name").Where("id = ?", userIDInt).First(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
