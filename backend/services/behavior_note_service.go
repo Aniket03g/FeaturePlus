@@ -107,3 +107,41 @@ func (s *BehaviorNoteService) loadArtifact(id uint) (*models.ContractArtifact, e
 	}
 	return &a, nil
 }
+
+// EnsureNote returns the behavior note for a contract artifact, generating and
+// persisting it on first request and returning the cached value thereafter.
+//
+// Caching is keyed by the artifact itself: artifacts are versioned per commit
+// (feature+file+commit), so an unchanged source reuses the same artifact and
+// its cached note (no LLM call), while drift produces a new artifact with an
+// empty note that is regenerated once. force=true regenerates unconditionally.
+func (s *BehaviorNoteService) EnsureNote(artifactID uint, featureDesc, taskDesc string, force bool) (string, error) {
+	a, err := s.loadArtifact(artifactID)
+	if err != nil {
+		return "", err
+	}
+	if a.BehaviorNote != "" && !force {
+		return a.BehaviorNote, nil // cached — no LLM call
+	}
+	note, err := s.GenerateNote(a.Contract, featureDesc, taskDesc)
+	if err != nil {
+		return "", err
+	}
+	a.BehaviorNote = note
+	if err := s.db.Model(a).Update("behavior_note", note).Error; err != nil {
+		return "", err
+	}
+	return note, nil
+}
+
+// ContractWithNote returns the contract text with the behavior note appended, if
+// one has been generated. Used when serving a contract to a collaborator.
+func ContractWithNote(a *models.ContractArtifact) string {
+	if a == nil {
+		return ""
+	}
+	if strings.TrimSpace(a.BehaviorNote) == "" {
+		return a.Contract
+	}
+	return strings.TrimRight(a.Contract, "\n") + "\n\n" + a.BehaviorNote + "\n"
+}

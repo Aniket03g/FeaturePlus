@@ -90,7 +90,7 @@ func (h *ContractHandler) ServeFile(c *gin.Context) {
 			FilePath: filePath,
 			Access:   string(models.AccessContract),
 			IsSource: false,
-			Content:  artifact.Contract,
+			Content:  services.ContractWithNote(artifact),
 			Note:     artifact.BehaviorNote,
 			Commit:   artifact.CommitHash,
 		})
