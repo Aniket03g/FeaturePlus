@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/FeaturePlus/backend/models"
 	"github.com/FeaturePlus/backend/repositories"
 	"github.com/FeaturePlus/backend/routes"
+	"github.com/FeaturePlus/backend/services"
 	"github.com/gin-gonic/gin"
 	"github.com/jilio/sqlitefs"
 	"github.com/joho/godotenv"
@@ -356,6 +358,13 @@ func main() {
 	webReleaseHandler := handlers.NewWebReleaseHandler(releaseRepo, prRepo, projectRepo)
 	llmSuggestHandler := handlers.NewLLMSuggestHandler(db.DB) // STAGE 4a: LLM feature suggestions
 	scopeHandler := handlers.NewScopeHandler(db.DB)           // Scoped Contracts: per-feature access grants
+	// Scoped Contracts: contract service serves stripped contracts vs real source.
+	// Source is read from the repo root (parent of the backend working dir).
+	contractService := services.NewContractService(db.DB)
+	if repoRoot, err := filepath.Abs(".."); err == nil {
+		contractService.SetSourceReader(services.FSSourceReader{BaseDir: repoRoot})
+	}
+	contractHandler := handlers.NewContractHandler(db.DB, contractService)
 
 	// MARKER:ROUTER_INIT Initialize the main router
 	router := gin.Default()
@@ -571,6 +580,8 @@ func main() {
 			projectRoutes.POST("/:id/export-markdown", projectHandler.ExportMarkdown)
 			// STAGE 4a: LLM-based feature suggestions
 			projectRoutes.POST("/:id/suggest", llmSuggestHandler.SuggestFeatures)
+			// Scoped Contracts: access-gated file content (owner=source, contract=stripped, none=404)
+			projectRoutes.GET("/:id/files", contractHandler.ServeFile)
 		}
 
 		// Regular authenticated routes

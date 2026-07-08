@@ -1,10 +1,20 @@
 package services
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/FeaturePlus/backend/contracts"
 	"github.com/FeaturePlus/backend/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// ErrSourceUnavailable is returned when real source is requested but no source
+// reader is configured (or the file cannot be located).
+var ErrSourceUnavailable = errors.New("source unavailable")
 
 // ContractService connects the extractor to FeaturePlus's existing
 // feature<->file linkage (feature_files, the same data behind GetLinkedCode)
@@ -14,6 +24,7 @@ import (
 type ContractService struct {
 	db     *gorm.DB
 	access *AccessService
+	source SourceReader
 }
 
 // NewContractService constructs a ContractService.
@@ -171,4 +182,92 @@ func (s *ContractService) ArtifactAtCommit(projectID int, filePath, commitHash s
 		return nil, err
 	}
 	return &a, nil
+}
+
+// SourceReader fetches the real source of a project file. Injecting it keeps the
+// serving logic testable and lets deployments decide where source lives (a git
+// worktree, an object store, etc.). When no reader is configured, real source is
+// simply unavailable and only persisted contracts can be served.
+type SourceReader interface {
+	ReadSource(projectID int, filePath string) ([]byte, error)
+}
+
+// SetSourceReader attaches a source reader used to serve real source (to owners)
+// and to generate contracts on demand.
+func (s *ContractService) SetSourceReader(r SourceReader) {
+	s.source = r
+}
+
+// RealSource returns the real file contents. It is the caller's responsibility
+// to have already verified the requester holds owner access — this method does
+// no access checks.
+func (s *ContractService) RealSource(projectID int, filePath string) ([]byte, error) {
+	if s.source == nil {
+		return nil, ErrSourceUnavailable
+	}
+	return s.source.ReadSource(projectID, filePath)
+}
+
+// ContractFor returns the stripped contract text for a file. It prefers a
+// persisted artifact; if none exists and a source reader is available, it
+// extracts, persists (tagged with commit), and returns a fresh contract. The
+// returned text never contains implementation bodies.
+func (s *ContractService) ContractFor(projectID int, featureID uint, filePath, commit string) (*models.ContractArtifact, error) {
+	// Prefer an existing artifact for this commit, else the latest.
+	if commit != "" {
+		if a, err := s.ArtifactAtCommit(projectID, filePath, commit); err == nil {
+			return a, nil
+		}
+	}
+	if a, err := s.LatestArtifact(projectID, filePath); err == nil {
+		return a, nil
+	}
+
+	// None persisted yet — generate from source if we can.
+	if s.source == nil {
+		return nil, ErrSourceUnavailable
+	}
+	src, err := s.source.ReadSource(projectID, filePath)
+	if err != nil {
+		return nil, err
+	}
+	contract, err := contracts.ExtractGoContract(filePath, src)
+	if err != nil {
+		return nil, err
+	}
+	a := &models.ContractArtifact{
+		ProjectID:  projectID,
+		FeatureID:  featureID,
+		FilePath:   filePath,
+		CommitHash: commit,
+		Language:   "go",
+		Contract:   contract,
+	}
+	if err := s.SaveArtifact(a); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+// FSSourceReader reads source from a filesystem rooted at BaseDir. Paths are
+// cleaned and confined to BaseDir so a crafted file_path cannot escape the
+// project tree.
+type FSSourceReader struct {
+	BaseDir string
+}
+
+// ReadSource returns the file contents for a project-relative path, rejecting
+// any path that would resolve outside BaseDir.
+func (r FSSourceReader) ReadSource(_ int, filePath string) ([]byte, error) {
+	clean := filepath.Clean("/" + strings.ReplaceAll(filePath, "\\", "/"))
+	full := filepath.Join(r.BaseDir, clean)
+	rel, err := filepath.Rel(r.BaseDir, full)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return nil, ErrSourceUnavailable
+	}
+	data, err := os.ReadFile(full)
+	if err != nil {
+		return nil, ErrSourceUnavailable
+	}
+	return data, nil
 }
