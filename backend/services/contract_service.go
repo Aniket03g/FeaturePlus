@@ -165,8 +165,10 @@ func (s *ContractService) SaveArtifact(a *models.ContractArtifact) error {
 // a project, or gorm.ErrRecordNotFound if none exists yet.
 func (s *ContractService) LatestArtifact(projectID int, filePath string) (*models.ContractArtifact, error) {
 	var a models.ContractArtifact
+	// Tie-break on id desc: artifacts created in the same timestamp tick would
+	// otherwise order non-deterministically, which could return a stale version.
 	err := s.db.Where("project_id = ? AND file_path = ?", projectID, filePath).
-		Order("created_at desc").First(&a).Error
+		Order("created_at desc, id desc").First(&a).Error
 	if err != nil {
 		return nil, err
 	}
