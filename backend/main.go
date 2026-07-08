@@ -363,6 +363,7 @@ func main() {
 	contractService := services.NewContractService(db.DB)
 	if repoRoot, err := filepath.Abs(".."); err == nil {
 		contractService.SetSourceReader(services.FSSourceReader{BaseDir: repoRoot})
+		contractService.SetCommitResolver(services.GitCommitResolver{RepoDir: repoRoot})
 	}
 	contractHandler := handlers.NewContractHandler(db.DB, contractService)
 
@@ -464,6 +465,7 @@ func main() {
 		"templates/task-guidance-fragment.html",
 		"templates/linked-code.html",
 		"templates/feature-scopes.html",
+		"templates/contract-view.html",
 		"templates/feature-progress.html",
 		"templates/dependencies/dependencies-list.html",
 		"templates/dependencies/dependency_panels.html",
@@ -652,6 +654,8 @@ func main() {
 			authWeb.DELETE("/features/:id", featureHandler.DeleteFeature)
 			authWeb.GET("/features/:id/tasks", taskHandler.GetTasksByFeature)
 			authWeb.GET("/features/:id/linked-code", featureHandler.GetLinkedCode)
+			// Scoped Contracts: collaborator contract view (with drift banner)
+			authWeb.GET("/projects/:id/contract-view", contractHandler.GetContractView)
 			// Scoped Contracts: per-feature access management
 			authWeb.GET("/features/:id/scopes", scopeHandler.GetFeatureScopes)
 			authWeb.POST("/features/:id/scopes", scopeHandler.CreateFeatureScope)

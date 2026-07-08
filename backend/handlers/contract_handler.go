@@ -38,6 +38,7 @@ type fileResponse struct {
 	Content  string `json:"content"`        // source or contract text
 	Note     string `json:"note,omitempty"` // behavior note, when present
 	Commit   string `json:"commit,omitempty"`
+	Stale    bool   `json:"stale,omitempty"` // contract drifted from current source
 }
 
 // ServeFile returns the content of a file scoped to the caller's access:
@@ -87,6 +88,10 @@ func (h *ContractHandler) ServeFile(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Contract not available"})
 			return
 		}
+		stale := false
+		if d, derr := h.contract.CheckDrift(projectID, filePath); derr == nil {
+			stale = d.Drifted
+		}
 		c.JSON(http.StatusOK, fileResponse{
 			FilePath: filePath,
 			Access:   string(models.AccessContract),
@@ -94,6 +99,7 @@ func (h *ContractHandler) ServeFile(c *gin.Context) {
 			Content:  services.ContractWithNote(artifact),
 			Note:     artifact.BehaviorNote,
 			Commit:   artifact.CommitHash,
+			Stale:    stale,
 		})
 		return
 
@@ -193,4 +199,55 @@ func mockFilename(filePath string) string {
 		return strings.TrimSuffix(base, ".go") + "_mock.go"
 	}
 	return base + "_mock.go"
+}
+
+// GetContractView renders the collaborator-facing view of a single contract
+// with a staleness banner when the contract has drifted from the current source.
+// It is access-gated exactly like ServeFile: none -> 404, and only contract- or
+// owner-level callers may view.
+func (h *ContractHandler) GetContractView(c *gin.Context) {
+	userIDVal, ok := c.Get("user_id")
+	if !ok {
+		c.String(http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	userID := 0
+	if u, ok := userIDVal.(uint); ok {
+		userID = int(u)
+	}
+	projectID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid project id")
+		return
+	}
+	filePath := c.Query("path")
+	if filePath == "" {
+		c.String(http.StatusBadRequest, "Missing path")
+		return
+	}
+
+	fa, err := h.access.ResolveFileAccess(userID, projectID, filePath)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Access check failed")
+		return
+	}
+	if fa.Level == models.AccessNone {
+		c.String(http.StatusNotFound, "Not found")
+		return
+	}
+
+	artifact, err := h.contract.ContractFor(projectID, fa.FeatureID, filePath, "")
+	if err != nil {
+		c.String(http.StatusNotFound, "Contract not available")
+		return
+	}
+	drift, _ := h.contract.CheckDrift(projectID, filePath)
+
+	c.HTML(http.StatusOK, "contract-view.html", gin.H{
+		"FilePath": filePath,
+		"Contract": services.ContractWithNote(artifact),
+		"Stale":    drift.Drifted,
+		"Artifact": artifact,
+		"Drift":    drift,
+	})
 }
