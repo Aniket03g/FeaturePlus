@@ -22,9 +22,10 @@ var ErrSourceUnavailable = errors.New("source unavailable")
 // as contracts?" — namely the files owned by the features that a feature they
 // own depends on.
 type ContractService struct {
-	db     *gorm.DB
-	access *AccessService
-	source SourceReader
+	db      *gorm.DB
+	access  *AccessService
+	source  SourceReader
+	commits CommitResolver
 }
 
 // NewContractService constructs a ContractService.
