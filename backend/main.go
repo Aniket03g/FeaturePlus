@@ -582,6 +582,8 @@ func main() {
 			projectRoutes.POST("/:id/suggest", llmSuggestHandler.SuggestFeatures)
 			// Scoped Contracts: access-gated file content (owner=source, contract=stripped, none=404)
 			projectRoutes.GET("/:id/files", contractHandler.ServeFile)
+			// Scoped Contracts: generated mock for a contract-scope dependency file
+			projectRoutes.GET("/:id/mocks", contractHandler.ServeMock)
 		}
 
 		// Regular authenticated routes

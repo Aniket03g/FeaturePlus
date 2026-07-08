@@ -271,3 +271,15 @@ func (r FSSourceReader) ReadSource(_ int, filePath string) ([]byte, error) {
 	}
 	return data, nil
 }
+
+// MockFor returns a generated mock package for a dependency file: the stripped
+// contract turned into a compilable fake (synthetic returns + sentinel-error
+// dispatch). A contract-scope collaborator drops this into their build in place
+// of the real dependency, so they can compile and test without the real code.
+func (s *ContractService) MockFor(projectID int, featureID uint, filePath, commit string) (string, error) {
+	artifact, err := s.ContractFor(projectID, featureID, filePath, commit)
+	if err != nil {
+		return "", err
+	}
+	return contracts.GenerateMock(filePath, []byte(artifact.Contract))
+}

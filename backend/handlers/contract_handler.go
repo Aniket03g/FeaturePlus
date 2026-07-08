@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/FeaturePlus/backend/models"
 	"github.com/FeaturePlus/backend/services"
@@ -114,4 +115,82 @@ func (h *ContractHandler) ServeFile(c *gin.Context) {
 	default:
 		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
 	}
+}
+
+// mockResponse is the JSON shape returned by ServeMock.
+type mockResponse struct {
+	FilePath     string `json:"file_path"`
+	MockFilename string `json:"mock_filename"`
+	Content      string `json:"content"`
+}
+
+// ServeMock returns a generated mock for a dependency file so a contract-scope
+// collaborator can build/test against a fake. Access rules:
+//   - none  -> 404 (invisible)
+//   - owner -> 409: owners have the real source; a mock is not what they want
+//   - contract -> the generated mock package
+func (h *ContractHandler) ServeMock(c *gin.Context) {
+	userIDVal, ok := c.Get("user_id")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+	userID := 0
+	if u, ok := userIDVal.(uint); ok {
+		userID = int(u)
+	}
+
+	projectID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project id"})
+		return
+	}
+	filePath := c.Query("path")
+	if filePath == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing path"})
+		return
+	}
+	commit := c.Query("commit")
+
+	fa, err := h.access.ResolveFileAccess(userID, projectID, filePath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Access check failed"})
+		return
+	}
+
+	switch fa.Level {
+	case models.AccessNone:
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	case models.AccessOwner:
+		c.JSON(http.StatusConflict, gin.H{"error": "You have source access to this file; a mock is unnecessary"})
+		return
+	case models.AccessContract:
+		mock, err := h.contract.MockFor(projectID, fa.FeatureID, filePath, commit)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Mock not available"})
+			return
+		}
+		c.JSON(http.StatusOK, mockResponse{
+			FilePath:     filePath,
+			MockFilename: mockFilename(filePath),
+			Content:      mock,
+		})
+		return
+	default:
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+	}
+}
+
+// mockFilename derives the mock file name for a source path, e.g.
+// trails/trail_service.go -> trail_service_mock.go.
+func mockFilename(filePath string) string {
+	base := filePath
+	if i := strings.LastIndexAny(base, "/\\"); i >= 0 {
+		base = base[i+1:]
+	}
+	if strings.HasSuffix(base, ".go") {
+		return strings.TrimSuffix(base, ".go") + "_mock.go"
+	}
+	return base + "_mock.go"
 }
