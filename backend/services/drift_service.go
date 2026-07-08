@@ -4,6 +4,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/FeaturePlus/backend/contracts"
+	"github.com/FeaturePlus/backend/models"
 	"gorm.io/gorm"
 )
 
@@ -81,4 +83,58 @@ func (s *ContractService) CheckDrift(projectID int, filePath string) (DriftStatu
 		status.Drifted = true
 	}
 	return status, nil
+}
+
+// RegenerateResult reports the outcome of a drift-triggered regeneration.
+type RegenerateResult struct {
+	Regenerated bool        `json:"regenerated"`
+	Drift       DriftStatus `json:"drift"`
+	Artifact    interface{} `json:"-"`
+}
+
+// RegenerateIfDrifted re-extracts and persists a fresh contract when the file's
+// contract is stale (or missing). The new artifact is tagged with the current
+// commit; because it starts with an empty behavior note, the note step will
+// regenerate it on next request. Returns whether a regeneration happened.
+//
+// When the source cannot be read or the current commit is unknown, it is a
+// no-op (no false regeneration).
+func (s *ContractService) RegenerateIfDrifted(projectID int, featureID uint, filePath string) (RegenerateResult, error) {
+	drift, err := s.CheckDrift(projectID, filePath)
+	if err != nil {
+		return RegenerateResult{}, err
+	}
+	// Nothing to do when we already have an up-to-date artifact.
+	if drift.HasArtifact && !drift.Drifted {
+		return RegenerateResult{Regenerated: false, Drift: drift}, nil
+	}
+	if s.source == nil {
+		return RegenerateResult{Regenerated: false, Drift: drift}, nil
+	}
+
+	src, err := s.source.ReadSource(projectID, filePath)
+	if err != nil {
+		return RegenerateResult{Regenerated: false, Drift: drift}, nil
+	}
+	contract, err := contracts.ExtractGoContract(filePath, src)
+	if err != nil {
+		return RegenerateResult{}, err
+	}
+
+	commit := drift.CurrentCommit
+	artifact := &models.ContractArtifact{
+		ProjectID:  projectID,
+		FeatureID:  featureID,
+		FilePath:   filePath,
+		CommitHash: commit,
+		Language:   "go",
+		Contract:   contract,
+	}
+	if err := s.SaveArtifact(artifact); err != nil {
+		return RegenerateResult{}, err
+	}
+	drift.HasArtifact = true
+	drift.ArtifactCommit = commit
+	drift.Drifted = false
+	return RegenerateResult{Regenerated: true, Drift: drift, Artifact: artifact}, nil
 }
