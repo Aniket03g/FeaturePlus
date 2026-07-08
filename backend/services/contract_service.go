@@ -3,6 +3,7 @@ package services
 import (
 	"github.com/FeaturePlus/backend/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ContractService connects the extractor to FeaturePlus's existing
@@ -131,4 +132,43 @@ func (s *ContractService) TargetsForUser(userID, projectID int) ([]ContractTarge
 		}
 	}
 	return targets, nil
+}
+
+// SaveArtifact persists (or updates in place) a contract artifact for a source
+// file at a given commit. Re-extracting the same file at the same commit updates
+// the existing row rather than piling up duplicates; a new commit creates a new
+// versioned row so history is retained.
+func (s *ContractService) SaveArtifact(a *models.ContractArtifact) error {
+	return s.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "feature_id"}, {Name: "file_path"}, {Name: "commit_hash"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"contract", "behavior_note", "language", "updated_at",
+		}),
+	}).Create(a).Error
+}
+
+// LatestArtifact returns the most recently generated contract for a file within
+// a project, or gorm.ErrRecordNotFound if none exists yet.
+func (s *ContractService) LatestArtifact(projectID int, filePath string) (*models.ContractArtifact, error) {
+	var a models.ContractArtifact
+	err := s.db.Where("project_id = ? AND file_path = ?", projectID, filePath).
+		Order("created_at desc").First(&a).Error
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+// ArtifactAtCommit returns the contract for a file generated at a specific
+// commit, or gorm.ErrRecordNotFound if that version was never extracted.
+func (s *ContractService) ArtifactAtCommit(projectID int, filePath, commitHash string) (*models.ContractArtifact, error) {
+	var a models.ContractArtifact
+	err := s.db.Where("project_id = ? AND file_path = ? AND commit_hash = ?",
+		projectID, filePath, commitHash).First(&a).Error
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
 }

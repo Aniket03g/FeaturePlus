@@ -326,7 +326,8 @@ func main() {
 		&models.PullRequest{}, &models.Dependency{},
 		&models.ApprovedPR{},
 		&models.FeatureFile{}, &models.FeatureCommit{}, // New: File and commit mappings
-		&models.FeatureScope{}, // Scoped Contracts: per-feature access grants
+		&models.FeatureScope{},      // Scoped Contracts: per-feature access grants
+		&models.ContractArtifact{}, // Scoped Contracts: versioned contract artifacts
 		&internalModels.ProjectConnection{},
 	); err != nil {
 		panic("failed to migrate database: " + err.Error())
