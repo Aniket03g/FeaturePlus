@@ -326,6 +326,7 @@ func main() {
 		&models.PullRequest{}, &models.Dependency{},
 		&models.ApprovedPR{},
 		&models.FeatureFile{}, &models.FeatureCommit{}, // New: File and commit mappings
+		&models.FeatureScope{}, // Scoped Contracts: per-feature access grants
 		&internalModels.ProjectConnection{},
 	); err != nil {
 		panic("failed to migrate database: " + err.Error())
@@ -544,6 +545,15 @@ func main() {
 		api.GET("/features/:id", featureHandler.GetFeatureAPI)
 		api.POST("/features/sync", featureHandler.SyncFeatureData)
 
+		// CLI JSON API routes (auth required)
+		cliApi := api.Group("/", middleware.AuthMiddleware())
+		{
+			cliApi.POST("/features", featureHandler.CreateFeatureAPI)
+			cliApi.GET("/json/projects/:id/features", featureHandler.GetFeaturesByProjectAPI)
+			cliApi.POST("/tasks", featureHandler.CreateTaskAPI)
+			cliApi.GET("/json/features/:id/tasks", featureHandler.GetTasksByFeatureAPI)
+		}
+
 		// Protected routes (auth required)
 		authApi := api.Group("/", middleware.AuthMiddleware())
 		authApi.Use(roleMiddleware()) // Apply role middleware to all authenticated routes
@@ -555,6 +565,7 @@ func main() {
 			projectRoutes.GET("/:id/progress", projectHandler.GetProjectProgress)
 			projectRoutes.GET("/:id/releases", projectHandler.GetProjectReleases)
 			projectRoutes.POST("/:id/settings", projectHandler.UpdateProjectSettings)
+			projectRoutes.POST("/:id/export-markdown", projectHandler.ExportMarkdown)
 			// STAGE 4a: LLM-based feature suggestions
 			projectRoutes.POST("/:id/suggest", llmSuggestHandler.SuggestFeatures)
 		}
