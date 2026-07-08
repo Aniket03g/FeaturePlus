@@ -89,14 +89,25 @@
     </div>
 
     <!-- Linked Code Section -->
-    <div 
-      id="linked-code-section" 
-      hx-get="/web/features/{{ .Feature.ID }}/linked-code" 
+    <div
+      id="linked-code-section"
+      hx-get="/web/features/{{ .Feature.ID }}/linked-code"
       hx-trigger="load"
       hx-swap="innerHTML">
         <div class="text-center py-8">
           <svg class="mx-auto animate-spin h-8 w-8 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
           <p class="text-gray-400 mt-2">Loading linked code...</p>
+        </div>
+    </div>
+
+    <!-- Feature Access (Scoped Contracts) Section -->
+    <div
+      hx-get="/web/features/{{ .Feature.ID }}/scopes"
+      hx-trigger="load"
+      hx-swap="outerHTML">
+        <div class="text-center py-8">
+          <svg class="mx-auto animate-spin h-8 w-8 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+          <p class="text-gray-400 mt-2">Loading access settings...</p>
         </div>
     </div>
   </div>

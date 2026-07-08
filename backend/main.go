@@ -354,6 +354,7 @@ func main() {
 	webPRHandler := handlers.NewWebPRHandler(prRepo)
 	webReleaseHandler := handlers.NewWebReleaseHandler(releaseRepo, prRepo, projectRepo)
 	llmSuggestHandler := handlers.NewLLMSuggestHandler(db.DB) // STAGE 4a: LLM feature suggestions
+	scopeHandler := handlers.NewScopeHandler(db.DB)           // Scoped Contracts: per-feature access grants
 
 	// MARKER:ROUTER_INIT Initialize the main router
 	router := gin.Default()
@@ -452,6 +453,7 @@ func main() {
 		"templates/task-edit-form.html",
 		"templates/task-guidance-fragment.html",
 		"templates/linked-code.html",
+		"templates/feature-scopes.html",
 		"templates/feature-progress.html",
 		"templates/dependencies/dependencies-list.html",
 		"templates/dependencies/dependency_panels.html",
@@ -636,6 +638,10 @@ func main() {
 			authWeb.DELETE("/features/:id", featureHandler.DeleteFeature)
 			authWeb.GET("/features/:id/tasks", taskHandler.GetTasksByFeature)
 			authWeb.GET("/features/:id/linked-code", featureHandler.GetLinkedCode)
+			// Scoped Contracts: per-feature access management
+			authWeb.GET("/features/:id/scopes", scopeHandler.GetFeatureScopes)
+			authWeb.POST("/features/:id/scopes", scopeHandler.CreateFeatureScope)
+			authWeb.DELETE("/features/:id/scopes/:scope_id", scopeHandler.DeleteFeatureScope)
 			authWeb.GET("/features/:id/tasks/new", taskHandler.NewTaskForm)
 			authWeb.POST("/features/:id/tasks", taskHandler.CreateTaskForFeature)
 			authWeb.GET("/tasks/cancel", taskHandler.CancelTaskForm)

@@ -1,0 +1,79 @@
+<div id="feature-scopes-section" class="bg-white rounded-lg shadow-sm p-8 mb-6">
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="text-xl font-semibold text-gray-900">Feature Access</h3>
+    <span class="text-xs text-gray-400">Scoped Contracts</span>
+  </div>
+  <p class="text-sm text-gray-500 mb-4">
+    Grant a collaborator <strong>owner</strong> access (full source of this feature) or
+    <strong>contract</strong> access (stripped signatures only). Dependencies of a feature
+    a collaborator owns are automatically served as contracts.
+  </p>
+
+  {{ if .Flash }}
+    <div class="mb-4 px-3 py-2 rounded-md bg-blue-50 text-blue-700 text-sm">{{ .Flash }}</div>
+  {{ end }}
+
+  <!-- Existing grants -->
+  {{ if .Scopes }}
+    <div class="divide-y divide-gray-100 mb-6 border border-gray-100 rounded-lg">
+      {{ range .Scopes }}
+        <div class="flex items-center justify-between px-4 py-3">
+          <div class="flex items-center gap-3">
+            <span class="text-sm font-medium text-gray-800">{{ .UserLabel }}</span>
+            {{ if eq (printf "%s" .AccessLevel) "owner" }}
+              <span class="inline-block px-2 py-0.5 rounded bg-green-100 text-green-700 text-xs font-medium">owner</span>
+            {{ else }}
+              <span class="inline-block px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-xs font-medium">contract</span>
+            {{ end }}
+          </div>
+          {{ if $.IsOwner }}
+            <button
+              hx-delete="/web/features/{{ $.Feature.ID }}/scopes/{{ .ID }}"
+              hx-target="#feature-scopes-section"
+              hx-swap="outerHTML"
+              hx-confirm="Revoke this collaborator's access to the feature?"
+              class="text-xs text-red-600 hover:text-red-800 font-medium">Revoke</button>
+          {{ end }}
+        </div>
+      {{ end }}
+    </div>
+  {{ else }}
+    <p class="text-sm text-gray-400 mb-6">No collaborators have scoped access to this feature yet.</p>
+  {{ end }}
+
+  <!-- Grant form (owner only) -->
+  {{ if .IsOwner }}
+    {{ if .Candidates }}
+      <form
+        hx-post="/web/features/{{ .Feature.ID }}/scopes"
+        hx-target="#feature-scopes-section"
+        hx-swap="outerHTML"
+        class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Collaborator</label>
+          <select name="user_id" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+            {{ range .Candidates }}
+              <option value="{{ .ID }}">{{ if .Username }}{{ .Username }}{{ else }}{{ .Email }}{{ end }}</option>
+            {{ end }}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Access</label>
+          <select name="access_level" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+            {{ range .Levels }}
+              <option value="{{ . }}">{{ . }}</option>
+            {{ end }}
+          </select>
+        </div>
+        <button type="submit"
+          class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition">
+          Grant Access
+        </button>
+      </form>
+    {{ else }}
+      <p class="text-sm text-gray-400">All users already have a grant on this feature.</p>
+    {{ end }}
+  {{ else }}
+    <p class="text-xs text-gray-400">Only the project owner can manage access.</p>
+  {{ end }}
+</div>
