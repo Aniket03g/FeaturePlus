@@ -87,7 +87,7 @@ func GenerateMock(filename string, contractSrc []byte) (string, error) {
 			continue
 		}
 		collectImports(fn.Type, imports)
-		mock := generateFuncMock(fset, pcfg, fn, structs, sentinels, imports)
+		mock := generateFuncMock(fset, pcfg, fn, structs, sentinels)
 		out.WriteString("\n")
 		out.WriteString(mock)
 		out.WriteString("\n")
@@ -103,7 +103,7 @@ func GenerateMock(filename string, contractSrc []byte) (string, error) {
 
 // generateFuncMock builds one mock function: named results + optional sentinel
 // dispatch + synthetic happy-path values.
-func generateFuncMock(fset *token.FileSet, pcfg *printer.Config, fn *ast.FuncDecl, structs map[string]*ast.StructType, sentinels []string, imports *importSet) string {
+func generateFuncMock(fset *token.FileSet, pcfg *printer.Config, fn *ast.FuncDecl, structs map[string]*ast.StructType, sentinels []string) string {
 	// Name every result so a bare return yields zero values.
 	results := nameResults(fn.Type.Results)
 	sig := &ast.FuncDecl{
@@ -146,7 +146,7 @@ func generateFuncMock(fset *token.FileSet, pcfg *printer.Config, fn *ast.FuncDec
 		if star, ok := r.typ.(*ast.StarExpr); ok {
 			if id, ok := star.X.(*ast.Ident); ok {
 				if st, known := structs[id.Name]; known {
-					fixture := synthStructLiteral(id.Name, st, imports)
+					fixture := synthStructLiteral(id.Name, st, structs)
 					body.WriteString("\t")
 					body.WriteString(r.name)
 					body.WriteString(" = &")
