@@ -1,3 +1,7 @@
+//go:build ignore
+
+// This is a standalone debug script, not part of the server build.
+// Run it directly:  go run debug_templates.go
 package main
 
 import (

@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -12,11 +13,29 @@ type Database struct {
 	DB *gorm.DB
 }
 
+// InitDB opens the database at the path given by FP_DB_PATH, falling back to
+// test.db in the working directory.
+//
+// Prefer InitDBAt where the caller knows the path: it does not depend on the
+// working directory, which is not a safe assumption for a desktop executable
+// that may be launched from anywhere.
 func InitDB() (*Database, error) {
-	// Get database path from environment variable with fallback to test.db
 	dbPath := os.Getenv("FP_DB_PATH")
 	if dbPath == "" {
 		dbPath = "test.db"
+	}
+
+	return InitDBAt(dbPath)
+}
+
+// InitDBAt opens the SQLite database at an explicit path, creating the parent
+// directory if it does not exist yet — a fresh desktop install has no data
+// directory until the first run creates one.
+func InitDBAt(dbPath string) (*Database, error) {
+	if dir := filepath.Dir(dbPath); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("failed to create database directory %s: %w", dir, err)
+		}
 	}
 
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})

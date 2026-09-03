@@ -1,3 +1,7 @@
+//go:build ignore
+
+// This is a standalone debug script, not part of the server build.
+// Run it directly:  go run test_role_middleware.go
 package main
 
 import (

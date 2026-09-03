@@ -23,7 +23,9 @@ COPY pkg ./pkg
 WORKDIR /app/backend
 
 RUN go mod tidy
-RUN CGO_ENABLED=1 GOOS=linux go build -o featureplus-server main.go
+# Build the whole package, not a single file: package main is split across
+# main.go and the app package it delegates to.
+RUN CGO_ENABLED=1 GOOS=linux go build -o featureplus-server .
 
 
 # Runtime stage
@@ -53,6 +55,7 @@ VOLUME ["/app/data"]
 
 # Set environment variables
 ENV DATA_PATH=/app/data
+ENV FP_RESOURCE_DIR=/app
 
 # Expose the port your app runs on
 EXPOSE 8080

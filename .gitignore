@@ -5,3 +5,9 @@
 */backend/bin
 tailwindcss.exe
 .env
+# Log output (written relative to the working directory)
+logs/
+*.log
+
+# Compiled binaries
+backend/*.exe
