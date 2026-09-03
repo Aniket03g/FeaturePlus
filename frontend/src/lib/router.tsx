@@ -14,6 +14,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
  *   /app/projects               project list
  *   /app/projects/:id           project detail, feature list
  *   /app/projects/:id/features/:featureId   feature detail
+ *   /app/projects/:id/dependencies          dependency canvas
  */
 
 const BASE = '/app'
@@ -23,6 +24,7 @@ export type Route =
   | { name: 'projects' }
   | { name: 'project'; projectId: number }
   | { name: 'feature'; projectId: number; featureId: number }
+  | { name: 'dependencies'; projectId: number }
 
 /** Parse a pathname into a route, falling back to the dashboard. */
 export function parseRoute(pathname: string): Route {
@@ -35,6 +37,10 @@ export function parseRoute(pathname: string): Route {
 
   const projectId = Number(parts[1])
   if (!Number.isFinite(projectId) || projectId <= 0) return { name: 'projects' }
+
+  if (parts[2] === 'dependencies') {
+    return { name: 'dependencies', projectId }
+  }
 
   if (parts[2] === 'features' && parts[3]) {
     const featureId = Number(parts[3])
@@ -57,6 +63,8 @@ export function routeToPath(route: Route): string {
       return `${BASE}/projects/${route.projectId}`
     case 'feature':
       return `${BASE}/projects/${route.projectId}/features/${route.featureId}`
+    case 'dependencies':
+      return `${BASE}/projects/${route.projectId}/dependencies`
   }
 }
 

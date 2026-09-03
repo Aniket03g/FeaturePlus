@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as api from './api'
-import type { Comment, Feature, Project, TagCount, Task } from './types'
+import type {
+  Comment,
+  Dependency,
+  DependencyGraph,
+  Feature,
+  Project,
+  TagCount,
+  Task,
+} from './types'
 
 /**
  * Query keys are declared in one place so that an invalidation after a write
@@ -260,6 +268,39 @@ export function useDeleteComment(taskId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: taskKeys.comments(taskId) })
       queryClient.invalidateQueries({ queryKey: taskKeys.task(taskId) })
+    },
+  })
+}
+
+export const graphKeys = {
+  graph: (projectId: number) => ['dependency-graph', projectId] as const,
+}
+
+export function useDependencyGraph(projectId: number) {
+  return useQuery({
+    queryKey: graphKeys.graph(projectId),
+    queryFn: () => api.get<DependencyGraph>(`/projects/${projectId}/dependency-graph`),
+    enabled: projectId > 0,
+  })
+}
+
+export function useCreateDependency(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { parent_id: number; child_id: number; description?: string }) =>
+      api.post<Dependency>(`/projects/${projectId}/dependencies`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: graphKeys.graph(projectId) })
+    },
+  })
+}
+
+export function useDeleteDependency(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.del(`/dependencies/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: graphKeys.graph(projectId) })
     },
   })
 }

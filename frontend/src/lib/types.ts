@@ -112,3 +112,42 @@ export interface Task {
   created_at: string
   updated_at: string
 }
+
+export interface GraphNode {
+  id: number
+  title: string
+  status: FeatureStatus
+  priority: FeaturePriority
+  category: string
+  tags: string[]
+  /** Longest path leading into this node; the canvas lays out columns by it. */
+  depth: number
+}
+
+export interface GraphEdge {
+  id: number
+  parent_id: number
+  child_id: number
+  description?: string
+  in_cycle: boolean
+}
+
+export interface GraphCycle {
+  node_ids: number[]
+  edge_ids: number[]
+}
+
+export interface DependencyGraph {
+  project_id: number
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  cycles: GraphCycle[]
+}
+
+export interface Dependency {
+  id: number
+  parent_id: number
+  child_id: number
+  description?: string
+  creates_cycle: boolean
+}

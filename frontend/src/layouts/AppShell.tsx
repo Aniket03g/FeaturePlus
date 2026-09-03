@@ -50,7 +50,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     items: [
       { id: 'features', label: 'Features', icon: ListChecks, soon: true },
       { id: 'tasks', label: 'Tasks', icon: ListChecks, soon: true },
-      { id: 'dependencies', label: 'Dependencies', icon: Network, soon: true },
+      { id: 'dependencies', label: 'Dependencies', icon: Network },
       { id: 'tags', label: 'Tags', icon: Tag, soon: true },
     ],
   },

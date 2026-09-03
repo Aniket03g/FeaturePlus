@@ -466,3 +466,75 @@ type CreateCommentRequest struct {
 type UpdateCommentRequest struct {
 	Content string `json:"content" binding:"required,min=1,max=20000"`
 }
+
+// GraphNode is a feature as drawn on the dependency canvas.
+type GraphNode struct {
+	ID       uint     `json:"id"`
+	Title    string   `json:"title"`
+	Status   string   `json:"status"`
+	Priority string   `json:"priority"`
+	Category string   `json:"category"`
+	Tags     []string `json:"tags"`
+
+	// Depth is the longest path leading into this node, which the canvas uses
+	// to lay the graph out in columns without repeating the walk in the browser.
+	Depth int `json:"depth"`
+}
+
+// GraphEdge is one dependency: ParentID must be done before ChildID.
+type GraphEdge struct {
+	ID          uint   `json:"id"`
+	ParentID    uint   `json:"parent_id"`
+	ChildID     uint   `json:"child_id"`
+	Description string `json:"description,omitempty"`
+
+	// InCycle marks an edge that takes part in a loop, so the canvas can draw
+	// it differently rather than leaving the reader to spot it.
+	InCycle bool `json:"in_cycle"`
+}
+
+// GraphCycle is one dependency loop, as the nodes and edges that form it.
+type GraphCycle struct {
+	NodeIDs []uint `json:"node_ids"`
+	EdgeIDs []uint `json:"edge_ids"`
+}
+
+// DependencyGraph is a project's features and the dependencies between them.
+type DependencyGraph struct {
+	ProjectID int          `json:"project_id"`
+	Nodes     []GraphNode  `json:"nodes"`
+	Edges     []GraphEdge  `json:"edges"`
+	Cycles    []GraphCycle `json:"cycles"`
+}
+
+// DependencyDTO is a single dependency as returned after a write.
+type DependencyDTO struct {
+	ID          uint   `json:"id"`
+	ParentID    uint   `json:"parent_id"`
+	ChildID     uint   `json:"child_id"`
+	Description string `json:"description,omitempty"`
+
+	// CreatesCycle warns that this edge closes a loop. Adding it is allowed:
+	// the data can be correct while the plan is not, and the person adding it
+	// is better placed to decide which edge should go.
+	CreatesCycle bool `json:"creates_cycle"`
+}
+
+// NewDependencyDTO converts a dependency for output.
+func NewDependencyDTO(d models.Dependency, createsCycle bool) DependencyDTO {
+	return DependencyDTO{
+		ID:           d.ID,
+		ParentID:     d.ParentID,
+		ChildID:      d.ChildID,
+		Description:  d.Description,
+		CreatesCycle: createsCycle,
+	}
+}
+
+// CreateDependencyRequest is the accepted body for adding a dependency.
+// ParentID must be completed before ChildID can start.
+type CreateDependencyRequest struct {
+	ParentID    uint   `json:"parent_id" binding:"required"`
+	ChildID     uint   `json:"child_id" binding:"required"`
+	Description string `json:"description" binding:"max=1000"`
+}

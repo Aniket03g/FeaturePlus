@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertCircle, ArrowLeft, Plus, X, ListChecks } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Network, Plus, X, ListChecks } from 'lucide-react'
 import { useFeatures, useProject, useProjectTags } from '@/lib/queries'
 import { useRouter } from '@/lib/router'
 import { ApiError } from '@/lib/api'
@@ -96,10 +96,20 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
           )}
         </div>
 
-        <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus className="h-3.5 w-3.5" />
-          New feature
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate({ name: 'dependencies', projectId })}
+          >
+            <Network className="h-3.5 w-3.5" />
+            Dependencies
+          </Button>
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            New feature
+          </Button>
+        </div>
       </div>
 
       {stats && (

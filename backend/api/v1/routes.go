@@ -35,6 +35,7 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	NewProjectsHandler(repositories.NewProjectRepository(db), db).Register(authed)
 	NewFeaturesHandler(db).Register(authed)
 	NewTasksHandler(db).Register(authed)
+	NewDependenciesHandler(db).Register(authed)
 
 	registerNotFound(router)
 }

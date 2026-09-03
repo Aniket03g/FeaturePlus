@@ -11,6 +11,7 @@ import { Projects } from '@/pages/Projects'
 import { ProjectDetail } from '@/pages/ProjectDetail'
 import { FeatureDetail } from '@/pages/FeatureDetail'
 import { NewProjectDialog } from '@/pages/NewProjectDialog'
+import { DependencyCanvas } from '@/pages/DependencyCanvas'
 
 export function App() {
   const { user, isLoading } = useAuth()
@@ -23,14 +24,29 @@ export function App() {
 
   // The sidebar highlights the section a route belongs to, so a feature page
   // still shows Projects as current rather than nothing at all.
-  const section = route.name === 'dashboard' ? 'dashboard' : 'projects'
+  const section =
+    route.name === 'dashboard'
+      ? 'dashboard'
+      : route.name === 'dependencies'
+        ? 'dependencies'
+        : 'projects'
 
   return (
     <AppShell
       active={section}
       onNavigate={(id) => {
         setSearch('')
-        navigate(id === 'dashboard' ? { name: 'dashboard' } : { name: 'projects' })
+        if (id === 'dashboard') return navigate({ name: 'dashboard' })
+        // Dependencies belong to a project, so the item only leads somewhere
+        // once one is open; otherwise it falls back to the project list.
+        if (id === 'dependencies') {
+          const projectId =
+            route.name === 'project' || route.name === 'feature' || route.name === 'dependencies'
+              ? route.projectId
+              : 0
+          return navigate(projectId > 0 ? { name: 'dependencies', projectId } : { name: 'projects' })
+        }
+        navigate({ name: 'projects' })
       }}
       title={<Title />}
       actions={
@@ -58,6 +74,7 @@ export function App() {
       {route.name === 'feature' && (
         <FeatureDetail projectId={route.projectId} featureId={route.featureId} />
       )}
+      {route.name === 'dependencies' && <DependencyCanvas projectId={route.projectId} />}
 
       {creatingProject && (
         <NewProjectDialog
@@ -79,7 +96,10 @@ export function App() {
  */
 function Title() {
   const { route } = useRouter()
-  const projectId = route.name === 'project' || route.name === 'feature' ? route.projectId : 0
+  const projectId =
+    route.name === 'project' || route.name === 'feature' || route.name === 'dependencies'
+      ? route.projectId
+      : 0
   const project = useProject(projectId)
 
   switch (route.name) {
@@ -96,5 +116,12 @@ function Title() {
       return <span>{project.data?.name ?? 'Project'}</span>
     case 'feature':
       return <span>{project.data?.name ?? 'Feature'}</span>
+    case 'dependencies':
+      return (
+        <span>
+          {project.data?.name ?? 'Project'}
+          <span className="ml-2 font-normal text-muted">Dependencies</span>
+        </span>
+      )
   }
 }
