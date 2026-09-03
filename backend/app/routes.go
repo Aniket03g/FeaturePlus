@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 
+	v1 "github.com/FeaturePlus/backend/api/v1"
 	"github.com/FeaturePlus/backend/handlers"
 	"github.com/FeaturePlus/backend/middleware"
 	"github.com/FeaturePlus/backend/routes"
@@ -13,6 +14,11 @@ import (
 // unchanged from main.go — this is a move, not a redesign.
 func registerRoutes(router *gin.Engine, d *dependencies, cfg *Config) {
 	routes.RegisterAuthRoutes(router, d.db.DB)
+
+	// The versioned JSON API the React frontend and the desktop window use.
+	// Registered before the legacy /api group so its own 404 envelope wins
+	// for unmatched /api/v1 paths.
+	v1.Register(router, d.db.DB)
 
 	registerAPIRoutes(router, d)
 

@@ -9,10 +9,15 @@ import (
 )
 
 type User struct {
-	ID        int       `gorm:"primaryKey" json:"id"` // ✅ Changed to int
-	Email     string    `gorm:"unique;not null" json:"email"`
-	Username  string    `gorm:"unique;not null" json:"username"`
-	Password  string    `gorm:"not null" json:"password,omitempty"`
+	ID       int    `gorm:"primaryKey" json:"id"` // ✅ Changed to int
+	Email    string `gorm:"unique;not null" json:"email"`
+	Username string `gorm:"unique;not null" json:"username"`
+	// Password holds the bcrypt hash and must never be serialised. It was
+	// json:"password,omitempty", but a stored hash is never empty, so every
+	// endpoint returning a User — or a Project with its Owner preloaded —
+	// handed out the hash. Requests that legitimately carry a password bind it
+	// through their own request struct, not through this model.
+	Password  string    `gorm:"not null" json:"-"`
 	Role      string    `gorm:"not null" json:"role"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

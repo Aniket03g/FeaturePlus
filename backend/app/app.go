@@ -294,9 +294,21 @@ func (a *App) Close() error {
 
 	if a.sqliteFS != nil {
 		if err := a.sqliteFS.Close(); err != nil {
-			return err
+			log.WithError(err).Warn("Error closing SQLiteFS")
 		}
 		a.sqliteFS = nil
+	}
+
+	// Close the database itself. Without this the SQLite file stays open for
+	// the life of the process, which leaves the desktop build holding a lock on
+	// the user's database after the window closes.
+	if a.DB != nil {
+		if sqlDB, err := a.DB.DB.DB(); err == nil {
+			if err := sqlDB.Close(); err != nil {
+				return err
+			}
+		}
+		a.DB = nil
 	}
 
 	return nil
