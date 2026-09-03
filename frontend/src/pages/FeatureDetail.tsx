@@ -16,6 +16,8 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
+import { TaskList } from '@/components/TaskList'
+import { TaskPanel } from './TaskPanel'
 import { cn } from '@/lib/utils'
 import {
   PRIORITY_LABEL,
@@ -51,6 +53,7 @@ export function FeatureDetail({
   const [tagText, setTagText] = useState('')
   const [error, setError] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [openTaskId, setOpenTaskId] = useState(0)
 
   // Seed the editing fields whenever the loaded feature changes.
   useEffect(() => {
@@ -242,31 +245,39 @@ export function FeatureDetail({
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Sub-features</CardTitle>
-          </CardHeader>
-          <CardBody className="p-0">
-            {data.sub_features && data.sub_features.length > 0 ? (
-              <div className="divide-y divide-border">
-                {data.sub_features.map((child) => (
-                  <button
-                    key={child.id}
-                    onClick={() =>
-                      navigate({ name: 'feature', projectId, featureId: child.id })
-                    }
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-raised"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-sm text-ink">{child.title}</span>
-                    <StatusPill status={child.status} />
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="px-4 py-8 text-center text-xs text-faint">No sub-features</p>
-            )}
-          </CardBody>
-        </Card>
+        <div className="space-y-4 lg:col-span-2">
+          <TaskList
+            featureId={featureId}
+            projectId={projectId}
+            onOpenTask={setOpenTaskId}
+          />
+
+          {data.sub_features && data.sub_features.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Sub-features</CardTitle>
+              </CardHeader>
+              <CardBody className="p-0">
+                <div className="divide-y divide-border">
+                  {data.sub_features.map((child) => (
+                    <button
+                      key={child.id}
+                      onClick={() =>
+                        navigate({ name: 'feature', projectId, featureId: child.id })
+                      }
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-raised"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                        {child.title}
+                      </span>
+                      <StatusPill status={child.status} />
+                    </button>
+                  ))}
+                </div>
+              </CardBody>
+            </Card>
+          )}
+        </div>
 
         <div className="space-y-4">
           <Card>
@@ -329,6 +340,15 @@ export function FeatureDetail({
           )}
         </div>
       </div>
+
+      {openTaskId > 0 && (
+        <TaskPanel
+          taskId={openTaskId}
+          featureId={featureId}
+          projectId={projectId}
+          onClose={() => setOpenTaskId(0)}
+        />
+      )}
 
       {confirmingDelete && (
         <ConfirmDelete

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as api from './api'
-import type { Feature, Project, TagCount } from './types'
+import type { Comment, Feature, Project, TagCount, Task } from './types'
 
 /**
  * Query keys are declared in one place so that an invalidation after a write
@@ -147,6 +147,119 @@ export function useReplaceTags(projectId: number) {
       queryClient.invalidateQueries({ queryKey: keys.feature(id) })
       queryClient.invalidateQueries({ queryKey: ['features', projectId] })
       queryClient.invalidateQueries({ queryKey: keys.tags(projectId) })
+    },
+  })
+}
+
+export const taskKeys = {
+  tasks: (featureId: number, params?: unknown) => ['tasks', featureId, params ?? {}] as const,
+  task: (id: number) => ['task', id] as const,
+  comments: (taskId: number) => ['comments', taskId] as const,
+}
+
+export interface TaskFilters {
+  type?: string[]
+  done?: 'true' | 'false' | ''
+  q?: string
+}
+
+export function useTasks(featureId: number, filters: TaskFilters = {}) {
+  return useQuery({
+    queryKey: taskKeys.tasks(featureId, filters),
+    queryFn: () =>
+      api.list<Task>(`/features/${featureId}/tasks`, {
+        query: {
+          type: filters.type?.length ? filters.type.join(',') : undefined,
+          done: filters.done || undefined,
+          q: filters.q || undefined,
+          per_page: 200,
+        },
+      }),
+    enabled: featureId > 0,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useTask(id: number) {
+  return useQuery({
+    queryKey: taskKeys.task(id),
+    queryFn: () => api.get<Task>(`/tasks/${id}`),
+    enabled: id > 0,
+  })
+}
+
+/**
+ * Task writes invalidate the feature and project caches too, because a task
+ * changes the counts those screens display.
+ */
+function invalidateAround(
+  queryClient: ReturnType<typeof useQueryClient>,
+  featureId: number,
+  projectId: number,
+) {
+  queryClient.invalidateQueries({ queryKey: ['tasks', featureId] })
+  queryClient.invalidateQueries({ queryKey: keys.feature(featureId) })
+  queryClient.invalidateQueries({ queryKey: ['features', projectId] })
+  queryClient.invalidateQueries({ queryKey: keys.project(projectId) })
+  queryClient.invalidateQueries({ queryKey: ['projects'] })
+}
+
+export function useCreateTask(featureId: number, projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { task_name: string; task_type?: string; description?: string }) =>
+      api.post<Task>(`/features/${featureId}/tasks`, body),
+    onSuccess: () => invalidateAround(queryClient, featureId, projectId),
+  })
+}
+
+export function useUpdateTask(featureId: number, projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: number } & Record<string, unknown>) =>
+      api.patch<Task>(`/tasks/${id}`, body),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(taskKeys.task(updated.id), updated)
+      invalidateAround(queryClient, featureId, projectId)
+    },
+  })
+}
+
+export function useDeleteTask(featureId: number, projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.del(`/tasks/${id}`),
+    onSuccess: () => invalidateAround(queryClient, featureId, projectId),
+  })
+}
+
+export function useComments(taskId: number) {
+  return useQuery({
+    queryKey: taskKeys.comments(taskId),
+    queryFn: () => api.list<Comment>(`/tasks/${taskId}/comments`),
+    enabled: taskId > 0,
+  })
+}
+
+export function useAddComment(taskId: number, featureId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (content: string) => api.post<Comment>(`/tasks/${taskId}/comments`, { content }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: taskKeys.comments(taskId) })
+      queryClient.invalidateQueries({ queryKey: taskKeys.task(taskId) })
+      queryClient.invalidateQueries({ queryKey: ['tasks', featureId] })
+    },
+  })
+}
+
+export function useDeleteComment(taskId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.del(`/comments/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: taskKeys.comments(taskId) })
+      queryClient.invalidateQueries({ queryKey: taskKeys.task(taskId) })
     },
   })
 }

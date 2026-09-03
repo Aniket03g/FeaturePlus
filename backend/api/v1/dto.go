@@ -4,6 +4,7 @@
 package v1
 
 import (
+	"strings"
 	"time"
 
 	"github.com/FeaturePlus/backend/models"
@@ -282,4 +283,186 @@ func emptyIfNil(values []string) []string {
 		return []string{}
 	}
 	return values
+}
+
+// PullRequestDTO is a pull request as attached to a task.
+type PullRequestDTO struct {
+	ID       uint   `json:"id"`
+	TaskID   uint   `json:"task_id"`
+	URL      string `json:"url"`
+	Title    string `json:"title"`
+	Branch   string `json:"branch"`
+	Status   string `json:"status"`
+	Tested   bool   `json:"tested"`
+	Approved bool   `json:"approved"`
+}
+
+// NewPullRequestDTO converts a pull request for output.
+//
+// Approved is derived rather than read: pull_requests has no approved column,
+// only a status whose casing varies in existing data.
+func NewPullRequestDTO(pr models.PullRequest) PullRequestDTO {
+	return PullRequestDTO{
+		ID:       pr.ID,
+		TaskID:   pr.TaskID,
+		URL:      pr.URL,
+		Title:    pr.Title,
+		Branch:   pr.Branch,
+		Status:   pr.Status,
+		Tested:   pr.Tested,
+		Approved: strings.EqualFold(pr.Status, "approved"),
+	}
+}
+
+// CommentDTO is a comment as the API presents one.
+type CommentDTO struct {
+	ID           uint      `json:"id"`
+	TaskID       uint      `json:"task_id"`
+	AttachmentID *uint     `json:"attachment_id,omitempty"`
+	Content      string    `json:"content"`
+	Author       *UserDTO  `json:"author,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// NewCommentDTO converts a comment for output. The author is included only
+// when it was preloaded.
+func NewCommentDTO(c models.Comment) CommentDTO {
+	dto := CommentDTO{
+		ID:           c.ID,
+		TaskID:       c.TaskID,
+		AttachmentID: c.AttachmentID,
+		Content:      c.Content,
+		CreatedAt:    c.CreatedAt,
+		UpdatedAt:    c.UpdatedAt,
+	}
+	if c.User.ID != 0 {
+		author := NewUserDTO(c.User)
+		dto.Author = &author
+	}
+	return dto
+}
+
+// NewCommentDTOs converts a slice, always returning a non-nil result.
+func NewCommentDTOs(comments []models.Comment) []CommentDTO {
+	out := make([]CommentDTO, 0, len(comments))
+	for _, c := range comments {
+		out = append(out, NewCommentDTO(c))
+	}
+	return out
+}
+
+// AttachmentDTO is a file attached to a task.
+type AttachmentDTO struct {
+	ID        uint      `json:"id"`
+	TaskID    uint      `json:"task_id"`
+	FileName  string    `json:"file_name"`
+	FileSize  int64     `json:"file_size"`
+	MimeType  string    `json:"mime_type"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// NewAttachmentDTO converts an attachment for output.
+func NewAttachmentDTO(a models.TaskAttachment) AttachmentDTO {
+	return AttachmentDTO{
+		ID:        a.ID,
+		TaskID:    a.TaskID,
+		FileName:  a.FileName,
+		FileSize:  a.FileSize,
+		MimeType:  a.MimeType,
+		CreatedAt: a.CreatedAt,
+	}
+}
+
+// TaskDTO is a task as the API presents one.
+//
+// Done is derived, not stored: models.Task has no status column, and a task
+// counts as complete once one of its pull requests is tested and approved.
+type TaskDTO struct {
+	ID          uint   `json:"id"`
+	FeatureID   uint   `json:"feature_id"`
+	TaskName    string `json:"task_name"`
+	TaskType    string `json:"task_type"`
+	Description string `json:"description"`
+	Done        bool   `json:"done"`
+
+	CommentCount int              `json:"comment_count"`
+	PullRequests []PullRequestDTO `json:"pull_requests"`
+
+	// Comments is filled only on a detail response.
+	Comments []CommentDTO `json:"comments,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// NewTaskDTO converts a task for output.
+func NewTaskDTO(t models.Task, done bool, commentCount int, prs []PullRequestDTO) TaskDTO {
+	if prs == nil {
+		prs = []PullRequestDTO{}
+	}
+	return TaskDTO{
+		ID:           t.ID,
+		FeatureID:    t.FeatureID,
+		TaskName:     t.TaskName,
+		TaskType:     t.TaskType,
+		Description:  t.Description,
+		Done:         done,
+		CommentCount: commentCount,
+		PullRequests: prs,
+		CreatedAt:    t.CreatedAt,
+		UpdatedAt:    t.UpdatedAt,
+	}
+}
+
+// NewTaskDTOs converts a slice, always returning a non-nil result.
+func NewTaskDTOs(
+	tasks []models.Task,
+	completion map[uint]bool,
+	counts map[uint]int,
+	prs map[uint][]PullRequestDTO,
+) []TaskDTO {
+	out := make([]TaskDTO, 0, len(tasks))
+	for _, t := range tasks {
+		out = append(out, NewTaskDTO(t, completion[t.ID], counts[t.ID], prs[t.ID]))
+	}
+	return out
+}
+
+// CreateTaskRequest is the accepted body for creating a task.
+type CreateTaskRequest struct {
+	TaskName    string `json:"task_name" binding:"required,min=1,max=255"`
+	TaskType    string `json:"task_type" binding:"max=50"`
+	Description string `json:"description" binding:"max=20000"`
+}
+
+// UpdateTaskRequest is the accepted body for a partial update.
+type UpdateTaskRequest struct {
+	TaskName    *string `json:"task_name" binding:"omitempty,min=1,max=255"`
+	TaskType    *string `json:"task_type" binding:"omitempty,max=50"`
+	Description *string `json:"description" binding:"omitempty,max=20000"`
+}
+
+// Apply copies the fields that were present onto a task model.
+func (r UpdateTaskRequest) Apply(t *models.Task) {
+	if r.TaskName != nil {
+		t.TaskName = *r.TaskName
+	}
+	if r.TaskType != nil {
+		t.TaskType = *r.TaskType
+	}
+	if r.Description != nil {
+		t.Description = *r.Description
+	}
+}
+
+// CreateCommentRequest is the accepted body for posting a comment.
+type CreateCommentRequest struct {
+	Content      string `json:"content" binding:"required,min=1,max=20000"`
+	AttachmentID *uint  `json:"attachment_id"`
+}
+
+// UpdateCommentRequest is the accepted body for editing a comment.
+type UpdateCommentRequest struct {
+	Content string `json:"content" binding:"required,min=1,max=20000"`
 }

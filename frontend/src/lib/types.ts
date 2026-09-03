@@ -76,3 +76,39 @@ export const PRIORITY_LABEL: Record<FeaturePriority, string> = {
   medium: 'Medium',
   high: 'High',
 }
+
+export interface PullRequestRef {
+  id: number
+  task_id: number
+  url: string
+  title: string
+  branch: string
+  status: string
+  tested: boolean
+  approved: boolean
+}
+
+export interface Comment {
+  id: number
+  task_id: number
+  attachment_id?: number
+  content: string
+  author?: User
+  created_at: string
+  updated_at: string
+}
+
+export interface Task {
+  id: number
+  feature_id: number
+  task_name: string
+  task_type: string
+  description: string
+  /** Derived, not stored: true once a pull request is tested and approved. */
+  done: boolean
+  comment_count: number
+  pull_requests: PullRequestRef[]
+  comments?: Comment[]
+  created_at: string
+  updated_at: string
+}
