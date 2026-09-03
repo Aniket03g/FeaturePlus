@@ -11,3 +11,7 @@ logs/
 
 # Compiled binaries
 backend/*.exe
+
+# Frontend
+frontend/node_modules/
+frontend/.vite/

@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  The palette is defined once, in HSL channels, and redefined for dark mode.
+  Names describe role rather than colour, so a component never has to know
+  which theme it is in.
+*/
+@layer base {
+  :root {
+    --bg: 220 20% 97%;
+    --surface: 0 0% 100%;
+    --raised: 220 20% 99%;
+    --border: 220 13% 89%;
+
+    --ink: 222 22% 14%;
+    --muted: 220 9% 43%;
+    --faint: 220 9% 60%;
+
+    --accent: 243 75% 59%;
+    --accent-hover: 244 65% 52%;
+    --accent-soft: 243 100% 96%;
+    --accent-ink: 0 0% 100%;
+
+    --success: 160 84% 32%;
+    --success-soft: 152 76% 94%;
+    --warning: 35 92% 45%;
+    --warning-soft: 48 96% 91%;
+    --danger: 0 72% 51%;
+    --danger-soft: 0 93% 96%;
+  }
+
+  .dark {
+    --bg: 224 24% 8%;
+    --surface: 224 20% 11%;
+    --raised: 223 18% 14%;
+    --border: 220 14% 20%;
+
+    --ink: 220 20% 94%;
+    --muted: 220 10% 64%;
+    --faint: 220 9% 48%;
+
+    --accent: 243 80% 68%;
+    --accent-hover: 243 85% 74%;
+    --accent-soft: 243 40% 20%;
+    --accent-ink: 224 30% 10%;
+
+    --success: 158 64% 48%;
+    --success-soft: 160 45% 17%;
+    --warning: 38 92% 58%;
+    --warning-soft: 33 45% 18%;
+    --danger: 0 84% 65%;
+    --danger-soft: 0 40% 20%;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    @apply bg-bg text-ink font-sans antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* A visible, consistent focus ring everywhere. This matters more in a
+     desktop window than a browser tab, where there is no address bar to
+     fall back to for orientation. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/60 ring-offset-2 ring-offset-bg;
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 6px;
+    border: 2px solid hsl(var(--bg));
+  }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--faint)); }
+}

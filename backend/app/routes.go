@@ -5,8 +5,10 @@ import (
 
 	v1 "github.com/FeaturePlus/backend/api/v1"
 	"github.com/FeaturePlus/backend/handlers"
+	"github.com/FeaturePlus/backend/internal/log"
 	"github.com/FeaturePlus/backend/middleware"
 	"github.com/FeaturePlus/backend/routes"
+	"github.com/FeaturePlus/backend/web"
 	"github.com/gin-gonic/gin"
 )
 
@@ -31,6 +33,19 @@ func registerRoutes(router *gin.Engine, d *dependencies, cfg *Config) {
 	registerWebRoutes(router, d)
 	registerFragmentRoutes(router, d)
 	registerMiscRoutes(router, d, cfg)
+
+	// The React frontend, served from inside the binary at /app. It runs
+	// alongside the htmx site rather than replacing it, so both are
+	// available while screens are migrated one at a time.
+	if web.Available() {
+		if err := web.Mount(router); err != nil {
+			log.WithError(err).Warn("Could not mount the frontend")
+		} else {
+			log.WithField("path", web.MountPath).Info("Frontend mounted")
+		}
+	} else {
+		log.Warn("No frontend build found - run `npm run build` in frontend/")
+	}
 }
 
 // registerAPIRoutes registers the JSON API under /api.

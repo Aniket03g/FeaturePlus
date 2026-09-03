@@ -25,6 +25,9 @@ func Register(router *gin.Engine, db *gorm.DB) {
 		api.OK(c, gin.H{"status": "ok", "version": "v1"})
 	})
 
+	// Public: signing in cannot require being signed in.
+	registerSessionRoutes(v1, db)
+
 	authed := v1.Group("", requireAuth(db))
 
 	authed.GET("/me", meHandler(db))
