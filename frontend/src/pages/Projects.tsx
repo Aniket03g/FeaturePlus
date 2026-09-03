@@ -15,7 +15,13 @@ import { percent, plural } from '@/lib/utils'
  * page state live in the URL-free component state for now, and each change
  * refetches through React Query's cache rather than refetching blindly.
  */
-export function Projects({ search }: { search: string }) {
+export function Projects({
+  search,
+  onOpenProject,
+}: {
+  search: string
+  onOpenProject: (id: number) => void
+}) {
   const [page, setPage] = useState(1)
 
   const { data, isLoading, error, isFetching } = useQuery({
@@ -79,7 +85,11 @@ export function Projects({ search }: { search: string }) {
       <div className={isFetching ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {projects.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onOpen={() => onOpenProject(project.id)}
+            />
           ))}
         </div>
       </div>
@@ -115,14 +125,25 @@ export function Projects({ search }: { search: string }) {
   )
 }
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({ project, onOpen }: { project: Project; onOpen: () => void }) {
   const stats = project.stats
   const features = stats?.feature_count ?? 0
   const done = stats?.completed_features ?? 0
   const stack = typeof project.config?.tech_stack === 'string' ? project.config.tech_stack : null
 
   return (
-    <Card className="transition-colors hover:border-accent/40">
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onOpen()
+        }
+      }}
+      className="cursor-pointer transition-colors hover:border-accent/40"
+    >
       <CardBody className="space-y-3">
         <div className="flex items-start justify-between gap-2">
           <h3 className="truncate text-sm font-medium text-ink">{project.name}</h3>

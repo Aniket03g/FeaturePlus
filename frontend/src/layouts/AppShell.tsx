@@ -66,13 +66,12 @@ const NAV: { heading: string; items: NavItem[] }[] = [
 interface AppShellProps {
   active: string
   onNavigate: (id: string) => void
-  title: string
-  subtitle?: string
+  title: ReactNode
   actions?: ReactNode
   children: ReactNode
 }
 
-export function AppShell({ active, onNavigate, title, subtitle, actions, children }: AppShellProps) {
+export function AppShell({ active, onNavigate, title, actions, children }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const { user, signOut } = useAuth()
 
@@ -138,7 +137,6 @@ export function AppShell({ active, onNavigate, title, subtitle, actions, childre
         <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-surface px-5">
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-semibold text-ink">{title}</h1>
-            {subtitle && <p className="truncate text-xs text-muted">{subtitle}</p>}
           </div>
 
           <div className="flex items-center gap-2">

@@ -1,47 +1,100 @@
 import { useState } from 'react'
+import { Plus } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
+import { useRouter } from '@/lib/router'
+import { useProject } from '@/lib/queries'
 import { AppShell, SearchInput } from '@/layouts/AppShell'
+import { Button } from '@/components/ui/button'
 import { Login, AuthLoading } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
 import { Projects } from '@/pages/Projects'
+import { ProjectDetail } from '@/pages/ProjectDetail'
+import { FeatureDetail } from '@/pages/FeatureDetail'
+import { NewProjectDialog } from '@/pages/NewProjectDialog'
 
-/**
- * Screen selection is local state for now. Phase 3 introduces TanStack Router,
- * at which point this becomes a route tree; keeping it simple until then means
- * the routing decisions are made once, against real screens, rather than
- * guessed at now.
- */
 export function App() {
   const { user, isLoading } = useAuth()
-  const [screen, setScreen] = useState('dashboard')
+  const { route, navigate } = useRouter()
   const [search, setSearch] = useState('')
+  const [creatingProject, setCreatingProject] = useState(false)
 
   if (isLoading) return <AuthLoading />
   if (!user) return <Login />
 
-  const titles: Record<string, { title: string; subtitle?: string }> = {
-    dashboard: { title: 'Dashboard', subtitle: 'Everything across your projects' },
-    projects: { title: 'Projects' },
-  }
-  const heading = titles[screen] ?? { title: screen }
+  // The sidebar highlights the section a route belongs to, so a feature page
+  // still shows Projects as current rather than nothing at all.
+  const section = route.name === 'dashboard' ? 'dashboard' : 'projects'
 
   return (
     <AppShell
-      active={screen}
+      active={section}
       onNavigate={(id) => {
-        setScreen(id)
         setSearch('')
+        navigate(id === 'dashboard' ? { name: 'dashboard' } : { name: 'projects' })
       }}
-      title={heading.title}
-      subtitle={heading.subtitle}
+      title={<Title />}
       actions={
-        screen === 'projects' ? (
-          <SearchInput value={search} onChange={setSearch} placeholder="Search projects…" />
+        route.name === 'projects' ? (
+          <>
+            <SearchInput value={search} onChange={setSearch} placeholder="Search projects…" />
+            <Button size="sm" onClick={() => setCreatingProject(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              New project
+            </Button>
+          </>
         ) : null
       }
     >
-      {screen === 'dashboard' && <Dashboard onOpenProject={() => setScreen('projects')} />}
-      {screen === 'projects' && <Projects search={search} />}
+      {route.name === 'dashboard' && (
+        <Dashboard onOpenProject={(projectId) => navigate({ name: 'project', projectId })} />
+      )}
+      {route.name === 'projects' && (
+        <Projects
+          search={search}
+          onOpenProject={(projectId) => navigate({ name: 'project', projectId })}
+        />
+      )}
+      {route.name === 'project' && <ProjectDetail projectId={route.projectId} />}
+      {route.name === 'feature' && (
+        <FeatureDetail projectId={route.projectId} featureId={route.featureId} />
+      )}
+
+      {creatingProject && (
+        <NewProjectDialog
+          onClose={() => setCreatingProject(false)}
+          onCreated={(projectId) => {
+            setCreatingProject(false)
+            navigate({ name: 'project', projectId })
+          }}
+        />
+      )}
     </AppShell>
   )
+}
+
+/**
+ * The heading follows the route. A project or feature page names the project
+ * it belongs to, which needs the loaded record, so this is its own component
+ * rather than a string computed in App.
+ */
+function Title() {
+  const { route } = useRouter()
+  const projectId = route.name === 'project' || route.name === 'feature' ? route.projectId : 0
+  const project = useProject(projectId)
+
+  switch (route.name) {
+    case 'dashboard':
+      return (
+        <span>
+          Dashboard
+          <span className="ml-2 font-normal text-muted">Everything across your projects</span>
+        </span>
+      )
+    case 'projects':
+      return <span>Projects</span>
+    case 'project':
+      return <span>{project.data?.name ?? 'Project'}</span>
+    case 'feature':
+      return <span>{project.data?.name ?? 'Feature'}</span>
+  }
 }

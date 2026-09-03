@@ -33,6 +33,7 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	authed.GET("/me", meHandler(db))
 
 	NewProjectsHandler(repositories.NewProjectRepository(db), db).Register(authed)
+	NewFeaturesHandler(db).Register(authed)
 
 	registerNotFound(router)
 }

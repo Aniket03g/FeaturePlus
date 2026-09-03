@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ApiError } from '@/lib/api'
 import { AuthProvider } from '@/lib/auth'
 import { ThemeProvider } from '@/lib/theme'
+import { RouterProvider } from '@/lib/router'
 import { App } from './App'
 import './index.css'
 
@@ -30,7 +31,9 @@ createRoot(container).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
-          <App />
+          <RouterProvider>
+            <App />
+          </RouterProvider>
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

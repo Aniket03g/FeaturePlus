@@ -151,3 +151,135 @@ func (r UpdateProjectRequest) Apply(p *models.Project) {
 		p.Config = models.JSONB(*r.Config)
 	}
 }
+
+// FeatureTaskCounts summarises the tasks under a feature.
+type FeatureTaskCounts struct {
+	Total     int `json:"total"`
+	Completed int `json:"completed"`
+}
+
+// TagCount is a tag and how many features carry it.
+type TagCount struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// FeatureDTO is a feature as the API presents one.
+type FeatureDTO struct {
+	ID              uint   `json:"id"`
+	ProjectID       int    `json:"project_id"`
+	ParentFeatureID *uint  `json:"parent_feature_id"`
+	ReleaseID       *uint  `json:"release_id"`
+	Title           string `json:"title"`
+	Description     string `json:"description"`
+	Category        string `json:"category"`
+	Status          string `json:"status"`
+	Priority        string `json:"priority"`
+	AssigneeID      uint   `json:"assignee_id"`
+
+	Tags  []string           `json:"tags"`
+	Tasks *FeatureTaskCounts `json:"tasks,omitempty"`
+
+	// SubFeatures is filled only on a detail response; a list would otherwise
+	// carry the whole tree for every row.
+	SubFeatures []FeatureDTO `json:"sub_features,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// NewFeatureDTO converts a feature model for output.
+func NewFeatureDTO(f models.Feature, tags []string, tasks *FeatureTaskCounts) FeatureDTO {
+	return FeatureDTO{
+		ID:              f.ID,
+		ProjectID:       f.ProjectID,
+		ParentFeatureID: f.ParentFeatureID,
+		ReleaseID:       f.ReleaseID,
+		Title:           f.Title,
+		Description:     f.Description,
+		Category:        f.Category,
+		Status:          string(f.Status),
+		Priority:        string(f.Priority),
+		AssigneeID:      f.AssigneeID,
+		Tags:            emptyIfNil(tags),
+		Tasks:           tasks,
+		CreatedAt:       f.CreatedAt,
+		UpdatedAt:       f.UpdatedAt,
+	}
+}
+
+// NewFeatureDTOs converts a slice, always returning a non-nil result.
+func NewFeatureDTOs(
+	features []models.Feature,
+	tags map[uint][]string,
+	tasks map[uint]*FeatureTaskCounts,
+) []FeatureDTO {
+	out := make([]FeatureDTO, 0, len(features))
+	for _, f := range features {
+		out = append(out, NewFeatureDTO(f, tags[f.ID], tasks[f.ID]))
+	}
+	return out
+}
+
+// CreateFeatureRequest is the accepted body for creating a feature. Status,
+// priority and category fall back to the model's defaults when omitted.
+type CreateFeatureRequest struct {
+	Title           string   `json:"title" binding:"required,min=1,max=255"`
+	Description     string   `json:"description" binding:"max=20000"`
+	Category        string   `json:"category" binding:"max=50"`
+	Status          string   `json:"status" binding:"omitempty,oneof=todo in_progress done"`
+	Priority        string   `json:"priority" binding:"omitempty,oneof=low medium high"`
+	ParentFeatureID *uint    `json:"parent_feature_id"`
+	AssigneeID      *uint    `json:"assignee_id"`
+	Tags            []string `json:"tags"`
+}
+
+// UpdateFeatureRequest is the accepted body for a partial update. Pointers
+// distinguish "not sent" from "set to empty", so omitting a field leaves it
+// alone while sending "" clears it.
+type UpdateFeatureRequest struct {
+	Title           *string `json:"title" binding:"omitempty,min=1,max=255"`
+	Description     *string `json:"description" binding:"omitempty,max=20000"`
+	Category        *string `json:"category" binding:"omitempty,max=50"`
+	Status          *string `json:"status" binding:"omitempty,oneof=todo in_progress done"`
+	Priority        *string `json:"priority" binding:"omitempty,oneof=low medium high"`
+	ParentFeatureID *uint   `json:"parent_feature_id"`
+	AssigneeID      *uint   `json:"assignee_id"`
+}
+
+// Apply copies the fields that were present onto a feature model.
+func (r UpdateFeatureRequest) Apply(f *models.Feature) {
+	if r.Title != nil {
+		f.Title = *r.Title
+	}
+	if r.Description != nil {
+		f.Description = *r.Description
+	}
+	if r.Category != nil {
+		f.Category = *r.Category
+	}
+	if r.Status != nil {
+		f.Status = models.FeatureStatus(*r.Status)
+	}
+	if r.Priority != nil {
+		f.Priority = models.FeaturePriority(*r.Priority)
+	}
+	if r.ParentFeatureID != nil {
+		f.ParentFeatureID = r.ParentFeatureID
+	}
+	if r.AssigneeID != nil {
+		f.AssigneeID = *r.AssigneeID
+	}
+}
+
+// ReplaceTagsRequest sets a feature's tags to exactly this list.
+type ReplaceTagsRequest struct {
+	Tags []string `json:"tags"`
+}
+
+func emptyIfNil(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
+}

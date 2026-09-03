@@ -123,6 +123,10 @@ export async function patch<T>(path: string, body: unknown): Promise<T> {
   return (await request<T>(path, { method: 'PATCH', body })).data
 }
 
+export async function request_put<T>(path: string, body: unknown): Promise<T> {
+  return (await request<T>(path, { method: 'PUT', body })).data
+}
+
 export async function del(path: string): Promise<void> {
   await request<void>(path, { method: 'DELETE' })
 }
