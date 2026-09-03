@@ -181,6 +181,26 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                 </div>
               ))}
             </div>
+          ) : features.isError ? (
+            <div className="px-4 py-12 text-center">
+              <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-lg bg-danger-soft text-danger">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-medium text-ink">Could not load features</p>
+              <p className="mx-auto mt-1 max-w-md text-xs text-muted">
+                {features.error instanceof ApiError
+                  ? features.error.message
+                  : 'The server could not be reached.'}
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="mt-3"
+                onClick={() => features.refetch()}
+              >
+                Try again
+              </Button>
+            </div>
           ) : items.length === 0 ? (
             <div className="px-4 py-14 text-center">
               <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-lg bg-raised text-faint">

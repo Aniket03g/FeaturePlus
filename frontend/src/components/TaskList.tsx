@@ -92,6 +92,18 @@ export function TaskList({
               </div>
             ))}
           </div>
+        ) : tasks.isError ? (
+          <div className="px-4 py-10 text-center">
+            <p className="text-sm font-medium text-ink">Could not load tasks</p>
+            <p className="mt-1 text-xs text-muted">
+              {tasks.error instanceof ApiError
+                ? tasks.error.message
+                : 'The server could not be reached.'}
+            </p>
+            <Button variant="secondary" size="sm" className="mt-3" onClick={() => tasks.refetch()}>
+              Try again
+            </Button>
+          </div>
         ) : items.length === 0 ? (
           <div className="px-4 py-10 text-center">
             <p className="text-sm text-muted">
