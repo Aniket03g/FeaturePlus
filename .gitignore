@@ -15,3 +15,6 @@ backend/*.exe
 # Frontend
 frontend/node_modules/
 frontend/.vite/
+
+# Scratch folder, never committed
+dontcommit/
