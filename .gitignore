@@ -18,3 +18,11 @@ frontend/.vite/
 
 # Scratch folder, never committed
 dontcommit/
+
+# Desktop build output. The exe and installer are produced by
+# backend/build/build-desktop.ps1 and are release artefacts, not source.
+backend/build/bin/
+backend/build/dist/
+
+# Feature maps produced by tools/map. Drafts about a repo, not source.
+tools/map/out/

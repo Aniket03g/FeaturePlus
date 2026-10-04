@@ -2,6 +2,7 @@ package v1
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/FeaturePlus/backend/api"
@@ -43,6 +44,7 @@ func registerSessionRoutes(g *gin.RouterGroup, db *gorm.DB) {
 	auth := g.Group("/auth")
 	{
 		auth.POST("/login", loginHandler(db))
+		auth.POST("/signup", signupHandler(db))
 		auth.POST("/logout", logoutHandler())
 	}
 }
@@ -59,7 +61,7 @@ func loginHandler(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		var user models.User
-		lookupErr := db.Where("email = ?", strings.TrimSpace(req.Email)).First(&user).Error
+		lookupErr := db.Where("LOWER(email) = ?", strings.ToLower(strings.TrimSpace(req.Email))).First(&user).Error
 
 		// A missing account, an account with no password, and a wrong password
 		// all answer identically. Distinguishing them would let anyone probe
@@ -95,9 +97,21 @@ func logoutHandler() gin.HandlerFunc {
 // read the token, and SameSite=Lax so it is not sent on cross-site requests
 // while still surviving ordinary navigation.
 //
-// Secure is left off because the desktop build and local development both run
-// over plain http on loopback; a Secure cookie would simply never be stored.
+// Secure is set when the request arrived over HTTPS, directly or through a
+// reverse proxy that says so, so a deployed server never sends the session in
+// the clear. It stays off over plain http, which is how the desktop build and
+// local development run; a Secure cookie there would never be stored.
 func setSessionCookie(c *gin.Context, value string, maxAge int) {
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(sessionCookie, value, maxAge, "/", "", false, true)
+	c.SetCookie(sessionCookie, value, maxAge, "/", "", overHTTPS(c), true)
+}
+
+// overHTTPS reports whether the browser reached the server over HTTPS.
+// FP_SECURE_COOKIES=true forces it, for a proxy that does not send
+// X-Forwarded-Proto.
+func overHTTPS(c *gin.Context) bool {
+	if c.Request.TLS != nil || os.Getenv("FP_SECURE_COOKIES") == "true" {
+		return true
+	}
+	return strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
 }

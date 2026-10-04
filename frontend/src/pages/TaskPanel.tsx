@@ -5,6 +5,7 @@ import {
   ExternalLink,
   Loader2,
   Pencil,
+  Plus,
   Send,
   Trash2,
   X,
@@ -12,6 +13,7 @@ import {
 import {
   useAddComment,
   useComments,
+  useCreatePullRequest,
   useDeleteComment,
   useTask,
   useUpdateTask,
@@ -21,6 +23,7 @@ import { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Attachments } from '@/components/Attachments'
 import { cn } from '@/lib/utils'
 import type { Comment } from '@/lib/types'
 
@@ -47,6 +50,7 @@ export function TaskPanel({
   const update = useUpdateTask(featureId, projectId)
 
   const [editing, setEditing] = useState(false)
+  const [addingPR, setAddingPR] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [error, setError] = useState('')
@@ -183,9 +187,31 @@ export function TaskPanel({
               )}
 
               <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-faint">
-                  Pull requests
-                </h3>
+                <div className="mb-2 flex items-center gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-faint">
+                    Pull requests
+                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto h-7"
+                    onClick={() => setAddingPR((open) => !open)}
+                  >
+                    <Plus className="h-3 w-3" />
+                    {addingPR ? 'Cancel' : 'Add'}
+                  </Button>
+                </div>
+
+                {addingPR && (
+                  <div className="mb-2">
+                    <NewPullRequestForm
+                      taskId={taskId}
+                      projectId={projectId}
+                      onDone={() => setAddingPR(false)}
+                    />
+                  </div>
+                )}
+
                 {data.pull_requests.length === 0 ? (
                   <p className="text-xs text-faint">
                     None yet. A task becomes complete once one is tested and approved.
@@ -210,6 +236,8 @@ export function TaskPanel({
                   </ul>
                 )}
               </section>
+
+              <Attachments taskId={taskId} />
 
               <section>
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-faint">
@@ -328,6 +356,99 @@ function CommentThread({
         </div>
       </form>
     </div>
+  )
+}
+
+/**
+ * Raise a pull request against this task.
+ *
+ * It lives here rather than on the pull request queue because a pull request
+ * belongs to a task — the API takes the feature from the task rather than the
+ * request body, so there is no way to file one without first saying which task
+ * it is for.
+ */
+function NewPullRequestForm({
+  taskId,
+  projectId,
+  onDone,
+}: {
+  taskId: number
+  projectId: number
+  onDone: () => void
+}) {
+  const create = useCreatePullRequest(projectId, taskId)
+
+  const [title, setTitle] = useState('')
+  const [url, setUrl] = useState('')
+  const [branch, setBranch] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [formError, setFormError] = useState('')
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setFieldErrors({})
+    setFormError('')
+
+    try {
+      await create.mutateAsync({ title, url, branch })
+      onDone()
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setFieldErrors(err.fields)
+        if (Object.keys(err.fields).length === 0) setFormError(err.message)
+      } else {
+        setFormError('Could not reach the server')
+      }
+    }
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="space-y-2.5 rounded-md border border-border bg-raised/50 p-3"
+      noValidate
+    >
+      {formError && (
+        <p role="alert" className="text-xs text-danger">
+          {formError}
+        </p>
+      )}
+
+      <Input
+        label="Title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        error={fieldErrors.title}
+        placeholder="What does this change?"
+        required
+      />
+      <Input
+        label="URL"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        error={fieldErrors.url}
+        placeholder="https://github.com/owner/repo/pull/1"
+        required
+      />
+      <Input
+        label="Branch"
+        value={branch}
+        onChange={(e) => setBranch(e.target.value)}
+        error={fieldErrors.branch}
+        placeholder="feat/the-thing"
+        className="font-mono"
+        required
+      />
+
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="secondary" size="sm" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit" size="sm" loading={create.isPending}>
+          Add pull request
+        </Button>
+      </div>
+    </form>
   )
 }
 

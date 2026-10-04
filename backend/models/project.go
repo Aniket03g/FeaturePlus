@@ -31,12 +31,19 @@ func (j JSONB) Value() (driver.Value, error) {
 }
 
 type Project struct {
-	ID          int       `gorm:"primaryKey" json:"id"`
-	Name        string    `gorm:"size:255;not null" json:"name"`
-	Description string    `gorm:"type:text" json:"description"`
-	OwnerID     int       `gorm:"not null;index" json:"owner_id"` // Foreign key
-	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID          int    `gorm:"primaryKey" json:"id"`
+	Name        string `gorm:"size:255;not null" json:"name"`
+	Description string `gorm:"type:text" json:"description"`
+	// Brief is the owner-authored, deliberately shareable summary of the project
+	// handed to scoped collaborators: what the app is, its stack, its conventions.
+	// Scoping hides code, not purpose — a collaborator still needs to know what
+	// they are building. Keeping this separate from Description makes sharing an
+	// explicit decision rather than an accident. Falls back to Description when
+	// empty.
+	Brief     string    `gorm:"type:text" json:"brief"`
+	OwnerID   int       `gorm:"not null;index" json:"owner_id"` // Foreign key
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 
 	// Association to User model (already in your models package)
 	Owner User `gorm:"foreignKey:OwnerID" json:"owner"`
@@ -51,7 +58,7 @@ func (p *Project) BeforeCreate(tx *gorm.DB) (err error) {
 	if p.Config == nil {
 		p.Config = JSONB{}
 	}
-	
+
 	// Only set defaults for fields that don't exist and are truly required
 	// Don't force default values if Config is partially populated
 	if len(p.Config) == 0 {

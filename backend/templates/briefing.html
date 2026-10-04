@@ -1,0 +1,94 @@
+{{ $b := .Briefing }}
+<div id="briefing" class="bg-white rounded-lg shadow-sm p-8 mb-6">
+
+  <div class="flex items-start justify-between mb-6">
+    <div>
+      <h2 class="text-2xl font-semibold text-gray-900">Your briefing</h2>
+      <p class="text-sm text-gray-500 mt-1">
+        {{ $b.Project.Name }}{{ if $b.Project.TechStack }} · <span class="font-mono">{{ $b.Project.TechStack }}</span>{{ end }}
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button"
+              onclick="var b=this;navigator.clipboard.writeText(document.getElementById('briefing-md').textContent).then(function(){var t=b.textContent;b.textContent='Copied';setTimeout(function(){b.textContent=t;},1500);})"
+              class="px-3 py-2 text-sm font-medium rounded-md bg-gray-900 text-white hover:bg-gray-700">
+        Copy as Markdown
+      </button>
+      <a href="/api/projects/{{ .ProjectID }}/briefing?format=md"
+         class="px-3 py-2 text-sm font-medium rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">
+        Raw
+      </a>
+    </div>
+  </div>
+
+  {{/* The Markdown rendering is carried in the page so "copy for your AI
+       assistant" needs no extra request. Held in a hidden <pre> rather than a
+       <script> block so html/template escapes it as text, not as JavaScript. */}}
+  <pre id="briefing-md" class="hidden">{{ .Markdown }}</pre>
+
+  {{ if $b.Project.Brief }}
+  <section class="mb-8">
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-2">About this project</h3>
+    <p class="text-gray-800 leading-relaxed">{{ $b.Project.Brief }}</p>
+  </section>
+  {{ end }}
+
+  <section class="mb-8">
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-3">What you are building</h3>
+    {{ range $b.YourFeatures }}
+    <div class="border border-emerald-200 bg-emerald-50 rounded-lg p-5 mb-3">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-600 text-white">owner</span>
+        <h4 class="text-lg font-semibold text-gray-900">{{ .Title }}</h4>
+      </div>
+      {{ if .Description }}<p class="text-gray-700 mb-3">{{ .Description }}</p>{{ end }}
+      {{ if .Tasks }}
+      <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
+        {{ range .Tasks }}
+        <li><span class="font-medium">{{ .Name }}</span>{{ if .Type }} <span class="text-gray-500">({{ .Type }})</span>{{ end }}{{ if .Description }} — {{ .Description }}{{ end }}</li>
+        {{ end }}
+      </ul>
+      {{ else }}
+      <p class="text-sm text-gray-500 italic">No tasks planned yet.</p>
+      {{ end }}
+    </div>
+    {{ else }}
+    <p class="text-sm text-gray-500 italic">No features assigned to you.</p>
+    {{ end }}
+  </section>
+
+  <section class="mb-8">
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-3">What you build against</h3>
+    {{ range $b.Dependencies }}
+    <div class="border border-blue-200 bg-blue-50 rounded-lg p-5 mb-3">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-600 text-white">contract</span>
+        <h4 class="text-lg font-semibold text-gray-900">{{ .Title }}</h4>
+      </div>
+      {{ if .Description }}<p class="text-gray-700 mb-4">{{ .Description }}</p>{{ end }}
+
+      {{ range .Files }}
+      <div class="mb-4">
+        <p class="font-mono text-sm text-gray-800 mb-1">{{ .Path }}</p>
+        {{ if .Unavailable }}
+        <p class="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">{{ .Unavailable }}</p>
+        {{ else }}
+          {{ if .BehaviorNote }}<p class="text-sm text-gray-600 italic mb-2">{{ .BehaviorNote }}</p>{{ end }}
+          <pre class="bg-gray-900 text-gray-100 text-xs rounded-lg p-4 overflow-x-auto"><code>{{ .Contract }}</code></pre>
+          {{ if .Mock }}
+          <details class="mt-2">
+            <summary class="text-sm text-blue-700 cursor-pointer">Compilable mock — <span class="font-mono">{{ .MockFilename }}</span></summary>
+            <pre class="bg-gray-900 text-gray-100 text-xs rounded-lg p-4 overflow-x-auto mt-2"><code>{{ .Mock }}</code></pre>
+          </details>
+          {{ end }}
+        {{ end }}
+      </div>
+      {{ end }}
+    </div>
+    {{ else }}
+    <p class="text-sm text-gray-500 italic">Your feature has no dependencies.</p>
+    {{ end }}
+  </section>
+
+  <p class="text-xs text-gray-500 border-t border-gray-200 pt-4">{{ $b.Rules }}</p>
+</div>

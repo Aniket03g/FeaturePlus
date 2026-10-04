@@ -17,6 +17,7 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
 import { TaskList } from '@/components/TaskList'
+import { FeatureAccess } from '@/components/FeatureAccess'
 import { TaskPanel } from './TaskPanel'
 import { cn } from '@/lib/utils'
 import {
@@ -280,6 +281,12 @@ export function FeatureDetail({
         </div>
 
         <div className="space-y-4">
+          <FeatureAccess
+            featureId={featureId}
+            projectId={projectId}
+            ownerId={project.data?.owner_id ?? 0}
+          />
+
           <Card>
             <CardHeader>
               <CardTitle>Status</CardTitle>

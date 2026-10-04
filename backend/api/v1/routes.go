@@ -5,18 +5,48 @@ import (
 	"strings"
 
 	"github.com/FeaturePlus/backend/api"
+	"github.com/FeaturePlus/backend/internal/log"
 	"github.com/FeaturePlus/backend/models"
 	"github.com/FeaturePlus/backend/repositories"
+	"github.com/FeaturePlus/backend/services"
 	"github.com/gin-gonic/gin"
+	"github.com/jilio/sqlitefs"
 	"gorm.io/gorm"
 )
+
+// Deps carries what the API needs beyond the database.
+//
+// Every field is optional. A nil Files disables attachment upload and
+// download, and an empty directory leaves the corresponding list empty — in
+// each case the routes still answer, saying there is nothing there. The
+// alternative, failing at startup because an optional directory is missing,
+// would take the whole API down over a feature nobody was using.
+type Deps struct {
+	// Files is where task attachments are stored — inside the database file
+	// itself, which is what lets a project be one file you can copy.
+	Files *sqlitefs.SQLiteFS
+
+	// TemplateDir holds templates.json. It ships with the application and is
+	// only read, which is why it is separate from ImportDir: on the desktop
+	// build the install directory may not be writable.
+	TemplateDir string
+
+	// ImportDir is where saved repository analyses are written and read.
+	ImportDir string
+
+	// Contracts is the application's configured contract service. It has to be
+	// passed in rather than built here: only the application knows the
+	// repository roots, and without them the service can serve stored
+	// contracts but cannot open a single real source file.
+	Contracts *services.ContractService
+}
 
 // Register mounts /api/v1 onto the router.
 //
 // Everything but the health check runs behind requireAuth, which accepts a JWT
 // from either the Authorization header or the token cookie and resolves the
 // caller's role. Only the health route is public.
-func Register(router *gin.Engine, db *gorm.DB) {
+func Register(router *gin.Engine, db *gorm.DB, deps Deps) {
 	v1 := router.Group("/api/v1")
 
 	// Public: lets a client check the API is reachable before authenticating,
@@ -36,8 +66,46 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	NewFeaturesHandler(db).Register(authed)
 	NewTasksHandler(db).Register(authed)
 	NewDependenciesHandler(db).Register(authed)
+	NewPlaygroundHandler(db).Register(authed)
+	NewReleasesHandler(db).Register(authed)
+	NewGitHubHandler(db).Register(authed)
+	NewPullRequestsHandler(db).Register(authed)
+
+	NewUsersHandler(db).Register(authed)
+	NewCodeHandler(db).Register(authed)
+	NewScopesHandler(db).Register(authed)
+	NewContractsHandler(db, deps.Contracts).Register(authed)
+	NewAttachmentsHandler(db, deps.Files).Register(authed)
+
+	templates := NewTemplatesHandler(db, loadTemplates(deps.TemplateDir))
+	templates.Register(authed)
+	NewImportsHandler(db, loadImports(deps.ImportDir), templates).Register(authed)
 
 	registerNotFound(router)
+}
+
+// loadTemplates opens the template catalogue, or returns nil when there is
+// none to open. A missing catalogue is a project without templates, not a
+// server that will not start.
+func loadTemplates(dataDir string) *repositories.TemplateRepository {
+	if dataDir == "" {
+		return nil
+	}
+
+	repo, err := repositories.NewTemplateRepository(dataDir)
+	if err != nil {
+		log.WithError(err).WithField("dir", dataDir).Warn("no template catalogue loaded")
+		return nil
+	}
+	return repo
+}
+
+// loadImports opens the directory saved repository analyses live in.
+func loadImports(dataDir string) *repositories.ImportRepository {
+	if dataDir == "" {
+		return nil
+	}
+	return repositories.NewImportRepository(dataDir)
 }
 
 // meHandler returns the authenticated user, which is how the frontend learns

@@ -275,6 +275,30 @@ func (r FSSourceReader) ReadSource(_ int, filePath string) ([]byte, error) {
 	return data, nil
 }
 
+// ProjectSourceReader routes each project to its own source root, so a single
+// FeaturePlus instance can serve contracts for code that lives in different
+// repositories. A project with an explicit root in Roots reads from there;
+// everything else falls back to Default. Confinement and path-traversal
+// rejection are inherited from the per-project FSSourceReader it delegates to.
+type ProjectSourceReader struct {
+	Roots   map[int]string // projectID -> absolute repo root
+	Default string         // root for projects with no explicit mapping
+}
+
+// ReadSource resolves the project's source root and reads the file from it,
+// rejecting any path that escapes that root. Projects without a mapping and no
+// Default resolve to ErrSourceUnavailable.
+func (r ProjectSourceReader) ReadSource(projectID int, filePath string) ([]byte, error) {
+	base := r.Default
+	if root, ok := r.Roots[projectID]; ok && root != "" {
+		base = root
+	}
+	if base == "" {
+		return nil, ErrSourceUnavailable
+	}
+	return FSSourceReader{BaseDir: base}.ReadSource(projectID, filePath)
+}
+
 // MockFor returns a generated mock package for a dependency file: the stripped
 // contract turned into a compilable fake (synthetic returns + sentinel-error
 // dispatch). A contract-scope collaborator drops this into their build in place

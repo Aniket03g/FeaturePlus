@@ -23,9 +23,14 @@ import {
 export function NewFeatureDialog({
   projectId,
   onClose,
+  parentFeatureId,
+  parentTitle,
 }: {
   projectId: number
   onClose: () => void
+  /** Create the feature inside another one, rather than at the top level. */
+  parentFeatureId?: number
+  parentTitle?: string
 }) {
   const create = useCreateFeature(projectId)
 
@@ -73,7 +78,14 @@ export function NewFeatureDialog({
       .filter(Boolean)
 
     try {
-      await create.mutateAsync({ title, description, status, priority, tags })
+      await create.mutateAsync({
+        title,
+        description,
+        status,
+        priority,
+        tags,
+        ...(parentFeatureId ? { parent_feature_id: parentFeatureId } : {}),
+      })
       onClose()
     } catch (error) {
       if (error instanceof ApiError) {
@@ -100,7 +112,7 @@ export function NewFeatureDialog({
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 id="new-feature-title" className="text-sm font-semibold text-ink">
-            New feature
+            {parentTitle ? `New feature in ${parentTitle}` : 'New feature'}
           </h2>
           <Button
             variant="ghost"

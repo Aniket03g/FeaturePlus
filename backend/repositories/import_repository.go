@@ -87,9 +87,13 @@ func (r *ImportRepository) ListAvailableImports() ([]string, error) {
 	var imports []string
 	for _, file := range files {
 		if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
-			// Remove .json extension
-			name := file.Name()[:len(file.Name())-4]
-			imports = append(imports, name)
+			// Remove the .json extension. This trimmed four characters rather
+			// than five, so every id kept a trailing dot — and since
+			// LoadImportTemplate appends ".json" again, every id this returned
+			// pointed at "name..json" and could not be loaded. The whole
+			// import-from-saved-analysis path was listing files it could never
+			// open.
+			imports = append(imports, strings.TrimSuffix(file.Name(), ".json"))
 		}
 	}
 	

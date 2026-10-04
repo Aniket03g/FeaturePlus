@@ -1,0 +1,83 @@
+# Answer key for msemakula/Career-Cloud, built 2026-08-19.
+#
+# Ground truth here does NOT need hand-reading, which is unusual and worth saying.
+# The repo is a job portal (see its README) built as four entity families, and it
+# names every file after the entity it implements: ApplicantResumeRepository.cs,
+# CompanyJobLogic.cs, SecurityRolePoco.cs. The key is therefore the file's own
+# stated subject - prefix Applicant/Company/Security/System - and everything else
+# is scaffolding shared by all four. That rule is mechanical and checkable, so the
+# key is not my opinion the way the Beatseek one is.
+#
+# One judgement call: CompanyJob* files (job postings) are counted under `company`
+# rather than split into a separate `job` feature. A reviewer could reasonably
+# split them; the repo's own naming does not.
+#
+# alias: login=security
+# alias: role=security
+# alias: code=reference
+# alias: system=reference
+file_path,feature
+CareerCloud.ADODataAccessLayer/ApplicantEducationRepository.cs,applicant
+CareerCloud.ADODataAccessLayer/ApplicantJobApplicationRepository.cs,applicant
+CareerCloud.ADODataAccessLayer/ApplicantProfileRepository.cs,applicant
+CareerCloud.ADODataAccessLayer/ApplicantResumeRepository.cs,applicant
+CareerCloud.ADODataAccessLayer/ApplicantSkillRepository.cs,applicant
+CareerCloud.ADODataAccessLayer/ApplicantWorkHistoryRepository.cs,applicant
+CareerCloud.ADODataAccessLayer/CompanyDescriptionRepository.cs,company
+CareerCloud.ADODataAccessLayer/CompanyJobDescriptionRepository.cs,company
+CareerCloud.ADODataAccessLayer/CompanyJobEducationRepository.cs,company
+CareerCloud.ADODataAccessLayer/CompanyJobRepository.cs,company
+CareerCloud.ADODataAccessLayer/CompanyJobSkillRepository.cs,company
+CareerCloud.ADODataAccessLayer/CompanyLocationRepository.cs,company
+CareerCloud.ADODataAccessLayer/CompanyProfileRepository.cs,company
+CareerCloud.ADODataAccessLayer/Properties/AssemblyInfo.cs,plumbing
+CareerCloud.ADODataAccessLayer/SecurityLoginRepository.cs,security
+CareerCloud.ADODataAccessLayer/SecurityLoginsLogRepository.cs,security
+CareerCloud.ADODataAccessLayer/SecurityLoginsRoleRepository.cs,security
+CareerCloud.ADODataAccessLayer/SecurityRoleRepository.cs,security
+CareerCloud.ADODataAccessLayer/SystemCountryCodeRepository.cs,reference
+CareerCloud.ADODataAccessLayer/SystemLanguageCodeRepository.cs,reference
+CareerCloud.BusinessLogicLayer/ApplicantEducationLogic.cs,applicant
+CareerCloud.BusinessLogicLayer/ApplicantJobApplicationLogic.cs,applicant
+CareerCloud.BusinessLogicLayer/ApplicantProfileLogic.cs,applicant
+CareerCloud.BusinessLogicLayer/ApplicantResumeLogic.cs,applicant
+CareerCloud.BusinessLogicLayer/ApplicantSkillLogic.cs,applicant
+CareerCloud.BusinessLogicLayer/ApplicantWorkHistoryLogic.cs,applicant
+CareerCloud.BusinessLogicLayer/BaseLogic.cs,plumbing
+CareerCloud.BusinessLogicLayer/CompanyDescriptionLogic.cs,company
+CareerCloud.BusinessLogicLayer/CompanyJobDescriptionLogic.cs,company
+CareerCloud.BusinessLogicLayer/CompanyJobEducationLogic.cs,company
+CareerCloud.BusinessLogicLayer/CompanyJobLogic.cs,company
+CareerCloud.BusinessLogicLayer/CompanyJobSkillLogic.cs,company
+CareerCloud.BusinessLogicLayer/CompanyLocationLogic.cs,company
+CareerCloud.BusinessLogicLayer/CompanyProfileLogic.cs,company
+CareerCloud.BusinessLogicLayer/SecurityLoginLogic.cs,security
+CareerCloud.BusinessLogicLayer/SecurityLoginsLogLogic.cs,security
+CareerCloud.BusinessLogicLayer/SecurityLoginsRoleLogic.cs,security
+CareerCloud.BusinessLogicLayer/SecurityRoleLogic.cs,security
+CareerCloud.BusinessLogicLayer/SystemCountryCodeLogic.cs,reference
+CareerCloud.BusinessLogicLayer/SystemLanguageCodeLogic.cs,reference
+CareerCloud.BusinessLogicLayer/ValidationException.cs,plumbing
+CareerCloud.DataAccessLayer/IDataRepository.cs,plumbing
+CareerCloud.EntityFrameworkDataAccess/CareerCloudContext.cs,plumbing
+CareerCloud.EntityFrameworkDataAccess/EFGenericRepository.cs,plumbing
+CareerCloud.Pocos/ApplicantEducationPoco.cs,applicant
+CareerCloud.Pocos/ApplicantJobApplicationPoco.cs,applicant
+CareerCloud.Pocos/ApplicantProfilePoco.cs,applicant
+CareerCloud.Pocos/ApplicantResumePoco.cs,applicant
+CareerCloud.Pocos/ApplicantSkillPoco.cs,applicant
+CareerCloud.Pocos/ApplicantWorkHistoryPoco.cs,applicant
+CareerCloud.Pocos/CompanyDescriptionPoco.cs,company
+CareerCloud.Pocos/CompanyJobDescriptionPoco.cs,company
+CareerCloud.Pocos/CompanyJobEducationPoco.cs,company
+CareerCloud.Pocos/CompanyJobPoco.cs,company
+CareerCloud.Pocos/CompanyJobSkillPoco.cs,company
+CareerCloud.Pocos/CompanyLocationPoco.cs,company
+CareerCloud.Pocos/CompanyProfilePoco.cs,company
+CareerCloud.Pocos/IPoco.cs,plumbing
+CareerCloud.Pocos/SecurityLoginPoco.cs,security
+CareerCloud.Pocos/SecurityLoginsLogPoco.cs,security
+CareerCloud.Pocos/SecurityLoginsRolePoco.cs,security
+CareerCloud.Pocos/SecurityRolePoco.cs,security
+CareerCloud.Pocos/SystemCountryCodePoco.cs,reference
+CareerCloud.Pocos/SystemLanguageCodePoco.cs,reference

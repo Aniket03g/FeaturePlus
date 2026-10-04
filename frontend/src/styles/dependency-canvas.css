@@ -1,0 +1,345 @@
+/*
+  The dependency canvas.
+
+  The canvas has a palette of its own rather than reusing the app's semantic
+  tokens. It is one dense picture — cards inside boundaries inside tiers, all
+  carrying meaning through colour — and the surface/raised/border scale the
+  rest of the app uses does not have enough steps to keep those layers apart.
+  The dark values are the design's; the light ones are their equivalents, so a
+  user on the light theme gets the same reading rather than a broken one.
+*/
+
+.dc {
+  --dc-canvas: 220 20% 97%;
+  --dc-grid: 222 15% 78%;
+  --dc-chrome: 0 0% 100%;
+
+  --dc-card: 0 0% 100%;
+  --dc-card-2: 220 20% 99%;
+  --dc-line: 220 13% 70%;
+  --dc-indep: 220 20% 98%;
+
+  /* The anchor of a branch: the card everything else inside it waits on. */
+  --dc-anchor: 243 60% 98%;
+  --dc-anchor-2: 243 50% 96%;
+
+  --dc-root: 243 70% 97%;
+  --dc-root-2: 243 60% 95%;
+
+  --dc-ink: 222 22% 14%;
+  --dc-ink-2: 222 20% 24%;
+  --dc-muted: 220 9% 43%;
+  --dc-faint: 220 9% 60%;
+
+  --dc-violet: 243 75% 59%;
+  --dc-violet-2: 244 55% 52%;
+  --dc-violet-3: 245 45% 42%;
+  --dc-violet-4: 246 45% 34%;
+
+  --dc-todo: 220 9% 55%;
+  --dc-doing: 35 92% 45%;
+  --dc-done: 160 84% 32%;
+  --dc-blocked: 0 72% 51%;
+}
+
+.dark .dc {
+  --dc-canvas: 240 17% 5%;
+  --dc-grid: 0 0% 100%;
+  --dc-chrome: 240 20% 6%;
+
+  --dc-card: 240 16% 10%;
+  --dc-card-2: 240 17% 8%;
+  --dc-line: 0 0% 100%;
+  --dc-indep: 240 17% 9%;
+
+  --dc-anchor: 240 24% 13%;
+  --dc-anchor-2: 240 26% 10%;
+
+  --dc-root: 249 33% 15%;
+  --dc-root-2: 250 36% 11%;
+
+  --dc-ink: 240 21% 95%;
+  --dc-ink-2: 240 30% 96%;
+  --dc-muted: 240 12% 70%;
+  --dc-faint: 240 10% 55%;
+
+  --dc-violet: 247 84% 69%;
+  --dc-violet-2: 249 100% 80%;
+  --dc-violet-3: 250 100% 87%;
+  --dc-violet-4: 249 100% 93%;
+
+  --dc-todo: 240 8% 58%;
+  --dc-doing: 41 87% 55%;
+  --dc-done: 156 57% 49%;
+  --dc-blocked: 357 86% 64%;
+}
+
+/* --- Surfaces ------------------------------------------------------------ */
+
+.dc-canvas {
+  position: relative;
+  background-color: hsl(var(--dc-canvas));
+  background-image: radial-gradient(hsl(var(--dc-grid) / 0.075) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+
+.dc-chrome {
+  background: hsl(var(--dc-chrome));
+  border-color: hsl(var(--dc-line) / 0.12);
+}
+
+.dc-panel {
+  background: hsl(var(--dc-chrome));
+  border-color: hsl(var(--dc-line) / 0.14);
+  box-shadow: -40px 0 90px -50px rgb(0 0 0 / 0.7);
+}
+
+.dc-scrim {
+  background: hsl(var(--dc-canvas) / 0.74);
+}
+
+/* --- Cards --------------------------------------------------------------- */
+
+.dc-card,
+.dc-card-root,
+.dc-card-anchor,
+.dc-card-indep {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-radius: 12px;
+  padding: 11px 15px;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid hsl(var(--dc-line) / 0.14);
+  background: linear-gradient(hsl(var(--dc-card)), hsl(var(--dc-card-2)));
+  box-shadow: 0 14px 34px -20px rgb(0 0 0 / 0.55);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dc-card-root {
+  padding: 13px 18px;
+  border-radius: 13px;
+  border-color: hsl(var(--dc-violet) / 0.45);
+  background: linear-gradient(160deg, hsl(var(--dc-root)), hsl(var(--dc-root-2)));
+  box-shadow: 0 18px 40px -24px rgb(0 0 0 / 0.65);
+}
+
+.dc-card-anchor {
+  border-color: hsl(var(--dc-violet) / 0.32);
+  background: linear-gradient(hsl(var(--dc-anchor)), hsl(var(--dc-anchor-2)));
+}
+
+.dc-card-indep {
+  background: hsl(var(--dc-indep) / 0.85);
+  box-shadow: none;
+}
+
+.dc-card:hover,
+.dc-card-root:hover,
+.dc-card-anchor:hover,
+.dc-card-indep:hover {
+  border-color: hsl(var(--dc-violet) / 0.75);
+}
+
+.dc-sel {
+  border-color: hsl(var(--dc-violet)) !important;
+  box-shadow: 0 0 0 3px hsl(var(--dc-violet) / 0.22);
+}
+
+.dc-cycle {
+  border-color: hsl(var(--dc-doing) / 0.6) !important;
+}
+
+/* A card the pointer is dragging a new dependency onto. */
+.dc-drop {
+  border-color: hsl(var(--dc-violet)) !important;
+  box-shadow: 0 0 0 4px hsl(var(--dc-violet) / 0.24);
+}
+
+.dc-name {
+  font-weight: 500;
+  font-size: 12.5px;
+  color: hsl(var(--dc-ink));
+  max-width: 230px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dc-card-root .dc-name {
+  font-weight: 600;
+  font-size: 14.5px;
+  color: hsl(var(--dc-ink-2));
+}
+
+.dc-card-indep .dc-name {
+  color: hsl(var(--dc-ink) / 0.82);
+}
+
+.dc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* --- Monospace labels ---------------------------------------------------- */
+
+.dc-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dc-chip {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  padding: 4px 6px;
+  border-radius: 5px;
+  color: hsl(var(--dc-muted));
+  background: hsl(var(--dc-line) / 0.09);
+  flex: none;
+}
+
+.dc-chip-root {
+  color: hsl(var(--dc-violet-2));
+  background: hsl(var(--dc-violet) / 0.16);
+}
+
+.dc-eyebrow {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: hsl(var(--dc-faint));
+}
+
+/* --- Expand badge -------------------------------------------------------- */
+
+.dc-expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  flex: none;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--dc-violet) / 0.4);
+  background: hsl(var(--dc-violet) / 0.18);
+  color: hsl(var(--dc-violet-2));
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dc-expand:hover {
+  background: hsl(var(--dc-violet) / 0.45);
+  color: hsl(var(--dc-violet-4));
+}
+
+/* --- The part-of boundary ------------------------------------------------ */
+
+.dc-branch {
+  position: relative;
+  z-index: 2;
+  padding: 32px 22px 20px;
+  border-radius: 16px;
+  border: 1px solid hsl(var(--dc-violet) / 0.38);
+  background: hsl(var(--dc-violet) / 0.05);
+}
+
+.dc-branch-tag {
+  position: absolute;
+  left: 18px;
+  top: -12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  background: hsl(var(--dc-canvas));
+  border: 1px solid hsl(var(--dc-violet) / 0.4);
+}
+
+.dc-corral {
+  position: relative;
+  padding: 26px 20px 18px;
+  border-radius: 14px;
+  border: 1px dashed hsl(var(--dc-line) / 0.18);
+  background: hsl(var(--dc-line) / 0.02);
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.dc-corral-tag {
+  position: absolute;
+  left: 18px;
+  top: -9px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: hsl(var(--dc-canvas));
+}
+
+/* --- Connect handle ------------------------------------------------------ */
+
+.dc-handle {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  border-radius: 50%;
+  background: hsl(var(--dc-violet));
+  border: 2px solid hsl(var(--dc-canvas));
+  opacity: 0;
+  cursor: crosshair;
+  transition: opacity 0.12s ease;
+  z-index: 5;
+}
+
+.dc-card:hover > .dc-handle,
+.dc-card-root:hover > .dc-handle,
+.dc-card-anchor:hover > .dc-handle,
+.dc-card-indep:hover > .dc-handle,
+.dc-connecting .dc-handle {
+  opacity: 1;
+}
+
+/* --- Edges --------------------------------------------------------------- */
+
+.dc-hit {
+  stroke: transparent;
+  stroke-width: 14;
+  fill: none;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* --- Spotlight ----------------------------------------------------------- */
+
+@keyframes dc-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.dc-pulse {
+  animation: dc-pulse 1.6s ease-in-out infinite;
+}
+
+/* --- Chain focus --------------------------------------------------------- */
+
+/*
+  Picking a feature dims everything that is not up or down its chain. On a map
+  of any size that is the only way to answer "what is actually in the way of
+  this one" — the picture alone cannot separate one path from a hundred.
+*/
+.dc-dim {
+  opacity: 0.16;
+  transition: opacity 0.15s ease;
+}

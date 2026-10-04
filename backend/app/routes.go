@@ -2,6 +2,7 @@ package app
 
 import (
 	"net/http"
+	"path/filepath"
 
 	v1 "github.com/FeaturePlus/backend/api/v1"
 	"github.com/FeaturePlus/backend/handlers"
@@ -20,7 +21,14 @@ func registerRoutes(router *gin.Engine, d *dependencies, cfg *Config) {
 	// The versioned JSON API the React frontend and the desktop window use.
 	// Registered before the legacy /api group so its own 404 envelope wins
 	// for unmatched /api/v1 paths.
-	v1.Register(router, d.db.DB)
+	v1.Register(router, d.db.DB, v1.Deps{
+		Files: d.sqliteFS,
+		// The catalogue ships beside the application; saved analyses are
+		// written at runtime, which on the desktop build is a different place.
+		TemplateDir: filepath.Join(cfg.ResourceDir, "data"),
+		ImportDir:   cfg.DataDir,
+		Contracts:   d.contracts,
+	})
 
 	registerAPIRoutes(router, d)
 

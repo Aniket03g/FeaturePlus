@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 
 	"github.com/FeaturePlus/backend/models"
@@ -278,10 +279,10 @@ func (h *ProjectHandler) ApplyTemplate(project *models.Project, templateID strin
 	log.Printf("INFO: Created %d/%d tasks successfully", len(createdTasks), len(filteredTasks))
 
 	// Create dependencies if we have a dependency repository
+	createdDependencies := 0
 	if len(template.Dependencies) > 0 && h.db != nil {
 		dependencyService := services.NewDependencyService(repositories.NewDependencyRepository(h.db))
-		createdDependencies := 0
-		
+
 		for _, dep := range template.Dependencies {
 			// Create a simple dependency record
 			dependency := models.Dependency{
@@ -312,8 +313,14 @@ func (h *ProjectHandler) ApplyTemplate(project *models.Project, templateID strin
 		log.Printf("INFO: Created %d dependencies", createdDependencies)
 	}
 
-	log.Printf("INFO: Successfully applied template %s to project %d: %d features, %d tasks", 
+	log.Printf("INFO: Successfully applied template %s to project %d: %d features, %d tasks",
 		template.Name, project.ID, len(createdFeatures), len(createdTasks))
-	
+
+	// Generate per-project markdown file
+	projectsDir := filepath.Join(h.dataPath, "projects")
+	if err := GenerateProjectMarkdown(project, template, createdFeatures, createdTasks, createdDependencies, projectsDir); err != nil {
+		log.Printf("WARNING: Failed to generate project markdown: %v", err)
+	}
+
 	return nil
 }

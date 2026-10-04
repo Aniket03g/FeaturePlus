@@ -31,18 +31,14 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// The requested role is ignored: letting callers pick "manager" let anyone
+	// edit and delete other people's projects. A manager changes roles later.
 	user := models.User{
 		Email:    req.Email,
 		Username: req.Username,
 		Password: req.Password,
-		Role:     req.Role,
+		Role:     "developer",
 	}
-	if user.Role != "developer" && user.Role != "manager" {
-		user.Role = "developer"
-	}
-	// Debug log
-	fmt.Printf("Signup request: email=%s, username=%s, password_length=%d, role=%s\n",
-		user.Email, user.Username, len(user.Password), user.Role)
 
 	// Make sure password is not empty
 	if user.Password == "" {
@@ -59,8 +55,6 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 		return
 	}
 
-	// Debug - show hashed password
-	fmt.Printf("Hashed password: %s\n", user.Password)
 
 	// Create the user with hashed password
 	if err := h.DB.Create(&user).Error; err != nil {
@@ -89,17 +83,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Logging to debug
-	fmt.Printf("Login attempt: email=%s, password_length=%d\n", input.Email, len(input.Password))
-
 	var user models.User
-	if err := h.DB.Where("email = ?", input.Email).First(&user).Error; err != nil {
+	if err := h.DB.Where("LOWER(email) = ?", strings.ToLower(strings.TrimSpace(input.Email))).First(&user).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
 		return
 	}
-
-	// Log stored password hash for debugging
-	fmt.Printf("User found: ID=%d, stored password hash=%s\n", user.ID, user.Password)
 
 	// Check if password is empty in database
 	if user.Password == "" {
@@ -117,9 +105,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
-
-	// Debug: print the generated JWT token
-	fmt.Printf("[DEBUG] Generated JWT token for user %s (ID=%d): %s\n", user.Email, user.ID, token)
 
 	// Set secure HTTP-only cookie with the JWT token
 	c.SetCookie(

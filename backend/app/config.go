@@ -51,9 +51,10 @@ type Config struct {
 	SourceRoot  string
 	SourceRoots map[int]string
 
-	// RequireGitHubToken makes a missing GITHUB_TOKEN a startup failure.
-	// True for the server, where GitHub integration is expected to work;
-	// the desktop build may choose to run without it.
+	// RequireGitHubToken makes a missing GITHUB_TOKEN a startup failure. Off
+	// by default: GITHUB_TOKEN only feeds the older GitHub MCP integration,
+	// which logs a warning and stays off without it. Publishing to GitHub
+	// goes through the GitHub App and each person's own sign-in instead.
 	RequireGitHubToken bool
 
 	// RouteDumpPath, when non-empty, receives the list of registered routes at
@@ -81,7 +82,7 @@ func DefaultServerConfig() Config {
 		DBPath:             resolveDBPath(dataDir, resourceDir),
 		SourceRoot:         resolveSourceRoot(resourceDir),
 		SourceRoots:        ParseSourceRoots(os.Getenv("FEATUREPLUS_SOURCE_ROOTS")),
-		RequireGitHubToken: true,
+		RequireGitHubToken: os.Getenv("FP_REQUIRE_GITHUB_TOKEN") == "true",
 		RouteDumpPath:      filepath.Join(resourceDir, "routes.txt"),
 		MaxMultipartMemory: 8 << 20, // 8 MiB
 	}

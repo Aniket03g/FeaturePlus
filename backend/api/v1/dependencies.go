@@ -90,6 +90,14 @@ func (h *DependenciesHandler) Graph(c *gin.Context) {
 	tags := h.tagsByFeature(ids)
 	nodes := make([]GraphNode, 0, len(features))
 	for _, f := range features {
+		// A parent outside this project would leave the canvas nesting a
+		// feature inside a boundary it cannot draw, so only keep the link
+		// when both ends are here.
+		var parentID *uint
+		if f.ParentFeatureID != nil && inProject[*f.ParentFeatureID] {
+			parentID = f.ParentFeatureID
+		}
+
 		nodes = append(nodes, GraphNode{
 			ID:       f.ID,
 			Title:    f.Title,
@@ -97,6 +105,7 @@ func (h *DependenciesHandler) Graph(c *gin.Context) {
 			Priority: string(f.Priority),
 			Category: f.Category,
 			Tags:     emptyIfNil(tags[f.ID]),
+			ParentID: parentID,
 		})
 	}
 

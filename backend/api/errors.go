@@ -23,6 +23,12 @@ const (
 	CodeNotFound     Code = "not_found"
 	CodeConflict     Code = "conflict"
 	CodeInternal     Code = "internal_error"
+
+	// CodeUnavailable means the resource exists but its backing store cannot
+	// be reached right now. It is separate from an internal error because the
+	// fix is usually configuration — a source root that is not set, a working
+	// copy that has moved — and a generic 500 tells the reader none of that.
+	CodeUnavailable Code = "unavailable"
 )
 
 // httpStatus maps each code to the status sent with it, so that a handler
@@ -35,6 +41,7 @@ var httpStatus = map[Code]int{
 	CodeNotFound:     http.StatusNotFound,
 	CodeConflict:     http.StatusConflict,
 	CodeInternal:     http.StatusInternalServerError,
+	CodeUnavailable:  http.StatusServiceUnavailable,
 }
 
 // Error is an API-level failure. It carries what the client should be told,
@@ -106,6 +113,13 @@ func NotFound(resource string) *Error {
 
 func Conflict(message string) *Error {
 	return &Error{Code: CodeConflict, Message: message}
+}
+
+// Unavailable reports that something exists but cannot be reached. Unlike
+// Internal, the message is shown to the caller: the cause is usually a setting
+// on the machine, and hiding it leaves nothing to act on.
+func Unavailable(message string) *Error {
+	return &Error{Code: CodeUnavailable, Message: message}
 }
 
 // Internal reports a server-side failure. The message sent to the client is

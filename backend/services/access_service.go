@@ -130,6 +130,54 @@ func (s *AccessService) EffectiveFeatureAccess(userID, projectID int, featureID 
 	return best, nil
 }
 
+// hasAnyGrant reports whether the user holds any feature grant at all in a
+// project, at any tier.
+func (s *AccessService) hasAnyGrant(userID, projectID int) (bool, error) {
+	var count int64
+	err := s.db.Model(&models.FeatureScope{}).
+		Where("project_id = ? AND user_id = ?", projectID, userID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// FilterVisibleFeatures narrows a project's feature list to what a scoped
+// collaborator may know exists. Enforcing tiers on file content alone is not
+// enough: a feature list that names every feature still discloses the shape of
+// the product, and it contradicts a briefing that claims to be complete.
+//
+// Filtering applies only to users who actually hold a grant in the project.
+// Everyone else — project owners, and users the scoping model was never applied
+// to — gets the list unchanged, so introducing this cannot blank out projects
+// that predate Scoped Contracts.
+func (s *AccessService) FilterVisibleFeatures(userID, projectID int, features []models.Feature) ([]models.Feature, error) {
+	owner, err := s.isProjectOwner(userID, projectID)
+	if err != nil {
+		return features, err
+	}
+	if owner {
+		return features, nil
+	}
+	scoped, err := s.hasAnyGrant(userID, projectID)
+	if err != nil {
+		return features, err
+	}
+	if !scoped {
+		return features, nil
+	}
+
+	visible := make([]models.Feature, 0, len(features))
+	for _, f := range features {
+		level, err := s.EffectiveFeatureAccess(userID, projectID, f.ID)
+		if err != nil {
+			return nil, err
+		}
+		if level != models.AccessNone {
+			visible = append(visible, f)
+		}
+	}
+	return visible, nil
+}
+
 // FileAccess is the outcome of resolving a file path for a user.
 type FileAccess struct {
 	Level     models.FeatureAccessLevel

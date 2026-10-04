@@ -236,6 +236,22 @@ func (h *ContractHandler) GetContractView(c *gin.Context) {
 		return
 	}
 
+	// Owners see the real implementation; contract-tier collaborators only ever
+	// see the stripped contract (with behavior note + drift status).
+	if fa.Level == models.AccessOwner {
+		src, err := h.contract.RealSource(projectID, filePath)
+		if err != nil {
+			c.String(http.StatusNotFound, "Source not available")
+			return
+		}
+		c.HTML(http.StatusOK, "contract-view.html", gin.H{
+			"FilePath": filePath,
+			"Contract": string(src),
+			"IsSource": true,
+		})
+		return
+	}
+
 	artifact, err := h.contract.ContractFor(projectID, fa.FeatureID, filePath, "")
 	if err != nil {
 		c.String(http.StatusNotFound, "Contract not available")

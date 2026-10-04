@@ -1,10 +1,16 @@
 <div id="contract-view" class="bg-white rounded-lg shadow-sm p-8 mb-6">
   <div class="flex items-center justify-between mb-4">
-    <h3 class="text-xl font-semibold text-gray-900">Contract: <span class="font-mono text-base text-gray-600">{{ .FilePath }}</span></h3>
+    <h3 class="text-xl font-semibold text-gray-900">{{ if .IsSource }}Source{{ else }}Contract{{ end }}: <span class="font-mono text-base text-gray-600">{{ .FilePath }}</span></h3>
+    {{ if .IsSource }}
+    <span class="text-xs font-medium text-emerald-600">full source — you own this feature</span>
+    {{ else }}
     <span class="text-xs text-gray-400">stripped view — implementation hidden</span>
+    {{ end }}
   </div>
 
-  {{ if .Stale }}
+  {{ if .IsSource }}
+  {{/* Owner view: real implementation, no drift/stripping badges. */}}
+  {{ else if .Stale }}
     <div class="mb-4 px-4 py-3 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-start gap-2">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />

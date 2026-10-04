@@ -105,6 +105,8 @@ func openDatabase(cfg Config) (*database.Database, error) {
 		&models.FeatureScope{},     // Scoped Contracts: per-feature access grants
 		&models.ContractArtifact{}, // Scoped Contracts: versioned contract artifacts
 		&models.IntegrationCheck{}, // Scoped Contracts: trusted integration check results
+		&models.ProjectGitHub{}, &models.ReleaseGitHub{}, &models.UserGitHub{}, // GitHub connection
+		&models.PlaygroundDraft{}, // Each person's playground draft
 		&internalModels.ProjectConnection{},
 	); err != nil {
 		return nil, fmt.Errorf("failed to migrate database: %w", err)
@@ -118,6 +120,10 @@ func openDatabase(cfg Config) (*database.Database, error) {
 type dependencies struct {
 	db       *database.Database
 	sqliteFS *sqlitefs.SQLiteFS
+
+	// contracts is shared with the v1 API, so both halves of the application
+	// read source through the same configured repository roots.
+	contracts *services.ContractService
 
 	prRepo repositories.PullRequestRepository
 
@@ -169,10 +175,11 @@ func (a *App) buildDependencies() *dependencies {
 	}
 
 	return &dependencies{
-		db:       db,
-		sqliteFS: a.sqliteFS,
-		prRepo:   prRepo,
-		role:     middleware.CreateRoleMiddleware(db.DB),
+		db:        db,
+		sqliteFS:  a.sqliteFS,
+		prRepo:    prRepo,
+		contracts: contractService,
+		role:      middleware.CreateRoleMiddleware(db.DB),
 
 		shell:      NewShellHandler(db),
 		user:       handlers.NewUserHandler(userRepo),

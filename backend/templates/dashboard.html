@@ -5,6 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FeaturePlus Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // FeaturePlus design tokens (see backend/templates/DESIGN.md).
+    // CDN Tailwind has no config file, so brand tokens are defined inline.
+    // This also revives the many existing `primary-*` utility classes that
+    // were previously inert (Tailwind has no default `primary` palette).
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            // Brand / primary accent (indigo scale)
+            primary: {
+              50:  '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            },
+            brand: {
+              50:  '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            },
+          },
+          borderRadius: { xl: '0.75rem', '2xl': '1rem' },
+          boxShadow: {
+            card: '0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 3px 0 rgb(0 0 0 / 0.08)',
+            'card-hover': '0 4px 12px 0 rgb(0 0 0 / 0.08), 0 2px 4px 0 rgb(0 0 0 / 0.04)',
+          },
+        },
+      },
+    };
+  </script>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <script src="/static/js/auth.js"></script>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
-import { useRouter } from '@/lib/router'
+import { projectOf, useRouter, type Route } from '@/lib/router'
 import { useProject } from '@/lib/queries'
 import { AppShell, SearchInput } from '@/layouts/AppShell'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,59 @@ import { ProjectDetail } from '@/pages/ProjectDetail'
 import { FeatureDetail } from '@/pages/FeatureDetail'
 import { NewProjectDialog } from '@/pages/NewProjectDialog'
 import { DependencyCanvas } from '@/pages/DependencyCanvas'
+import { Releases } from '@/pages/Releases'
+import { ReleaseDetail } from '@/pages/ReleaseDetail'
+import { PullRequests } from '@/pages/PullRequests'
+import { LinkedCode } from '@/pages/LinkedCode'
+import { Contracts } from '@/pages/Contracts'
+import { BriefingPage } from '@/pages/BriefingPage'
+import { Team } from '@/pages/Team'
+import { Templates } from '@/pages/Templates'
+import { Imports } from '@/pages/Imports'
+import { Playground } from '@/pages/Playground'
+
+/**
+ * Which sidebar section a route belongs to. A feature page still shows
+ * Projects as current rather than nothing at all, and a release detail keeps
+ * Releases lit while you are inside one.
+ */
+const SECTION: Record<Route['name'], string> = {
+  dashboard: 'dashboard',
+  projects: 'projects',
+  project: 'projects',
+  feature: 'projects',
+  dependencies: 'dependencies',
+  releases: 'releases',
+  release: 'releases',
+  pullRequests: 'prs',
+  code: 'code',
+  contracts: 'contracts',
+  briefing: 'briefing',
+  team: 'team',
+  templates: 'templates',
+  imports: 'imports',
+  playground: 'playground',
+}
+
+/** The sidebar items that lead into whichever project is currently open. */
+const PROJECT_SECTIONS: Record<string, Route['name']> = {
+  dependencies: 'dependencies',
+  releases: 'releases',
+  prs: 'pullRequests',
+  code: 'code',
+  contracts: 'contracts',
+  briefing: 'briefing',
+}
+
+/** The sidebar items that stand on their own. */
+const TOP_LEVEL_SECTIONS: Record<string, Route> = {
+  dashboard: { name: 'dashboard' },
+  projects: { name: 'projects' },
+  team: { name: 'team' },
+  templates: { name: 'templates' },
+  imports: { name: 'imports' },
+  playground: { name: 'playground' },
+}
 
 export function App() {
   const { user, isLoading } = useAuth()
@@ -22,32 +75,27 @@ export function App() {
   if (isLoading) return <AuthLoading />
   if (!user) return <Login />
 
-  // The sidebar highlights the section a route belongs to, so a feature page
-  // still shows Projects as current rather than nothing at all.
-  const section =
-    route.name === 'dashboard'
-      ? 'dashboard'
-      : route.name === 'dependencies'
-        ? 'dependencies'
-        : 'projects'
+  const currentProject = projectOf(route)
+
+  function goTo(id: string) {
+    setSearch('')
+
+    const topLevel = TOP_LEVEL_SECTIONS[id]
+    if (topLevel) return navigate(topLevel)
+
+    // The rest belong to a project, so they only lead somewhere once one is
+    // open; otherwise they fall back to the project list.
+    const section = PROJECT_SECTIONS[id]
+    if (section && currentProject > 0) {
+      return navigate({ name: section, projectId: currentProject } as Route)
+    }
+    navigate({ name: 'projects' })
+  }
 
   return (
     <AppShell
-      active={section}
-      onNavigate={(id) => {
-        setSearch('')
-        if (id === 'dashboard') return navigate({ name: 'dashboard' })
-        // Dependencies belong to a project, so the item only leads somewhere
-        // once one is open; otherwise it falls back to the project list.
-        if (id === 'dependencies') {
-          const projectId =
-            route.name === 'project' || route.name === 'feature' || route.name === 'dependencies'
-              ? route.projectId
-              : 0
-          return navigate(projectId > 0 ? { name: 'dependencies', projectId } : { name: 'projects' })
-        }
-        navigate({ name: 'projects' })
-      }}
+      active={SECTION[route.name]}
+      onNavigate={goTo}
       title={<Title />}
       actions={
         route.name === 'projects' ? (
@@ -74,7 +122,22 @@ export function App() {
       {route.name === 'feature' && (
         <FeatureDetail projectId={route.projectId} featureId={route.featureId} />
       )}
-      {route.name === 'dependencies' && <DependencyCanvas projectId={route.projectId} />}
+      {/* Keyed so switching projects starts fresh, with that project's own sketch. */}
+      {route.name === 'dependencies' && (
+        <DependencyCanvas key={route.projectId} projectId={route.projectId} />
+      )}
+      {route.name === 'releases' && <Releases projectId={route.projectId} />}
+      {route.name === 'release' && (
+        <ReleaseDetail projectId={route.projectId} releaseId={route.releaseId} />
+      )}
+      {route.name === 'pullRequests' && <PullRequests projectId={route.projectId} />}
+      {route.name === 'code' && <LinkedCode projectId={route.projectId} />}
+      {route.name === 'contracts' && <Contracts projectId={route.projectId} />}
+      {route.name === 'briefing' && <BriefingPage projectId={route.projectId} />}
+      {route.name === 'team' && <Team />}
+      {route.name === 'templates' && <Templates />}
+      {route.name === 'imports' && <Imports />}
+      {route.name === 'playground' && <Playground />}
 
       {creatingProject && (
         <NewProjectDialog
@@ -90,17 +153,24 @@ export function App() {
 }
 
 /**
- * The heading follows the route. A project or feature page names the project
- * it belongs to, which needs the loaded record, so this is its own component
+ * The heading follows the route. A page inside a project names the project it
+ * belongs to, which needs the loaded record, so this is its own component
  * rather than a string computed in App.
  */
+const SCOPED_TITLE: Partial<Record<Route['name'], string>> = {
+  dependencies: 'Dependencies',
+  releases: 'Releases',
+  release: 'Releases',
+  pullRequests: 'Pull requests',
+  code: 'Linked code',
+  contracts: 'Contracts',
+  briefing: 'Briefing',
+}
+
 function Title() {
   const { route } = useRouter()
-  const projectId =
-    route.name === 'project' || route.name === 'feature' || route.name === 'dependencies'
-      ? route.projectId
-      : 0
-  const project = useProject(projectId)
+  const project = useProject(projectOf(route))
+  const name = project.data?.name ?? 'Project'
 
   switch (route.name) {
     case 'dashboard':
@@ -112,15 +182,22 @@ function Title() {
       )
     case 'projects':
       return <span>Projects</span>
+    case 'team':
+      return <span>Team</span>
+    case 'templates':
+      return <span>Templates</span>
+    case 'imports':
+      return <span>Import a project</span>
+    case 'playground':
+      return <span>Playground</span>
     case 'project':
-      return <span>{project.data?.name ?? 'Project'}</span>
     case 'feature':
-      return <span>{project.data?.name ?? 'Feature'}</span>
-    case 'dependencies':
+      return <span>{name}</span>
+    default:
       return (
         <span>
-          {project.data?.name ?? 'Project'}
-          <span className="ml-2 font-normal text-muted">Dependencies</span>
+          {name}
+          <span className="ml-2 font-normal text-muted">{SCOPED_TITLE[route.name]}</span>
         </span>
       )
   }

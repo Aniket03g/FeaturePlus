@@ -20,6 +20,7 @@ type ProjectHandler struct {
 	templateRepo *repositories.TemplateRepository
 	featureRepo  *repositories.FeatureRepository
 	taskRepo     repositories.TaskRepository
+	dataPath     string
 }
 
 func NewProjectHandler(repo *repositories.ProjectRepository, db *gorm.DB) *ProjectHandler {
@@ -53,6 +54,7 @@ func NewProjectHandler(repo *repositories.ProjectRepository, db *gorm.DB) *Proje
 		templateRepo: templateRepo,
 		featureRepo:  repositories.NewFeatureRepository(db),
 		taskRepo:     repositories.NewTaskRepository(db),
+		dataPath:     absPath,
 	}
 }
 

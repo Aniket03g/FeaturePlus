@@ -12,6 +12,7 @@
 **/bin
 **/obj
 **/node_modules
+# Built screens are rebuilt inside the image (the web stage), never copied in.
 **/dist
 **/*.exe
 **/*.dll
@@ -22,12 +23,11 @@
 **/*.log
 **/logs
 
-# Local development files
-.env
-.env.local
-.env.development
-.env.test
-.env.production
+# Local development files and secrets: pass these at run time, never bake them in
+**/.env
+**/.env.*
+**/*.pem
+**/*.zip
 
 # Docker files (to avoid recursive copying)
 Dockerfile

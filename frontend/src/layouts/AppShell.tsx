@@ -2,10 +2,8 @@ import { useState, type ReactNode } from 'react'
 import {
   LayoutDashboard,
   FolderKanban,
-  ListChecks,
   GitPullRequest,
   Network,
-  Tag,
   Rocket,
   Settings,
   PanelLeftClose,
@@ -15,6 +13,13 @@ import {
   Monitor,
   LogOut,
   Search,
+  FileCode,
+  ShieldCheck,
+  BookOpen,
+  Users,
+  LayoutTemplate,
+  Boxes,
+  Shapes,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
@@ -48,17 +53,26 @@ const NAV: { heading: string; items: NavItem[] }[] = [
   {
     heading: 'Work',
     items: [
-      { id: 'features', label: 'Features', icon: ListChecks, soon: true },
-      { id: 'tasks', label: 'Tasks', icon: ListChecks, soon: true },
       { id: 'dependencies', label: 'Dependencies', icon: Network },
-      { id: 'tags', label: 'Tags', icon: Tag, soon: true },
+      { id: 'code', label: 'Linked code', icon: FileCode },
+      { id: 'contracts', label: 'Contracts', icon: ShieldCheck },
+      { id: 'briefing', label: 'Briefing', icon: BookOpen },
     ],
   },
   {
     heading: 'Delivery',
     items: [
-      { id: 'releases', label: 'Releases', icon: Rocket, soon: true },
-      { id: 'prs', label: 'Pull requests', icon: GitPullRequest, soon: true },
+      { id: 'releases', label: 'Releases', icon: Rocket },
+      { id: 'prs', label: 'Pull requests', icon: GitPullRequest },
+    ],
+  },
+  {
+    heading: 'Workspace',
+    items: [
+      { id: 'team', label: 'Team', icon: Users },
+      { id: 'templates', label: 'Templates', icon: LayoutTemplate },
+      { id: 'imports', label: 'Import', icon: Boxes },
+      { id: 'playground', label: 'Playground', icon: Shapes },
     ],
   },
 ]

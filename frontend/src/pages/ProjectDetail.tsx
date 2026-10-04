@@ -1,5 +1,14 @@
 import { useMemo, useState } from 'react'
-import { AlertCircle, ArrowLeft, Network, Plus, X, ListChecks } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowLeft,
+  FileCode,
+  LayoutTemplate,
+  ListChecks,
+  Network,
+  Plus,
+  X,
+} from 'lucide-react'
 import { useFeatures, useProject, useProjectTags } from '@/lib/queries'
 import { useRouter } from '@/lib/router'
 import { ApiError } from '@/lib/api'
@@ -10,6 +19,7 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
 import { NewFeatureDialog } from './NewFeatureDialog'
+import { ApplyTemplateDialog } from './ApplyTemplateDialog'
 import { cn, percent, plural } from '@/lib/utils'
 import { STATUS_LABEL, type Feature, type FeatureStatus } from '@/lib/types'
 
@@ -30,6 +40,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   const [tag, setTag] = useState('')
   const [search, setSearch] = useState('')
   const [creating, setCreating] = useState(false)
+  const [applying, setApplying] = useState(false)
 
   const filters = useMemo(
     () => ({ status: statuses, tag, q: search }),
@@ -96,7 +107,15 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
           )}
         </div>
 
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate({ name: 'code', projectId })}
+          >
+            <FileCode className="h-3.5 w-3.5" />
+            Code
+          </Button>
           <Button
             variant="secondary"
             size="sm"
@@ -104,6 +123,10 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
           >
             <Network className="h-3.5 w-3.5" />
             Dependencies
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setApplying(true)}>
+            <LayoutTemplate className="h-3.5 w-3.5" />
+            Template
           </Button>
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="h-3.5 w-3.5" />
@@ -250,6 +273,10 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
 
       {creating && (
         <NewFeatureDialog projectId={projectId} onClose={() => setCreating(false)} />
+      )}
+
+      {applying && (
+        <ApplyTemplateDialog projectId={projectId} onClose={() => setApplying(false)} />
       )}
     </div>
   )

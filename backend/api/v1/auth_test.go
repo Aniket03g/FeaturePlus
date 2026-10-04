@@ -20,7 +20,9 @@ func realAuthRouter(t *testing.T, db *gorm.DB) *gin.Engine {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	Register(r, db)
+	// No files store and no data directories: those routes answer "nothing
+	// here", which is what this test's subject — authentication — needs.
+	Register(r, db, Deps{})
 	return r
 }
 

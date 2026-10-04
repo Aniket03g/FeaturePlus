@@ -285,16 +285,38 @@ func emptyIfNil(values []string) []string {
 	return values
 }
 
-// PullRequestDTO is a pull request as attached to a task.
+// PullRequestDTO is a pull request as the API presents one.
+//
+// One type serves two callers with different needs. A task response embeds it,
+// and there the surroundings already say which task and feature it belongs to.
+// A project-wide pull request list has no such surroundings, so the context
+// fields below are filled in there and left out everywhere else.
 type PullRequestDTO struct {
-	ID       uint   `json:"id"`
-	TaskID   uint   `json:"task_id"`
-	URL      string `json:"url"`
-	Title    string `json:"title"`
-	Branch   string `json:"branch"`
-	Status   string `json:"status"`
-	Tested   bool   `json:"tested"`
-	Approved bool   `json:"approved"`
+	ID          uint   `json:"id"`
+	TaskID      uint   `json:"task_id"`
+	FeatureID   uint   `json:"feature_id"`
+	URL         string `json:"url"`
+	Title       string `json:"title"`
+	Branch      string `json:"branch"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status"`
+	Tested      bool   `json:"tested"`
+	Approved    bool   `json:"approved"`
+	Version     string `json:"version,omitempty"`
+
+	// Context, present only where the caller loaded it.
+	TaskName     string `json:"task_name,omitempty"`
+	FeatureTitle string `json:"feature_title,omitempty"`
+	ProjectID    int    `json:"project_id,omitempty"`
+
+	// Approvals is filled on a detail response, where who signed off matters.
+	Approvals []ApprovalDTO `json:"approvals,omitempty"`
+
+	// The timestamps are stored as epoch milliseconds and are zero on rows
+	// written before that column existed, so they are pointers: absent, rather
+	// than claiming the work happened in 1970.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
 // NewPullRequestDTO converts a pull request for output.
@@ -303,15 +325,46 @@ type PullRequestDTO struct {
 // only a status whose casing varies in existing data.
 func NewPullRequestDTO(pr models.PullRequest) PullRequestDTO {
 	return PullRequestDTO{
-		ID:       pr.ID,
-		TaskID:   pr.TaskID,
-		URL:      pr.URL,
-		Title:    pr.Title,
-		Branch:   pr.Branch,
-		Status:   pr.Status,
-		Tested:   pr.Tested,
-		Approved: strings.EqualFold(pr.Status, "approved"),
+		ID:          pr.ID,
+		TaskID:      pr.TaskID,
+		FeatureID:   pr.FeatureID,
+		URL:         pr.URL,
+		Title:       pr.Title,
+		Branch:      pr.Branch,
+		Description: pr.Description,
+		Status:      pr.Status,
+		Tested:      pr.Tested,
+		Approved:    IsApproved(pr.Status),
+		Version:     pr.Version,
+		CreatedAt:   millisTime(pr.CreatedAt),
+		UpdatedAt:   millisTime(pr.UpdatedAt),
 	}
+}
+
+// NewPullRequestDTOs converts a slice, always returning a non-nil result.
+func NewPullRequestDTOs(prs []models.PullRequest) []PullRequestDTO {
+	out := make([]PullRequestDTO, 0, len(prs))
+	for _, pr := range prs {
+		out = append(out, NewPullRequestDTO(pr))
+	}
+	return out
+}
+
+// IsApproved reports whether a status means approved. Existing data holds both
+// "Approved" and "approved", so the comparison ignores case; every place that
+// asks whether a pull request is signed off goes through here.
+func IsApproved(status string) bool {
+	return strings.EqualFold(status, "approved")
+}
+
+// millisTime converts an epoch-milliseconds column into a time, or nil when
+// the column was never written.
+func millisTime(ms int64) *time.Time {
+	if ms == 0 {
+		return nil
+	}
+	t := time.UnixMilli(ms)
+	return &t
 }
 
 // CommentDTO is a comment as the API presents one.
@@ -475,6 +528,13 @@ type GraphNode struct {
 	Priority string   `json:"priority"`
 	Category string   `json:"category"`
 	Tags     []string `json:"tags"`
+
+	// ParentID is the feature this one is part of, or nil at the top level.
+	// Hierarchy and dependency are different relationships and the canvas
+	// draws them differently: a boundary around the children of a parent, an
+	// arrow between two features that block each other. Without this the
+	// canvas cannot tell the two apart.
+	ParentID *uint `json:"parent_id"`
 
 	// Depth is the longest path leading into this node, which the canvas uses
 	// to lay the graph out in columns without repeating the walk in the browser.

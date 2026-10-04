@@ -6,15 +6,34 @@ import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/lib/theme'
 import { ApiError } from '@/lib/api'
 
+type Mode = 'signin' | 'signup'
+
+// /app/signup opens straight on the create-account form, so the address can be
+// sent to someone being invited.
+function modeFromPath(): Mode {
+  return window.location.pathname.replace(/\/+$/, '').endsWith('/signup') ? 'signup' : 'signin'
+}
+
 export function Login() {
-  const { signIn } = useAuth()
+  const { signIn, signUp } = useAuth()
   const { resolved, setTheme } = useTheme()
 
+  const [mode, setMode] = useState<Mode>(modeFromPath)
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  const isSignUp = mode === 'signup'
+
+  function switchMode(next: Mode) {
+    setMode(next)
+    setFormError('')
+    setFieldErrors({})
+    window.history.replaceState({}, '', next === 'signup' ? '/app/signup' : '/app/')
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -23,7 +42,13 @@ export function Login() {
     setFieldErrors({})
 
     try {
-      await signIn(email, password)
+      if (isSignUp) {
+        await signUp(name.trim(), email.trim(), password)
+        // Leave /app/signup behind, or the address bar would keep saying so.
+        window.history.replaceState({}, '', '/app/')
+      } else {
+        await signIn(email.trim(), password)
+      }
     } catch (error) {
       if (error instanceof ApiError) {
         // The API separates per-field validation from the overall failure, so
@@ -60,8 +85,12 @@ export function Login() {
           <div className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-xl bg-accent text-base font-bold text-accent-ink shadow-pop">
             F+
           </div>
-          <h1 className="text-lg font-semibold tracking-tight text-ink">Welcome back</h1>
-          <p className="mt-1 text-sm text-muted">Sign in to continue to FeaturePlus</p>
+          <h1 className="text-lg font-semibold tracking-tight text-ink">
+            {isSignUp ? 'Create your account' : 'Welcome back'}
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {isSignUp ? 'Start planning features with FeaturePlus' : 'Sign in to continue to FeaturePlus'}
+          </p>
         </div>
 
         <form
@@ -78,6 +107,19 @@ export function Login() {
             </div>
           )}
 
+          {isSignUp && (
+            <Input
+              label="Name"
+              autoComplete="name"
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              error={fieldErrors.name}
+              autoFocus
+              required
+            />
+          )}
+
           <Input
             label="Email"
             type="email"
@@ -86,25 +128,40 @@ export function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             error={fieldErrors.email}
-            autoFocus
+            autoFocus={!isSignUp}
             required
           />
 
           <Input
             label="Password"
             type="password"
-            autoComplete="current-password"
+            autoComplete={isSignUp ? 'new-password' : 'current-password'}
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             error={fieldErrors.password}
+            hint={isSignUp ? 'At least 8 characters' : undefined}
+            minLength={isSignUp ? 8 : undefined}
             required
           />
 
           <Button type="submit" size="lg" className="w-full" loading={submitting}>
-            {submitting ? 'Signing in…' : 'Sign in'}
+            {isSignUp
+              ? submitting ? 'Creating account…' : 'Create account'
+              : submitting ? 'Signing in…' : 'Sign in'}
           </Button>
         </form>
+
+        <p className="mt-4 text-center text-xs text-muted">
+          {isSignUp ? 'Already have an account?' : 'New to FeaturePlus?'}{' '}
+          <button
+            type="button"
+            onClick={() => switchMode(isSignUp ? 'signin' : 'signup')}
+            className="font-medium text-accent hover:underline"
+          >
+            {isSignUp ? 'Sign in' : 'Create an account'}
+          </button>
+        </p>
 
         <p className="mt-5 text-center text-2xs text-faint">
           FeaturePlus · feature and task tracking

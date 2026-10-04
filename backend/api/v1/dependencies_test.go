@@ -513,3 +513,53 @@ func TestCycleKeyDoesNotMutateItsInput(t *testing.T) {
 		}
 	}
 }
+
+func TestGraphNodesCarryTheirParent(t *testing.T) {
+	db := newTestDB(t)
+	owner, _, project := seed(t, db)
+	features := seedFeatures(t, db, project.ID, owner.ID)
+
+	// Make the second feature part of the first.
+	if err := db.Model(&features[1]).Update("parent_feature_id", features[0].ID).Error; err != nil {
+		t.Fatalf("set parent: %v", err)
+	}
+
+	r := depRouter(t, db, owner.ID, "developer")
+	w := do(r, http.MethodGet, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/dependency-graph", "")
+	graph := decodeGraph(t, w)
+
+	parents := map[uint]*uint{}
+	for _, node := range graph.Nodes {
+		parents[node.ID] = node.ParentID
+	}
+
+	child := parents[features[1].ID]
+	if child == nil || *child != features[0].ID {
+		t.Errorf("the nested feature should carry its parent, got %v", child)
+	}
+	if parents[features[0].ID] != nil {
+		t.Errorf("a top-level feature should have no parent, got %v", parents[features[0].ID])
+	}
+}
+
+func TestGraphDropsAParentOutsideTheProject(t *testing.T) {
+	db := newTestDB(t)
+	owner, _, project := seed(t, db)
+	features := seedFeatures(t, db, project.ID, owner.ID)
+
+	// A parent that is not in this project cannot be drawn as a boundary, so
+	// the node comes back as top-level rather than pointing at nothing.
+	if err := db.Model(&features[0]).Update("parent_feature_id", 9999).Error; err != nil {
+		t.Fatalf("set parent: %v", err)
+	}
+
+	r := depRouter(t, db, owner.ID, "developer")
+	w := do(r, http.MethodGet, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/dependency-graph", "")
+	graph := decodeGraph(t, w)
+
+	for _, node := range graph.Nodes {
+		if node.ID == features[0].ID && node.ParentID != nil {
+			t.Errorf("a parent outside the project should be dropped, got %v", *node.ParentID)
+		}
+	}
+}

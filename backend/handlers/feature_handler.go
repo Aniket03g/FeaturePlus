@@ -9,6 +9,7 @@ import (
 
 	"github.com/FeaturePlus/backend/models"
 	"github.com/FeaturePlus/backend/repositories"
+	"github.com/FeaturePlus/backend/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -29,6 +30,31 @@ func NewFeatureHandler(repo *repositories.FeatureRepository, tagRepo *repositori
 type FeatureWithTags struct {
 	models.Feature
 	TagsInput string `json:"tags_input,omitempty"`
+}
+
+// viewerID reads the authenticated user's id out of the gin context, or 0 when
+// the request is unauthenticated.
+func viewerID(c *gin.Context) int {
+	v, ok := c.Get("user_id")
+	if !ok {
+		return 0
+	}
+	if u, ok := v.(uint); ok {
+		return int(u)
+	}
+	return 0
+}
+
+// visibleFeatures lists a project's features narrowed to those the current
+// viewer is scoped to see. Handlers that render feature lists should use this
+// rather than the repository directly, so a scoped collaborator's project view
+// matches the access they actually hold.
+func (h *FeatureHandler) visibleFeatures(c *gin.Context, projectID int) ([]models.Feature, error) {
+	features, err := h.repo.GetFeaturesByProject(projectID)
+	if err != nil {
+		return nil, err
+	}
+	return services.NewAccessService(h.DB).FilterVisibleFeatures(viewerID(c), projectID, features)
 }
 
 type FeatureFormInput struct {
@@ -191,7 +217,7 @@ func (h *FeatureHandler) GetProjectFeatures(c *gin.Context) {
 	if c.GetHeader("HX-Request") == "true" {
 		// HTMX request: only render the inner list
 		if filterCategory == "" || filterCategory == "All" {
-			features, err := h.repo.GetFeaturesByProject(projectID)
+			features, err := h.visibleFeatures(c, projectID)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -203,7 +229,7 @@ func (h *FeatureHandler) GetProjectFeatures(c *gin.Context) {
 			c.HTML(http.StatusOK, "feature-list-inner.html", gin.H{"Features": features, "ProjectID": projectID, "FeatureCategories": categories, "FilterCategory": "All"})
 			return
 		}
-		features, err := h.repo.GetFeaturesByProject(projectID)
+		features, err := h.visibleFeatures(c, projectID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -224,7 +250,7 @@ func (h *FeatureHandler) GetProjectFeatures(c *gin.Context) {
 
 	// Non-HTMX request: render the full feature list
 	if filterCategory == "" || filterCategory == "All" {
-		features, err := h.repo.GetFeaturesByProject(projectID)
+		features, err := h.visibleFeatures(c, projectID)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -237,7 +263,7 @@ func (h *FeatureHandler) GetProjectFeatures(c *gin.Context) {
 		return
 	}
 
-	features, err := h.repo.GetFeaturesByProject(projectID)
+	features, err := h.visibleFeatures(c, projectID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -274,7 +300,7 @@ func (h *FeatureHandler) FeaturesContentHandler(c *gin.Context) {
 	categories := getFeatureCategories(project)
 
 	filterCategory := c.Query("category")
-	features, err := h.repo.GetFeaturesByProject(projectID)
+	features, err := h.visibleFeatures(c, projectID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -972,6 +998,21 @@ func (h *FeatureHandler) GetLinkedCode(c *gin.Context) {
 	
 	log.Printf("[GetLinkedCode] Fetching data for feature ID: %d", featureID)
 
+	// Resolve the owning project so we can build contract-view links and check
+	// the current viewer's per-file access under Scoped Contracts.
+	var feature models.Feature
+	projectID := 0
+	if err := h.DB.Select("project_id").First(&feature, featureID).Error; err == nil {
+		projectID = int(feature.ProjectID)
+	}
+	viewerID := 0
+	if v, ok := c.Get("user_id"); ok {
+		if u, ok := v.(uint); ok {
+			viewerID = int(u)
+		}
+	}
+	access := services.NewAccessService(h.DB)
+
 	// Fetch files from database
 	var files []models.FeatureFile
 	h.DB.Where("feature_id = ?", featureID).Find(&files)
@@ -984,6 +1025,7 @@ func (h *FeatureHandler) GetLinkedCode(c *gin.Context) {
 	type FileDisplay struct {
 		FilePath       string
 		LastSeenCommit string
+		AccessLevel    string // owner | contract | none â€” governs the contract-view link
 	}
 	fileDisplays := make([]FileDisplay, 0, len(files))
 	for _, file := range files {
@@ -992,9 +1034,16 @@ func (h *FeatureHandler) GetLinkedCode(c *gin.Context) {
 		if len(commits) > 0 {
 			lastCommit = commits[0].CommitHash
 		}
+		level := string(models.AccessNone)
+		if projectID != 0 {
+			if fa, err := access.ResolveFileAccess(viewerID, projectID, file.FilePath); err == nil {
+				level = string(fa.Level)
+			}
+		}
 		fileDisplays = append(fileDisplays, FileDisplay{
 			FilePath:       file.FilePath,
 			LastSeenCommit: lastCommit,
+			AccessLevel:    level,
 		})
 	}
 
@@ -1024,18 +1073,167 @@ func (h *FeatureHandler) GetLinkedCode(c *gin.Context) {
 	}
 
 	log.Printf("[GetLinkedCode] Rendering template with %d files, %d commits", len(fileDisplays), len(commitDisplays))
-	
+
 	// TODO: Get RepoURL from project settings or feature metadata
 	// For now, you can configure this per project in the database
 	repoURL := "" // e.g., "https://github.com/username/repo"
-	
+
 	c.HTML(http.StatusOK, "linked-code.html", gin.H{
 		"Feature":    gin.H{"ID": featureIDStr},
+		"ProjectID":  projectID,
 		"Files":      fileDisplays,
 		"Commits":    commitDisplays,
 		"LastSynced": lastSynced,
 		"RepoURL":    repoURL,
 	})
+}
+
+// CreateFeatureAPI creates a feature via JSON (used by CLI).
+// POST /api/features
+func (h *FeatureHandler) CreateFeatureAPI(c *gin.Context) {
+	var input struct {
+		ProjectID   uint   `json:"project_id" binding:"required"`
+		Title       string `json:"title" binding:"required"`
+		Description string `json:"description"`
+		Status      string `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	status := models.StatusTodo
+	if input.Status != "" {
+		status = models.FeatureStatus(input.Status)
+	}
+
+	feature := models.Feature{
+		ProjectID:   int(input.ProjectID),
+		Title:       input.Title,
+		Description: input.Description,
+		Status:      status,
+		Priority:    models.PriorityMedium,
+	}
+
+	if err := h.repo.CreateFeature(&feature); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create feature"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":          feature.ID,
+		"project_id":  feature.ProjectID,
+		"title":       feature.Title,
+		"description": feature.Description,
+		"status":      feature.Status,
+	})
+}
+
+// GetFeaturesByProjectAPI lists features for a project as JSON (used by CLI).
+// GET /api/json/projects/:id/features
+func (h *FeatureHandler) GetFeaturesByProjectAPI(c *gin.Context) {
+	projectIDStr := c.Param("id")
+	projectID, err := strconv.Atoi(projectIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid project ID"})
+		return
+	}
+
+	features, err := h.visibleFeatures(c, projectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch features"})
+		return
+	}
+
+	type featureJSON struct {
+		ID          uint   `json:"id"`
+		ProjectID   int    `json:"project_id"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Status      string `json:"status"`
+	}
+
+	result := make([]featureJSON, len(features))
+	for i, f := range features {
+		result[i] = featureJSON{
+			ID:          f.ID,
+			ProjectID:   f.ProjectID,
+			Title:       f.Title,
+			Description: f.Description,
+			Status:      string(f.Status),
+		}
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+// CreateTaskAPI creates a task via JSON (used by CLI).
+// POST /api/tasks
+func (h *FeatureHandler) CreateTaskAPI(c *gin.Context) {
+	var input struct {
+		FeatureID   uint   `json:"feature_id" binding:"required"`
+		TaskName    string `json:"task_name" binding:"required"`
+		TaskType    string `json:"task_type" binding:"required"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	task := models.Task{
+		FeatureID: input.FeatureID,
+		TaskName:  input.TaskName,
+		TaskType:  input.TaskType,
+	}
+
+	if err := h.taskRepo.Create(&task); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"id":         task.ID,
+		"feature_id": task.FeatureID,
+		"task_name":  task.TaskName,
+		"task_type":  task.TaskType,
+	})
+}
+
+// GetTasksByFeatureAPI lists tasks for a feature as JSON (used by CLI).
+// GET /api/json/features/:id/tasks
+func (h *FeatureHandler) GetTasksByFeatureAPI(c *gin.Context) {
+	featureIDStr := c.Param("id")
+	featureID, err := strconv.Atoi(featureIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid feature ID"})
+		return
+	}
+
+	tasks, err := h.taskRepo.GetByFeatureID(uint(featureID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch tasks"})
+		return
+	}
+
+	type taskJSON struct {
+		ID        uint   `json:"id"`
+		FeatureID uint   `json:"feature_id"`
+		TaskName  string `json:"task_name"`
+		TaskType  string `json:"task_type"`
+	}
+
+	result := make([]taskJSON, len(tasks))
+	for i, t := range tasks {
+		result[i] = taskJSON{
+			ID:        t.ID,
+			FeatureID: t.FeatureID,
+			TaskName:  t.TaskName,
+			TaskType:  t.TaskType,
+		}
+	}
+
+	c.JSON(http.StatusOK, result)
 	
 	log.Printf("[GetLinkedCode] Template rendered successfully")
 }

@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -225,6 +226,54 @@ func (h *ProjectHandler) GetProjectSettingsModal(c *gin.Context) {
 		"FeatureCategories": featureCategories,
 		"TaskTypes":         taskTypes,
 	})
+}
+
+// ExportMarkdown regenerates the markdown file for a project on demand.
+func (h *ProjectHandler) ExportMarkdown(c *gin.Context) {
+	idStr := c.Param("id")
+	projectID, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.Data(http.StatusBadRequest, "text/html", []byte(`<span class="text-red-600 text-sm font-medium">Invalid project ID.</span>`))
+		return
+	}
+
+	project, err := h.repo.GetProjectByID(projectID)
+	if err != nil {
+		c.Data(http.StatusNotFound, "text/html", []byte(`<span class="text-red-600 text-sm font-medium">Project not found.</span>`))
+		return
+	}
+
+	features, err := h.featureRepo.GetFeaturesByProject(projectID)
+	if err != nil {
+		log.Printf("ERROR: ExportMarkdown - failed to get features for project %d: %v", projectID, err)
+		features = []models.Feature{}
+	}
+
+	var allTasks []models.Task
+	for _, f := range features {
+		tasks, err := h.taskRepo.GetByFeatureID(f.ID)
+		if err == nil {
+			allTasks = append(allTasks, tasks...)
+		}
+	}
+
+	var tmpl *repositories.Template
+	if project.Config != nil {
+		if tid, ok := project.Config["template_id"].(string); ok && tid != "" && h.templateRepo != nil {
+			if t, err := h.templateRepo.GetTemplateByID(tid); err == nil {
+				tmpl = t
+			}
+		}
+	}
+
+	projectsDir := filepath.Join(h.dataPath, "projects")
+	if err := GenerateProjectMarkdown(project, tmpl, features, allTasks, 0, projectsDir); err != nil {
+		log.Printf("ERROR: ExportMarkdown - failed to generate markdown for project %d: %v", projectID, err)
+		c.Data(http.StatusInternalServerError, "text/html", []byte(`<span class="text-red-600 text-sm font-medium">Failed to export markdown.</span>`))
+		return
+	}
+
+	c.Data(http.StatusOK, "text/html", []byte(`<span class="text-green-600 text-sm font-medium">Markdown exported successfully.</span>`))
 }
 
 // UpdateProjectSettings updates project settings from the settings modal
