@@ -59,8 +59,8 @@ func (h *FeaturesHandler) ListForProject(c *gin.Context) {
 		return
 	}
 
-	if _, dbErr := h.projectRepo.GetProjectByID(projectID); dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	if _, err := requireProject(c, h.db, projectID, canView); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -108,6 +108,11 @@ func (h *FeaturesHandler) Get(c *gin.Context) {
 		return
 	}
 
+	if _, err := requireFeature(c, h.db, uint(id), canView); err != nil {
+		api.Fail(c, err)
+		return
+	}
+
 	feature, dbErr := h.repo.GetFeatureByID(id)
 	if dbErr != nil {
 		api.Fail(c, api.FromDB(dbErr, "Feature"))
@@ -137,20 +142,14 @@ func (h *FeaturesHandler) Create(c *gin.Context) {
 		return
 	}
 
-	project, dbErr := h.projectRepo.GetProjectByID(projectID)
-	if dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	if _, err := requireProject(c, h.db, projectID, canEdit); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
 	var req CreateFeatureRequest
 	if bindErr := api.Bind(c, &req); bindErr != nil {
 		api.Fail(c, bindErr)
-		return
-	}
-
-	if err := h.authoriseProjectWrite(c, project); err != nil {
-		api.Fail(c, err)
 		return
 	}
 
@@ -163,6 +162,10 @@ func (h *FeaturesHandler) Create(c *gin.Context) {
 		Priority:    models.FeaturePriority(orDefault(req.Priority, string(models.PriorityMedium))),
 	}
 	if req.ParentFeatureID != nil {
+		if err := h.checkParent(projectID, *req.ParentFeatureID); err != nil {
+			api.Fail(c, err)
+			return
+		}
 		feature.ParentFeatureID = req.ParentFeatureID
 	}
 	if req.AssigneeID != nil {
@@ -201,6 +204,13 @@ func (h *FeaturesHandler) Update(c *gin.Context) {
 	if bindErr := api.Bind(c, &req); bindErr != nil {
 		api.Fail(c, bindErr)
 		return
+	}
+
+	if req.ParentFeatureID != nil && *req.ParentFeatureID != 0 {
+		if err := h.checkParent(feature.ProjectID, *req.ParentFeatureID); err != nil {
+			api.Fail(c, err)
+			return
+		}
 	}
 
 	req.Apply(feature)
@@ -291,6 +301,11 @@ func (h *FeaturesHandler) ProjectTags(c *gin.Context) {
 		return
 	}
 
+	if _, err := requireProject(c, h.db, projectID, canView); err != nil {
+		api.Fail(c, err)
+		return
+	}
+
 	var rows []TagCount
 	if dbErr := h.db.Model(&models.FeatureTag{}).
 		Select("feature_tags.tag_name as name, count(*) as count").
@@ -317,36 +332,33 @@ func (h *FeaturesHandler) loadForWrite(c *gin.Context) (*models.Feature, error) 
 		return nil, err
 	}
 
+	if _, err := requireFeature(c, h.db, uint(id), canEdit); err != nil {
+		return nil, err
+	}
+
 	feature, dbErr := h.repo.GetFeatureByID(id)
 	if dbErr != nil {
 		return nil, api.FromDB(dbErr, "Feature")
 	}
 
-	project, dbErr := h.projectRepo.GetProjectByID(feature.ProjectID)
-	if dbErr != nil {
-		return nil, api.FromDB(dbErr, "Project")
-	}
-
-	if err := h.authoriseProjectWrite(c, project); err != nil {
-		return nil, err
-	}
-
 	return feature, nil
 }
 
-// authoriseProjectWrite permits changes by the project's owner or a manager,
-// matching the rule the projects handler applies.
-func (h *FeaturesHandler) authoriseProjectWrite(c *gin.Context, project *models.Project) error {
-	userID, err := api.UserID(c)
-	if err != nil {
-		return err
+// checkParent refuses a parent from another project. Without it a feature
+// could be hung inside a project its author cannot see, and would then show up
+// there as one of its sub-features.
+func (h *FeaturesHandler) checkParent(projectID int, parentID uint) error {
+	var count int64
+	if err := h.db.Model(&models.Feature{}).
+		Where("id = ? AND project_id = ?", parentID, projectID).
+		Count(&count).Error; err != nil {
+		return api.Internal(err)
 	}
-
-	if project.OwnerID == userID || api.IsManager(c) {
-		return nil
+	if count == 0 {
+		return api.Validation("The parent feature is not in this project").
+			WithField("parent_feature_id", "Choose a feature from the same project")
 	}
-
-	return api.Forbidden("Only the project owner or a manager can change this project's features")
+	return nil
 }
 
 // setTags replaces a feature's tags in one transaction, so a failure halfway

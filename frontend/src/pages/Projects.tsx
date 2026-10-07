@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, ChevronLeft, ChevronRight, FolderKanban } from 'lucide-react'
 import * as api from '@/lib/api'
-import type { Project } from '@/lib/types'
+import { useAuth } from '@/lib/auth'
+import { cn } from '@/lib/utils'
+import { ROLE_LABEL, type Project } from '@/lib/types'
 import { Card, CardBody } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,11 +24,20 @@ export function Projects({
   search: string
   onOpenProject: (id: number) => void
 }) {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [page, setPage] = useState(1)
+  // An admin can switch between their own projects and every project on the
+  // server. Everyone else only ever has their own and those shared with them.
+  const [all, setAll] = useState(false)
+  const showAll = isAdmin && all
 
   const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ['projects', { page, search }],
-    queryFn: () => api.list<Project>('/projects', { query: { page, per_page: 12, q: search } }),
+    queryKey: ['projects', { page, search, all: showAll }],
+    queryFn: () =>
+      api.list<Project>('/projects', {
+        query: { page, per_page: 12, q: search, ...(showAll ? { all: 'true' } : {}) },
+      }),
     // Keeping the previous page visible while the next loads avoids the list
     // collapsing to a spinner on every page change.
     placeholderData: (previous) => previous,
@@ -34,6 +45,34 @@ export function Projects({
 
   const projects = data?.items ?? []
   const meta = data?.meta
+
+  const scopeSwitch = isAdmin && (
+    <div className="flex items-center gap-2">
+      <div className="flex rounded-md border border-border p-0.5" role="group" aria-label="Which projects">
+        {[
+          { value: false, label: 'My projects' },
+          { value: true, label: 'All projects' },
+        ].map((option) => (
+          <button
+            key={option.label}
+            type="button"
+            onClick={() => {
+              setAll(option.value)
+              setPage(1)
+            }}
+            aria-pressed={all === option.value}
+            className={cn(
+              'rounded px-2.5 py-1 text-xs transition-colors',
+              all === option.value ? 'bg-accent-soft font-medium text-accent' : 'text-muted hover:bg-raised hover:text-ink',
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {showAll && <span className="text-2xs text-faint">Admin view: every project on this server.</span>}
+    </div>
+  )
 
   if (error) {
     return (
@@ -66,6 +105,8 @@ export function Projects({
 
   if (projects.length === 0) {
     return (
+      <div className="space-y-4">
+      {scopeSwitch}
       <Card>
         <CardBody className="py-14 text-center">
           <div className="mx-auto mb-3 grid h-10 w-10 place-items-center rounded-lg bg-raised text-faint">
@@ -77,11 +118,13 @@ export function Projects({
           {search && <p className="mt-1 text-xs text-muted">Try a different search term.</p>}
         </CardBody>
       </Card>
+      </div>
     )
   }
 
   return (
     <div className="space-y-4">
+      {scopeSwitch}
       <div className={isFetching ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {projects.map((project) => (
@@ -148,6 +191,18 @@ function ProjectCard({ project, onOpen }: { project: Project; onOpen: () => void
         <div className="flex items-start justify-between gap-2">
           <h3 className="truncate text-sm font-medium text-ink">{project.name}</h3>
           {stack && stack !== 'Other' && <Badge tone="accent">{stack}</Badge>}
+          {project.my_role === 'admin' ? (
+            <Badge tone="warning" title="You are opening this as the server's admin">
+              Admin
+            </Badge>
+          ) : (
+            project.my_role &&
+            project.my_role !== 'owner' && (
+              <Badge tone="neutral" title={`Shared with you as ${ROLE_LABEL[project.my_role].toLowerCase()}`}>
+                Shared · {ROLE_LABEL[project.my_role]}
+              </Badge>
+            )
+          )}
         </div>
 
         <p className="line-clamp-2 min-h-[2rem] text-xs text-muted">

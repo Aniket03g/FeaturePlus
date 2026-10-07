@@ -63,6 +63,15 @@ type Config struct {
 
 	// MaxMultipartMemory caps in-memory upload buffering, in bytes.
 	MaxMultipartMemory int64
+
+	// LegacyRoutes serves the old htmx site and its /api routes beside the
+	// React app and /api/v1. Those routes predate project sharing and do not
+	// check who can see a project, and some need no sign-in at all, so a
+	// server other people can reach must run with them off
+	// (FP_LEGACY_ROUTES=off). They stay on by default because the
+	// featureplus-pr CLI, and the /plan and /fp skills through it, still
+	// talk to them.
+	LegacyRoutes bool
 }
 
 // DefaultServerConfig builds the configuration for the web server, reading the
@@ -85,6 +94,7 @@ func DefaultServerConfig() Config {
 		RequireGitHubToken: os.Getenv("FP_REQUIRE_GITHUB_TOKEN") == "true",
 		RouteDumpPath:      filepath.Join(resourceDir, "routes.txt"),
 		MaxMultipartMemory: 8 << 20, // 8 MiB
+		LegacyRoutes:       !isOff(os.Getenv("FP_LEGACY_ROUTES")),
 	}
 
 	return cfg
@@ -114,6 +124,8 @@ func DefaultDesktopConfig() Config {
 		RequireGitHubToken: false,
 		RouteDumpPath:      "",
 		MaxMultipartMemory: 8 << 20,
+		// Loopback only, so nobody else can reach these.
+		LegacyRoutes: true,
 	}
 }
 
@@ -220,6 +232,15 @@ func resolveSourceRoot(resourceDir string) string {
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+// isOff reads a switch that is on unless set to off, false or 0.
+func isOff(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "off", "false", "0", "no":
+		return true
+	}
+	return false
 }
 
 func envOr(key, fallback string) string {

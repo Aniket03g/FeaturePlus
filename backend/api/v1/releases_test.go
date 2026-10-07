@@ -136,6 +136,7 @@ func TestCreateReleaseRequiresOwnerOrManager(t *testing.T) {
 	owner, other, project := seed(t, db)
 	_ = owner
 
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 	r := releaseRouter(t, db, other.ID, "developer")
 	w := do(r, http.MethodPost, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/releases",
 		`{"tag":"v1.0.0"}`)
@@ -143,12 +144,12 @@ func TestCreateReleaseRequiresOwnerOrManager(t *testing.T) {
 		t.Fatalf("status %d, want 403: %s", w.Code, w.Body.String())
 	}
 
-	// A manager may plan a release in a project they do not own.
-	r = releaseRouter(t, db, other.ID, "manager")
+	// An editor may plan a release in a project they do not own.
+	db.Model(&models.ProjectMember{}).Where("user_id = ?", other.ID).Update("role", models.RoleEditor)
 	w = do(r, http.MethodPost, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/releases",
 		`{"tag":"v1.0.0"}`)
 	if w.Code != http.StatusCreated {
-		t.Fatalf("manager status %d, want 201: %s", w.Code, w.Body.String())
+		t.Fatalf("editor status %d, want 201: %s", w.Code, w.Body.String())
 	}
 }
 

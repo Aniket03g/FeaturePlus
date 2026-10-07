@@ -420,6 +420,7 @@ func TestCreateDependencyForbiddenForNonOwner(t *testing.T) {
 	owner, other, project := seed(t, db)
 	features := seedFeatures(t, db, project.ID, owner.ID)
 
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 	r := depRouter(t, db, other.ID, "developer")
 	body := `{"parent_id":` + strconv.Itoa(int(features[0].ID)) +
 		`,"child_id":` + strconv.Itoa(int(features[1].ID)) + `}`

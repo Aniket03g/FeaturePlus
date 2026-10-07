@@ -7,6 +7,7 @@ import {
   ListChecks,
   Network,
   Plus,
+  Users,
   X,
 } from 'lucide-react'
 import { useFeatures, useProject, useProjectTags } from '@/lib/queries'
@@ -20,8 +21,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
 import { NewFeatureDialog } from './NewFeatureDialog'
 import { ApplyTemplateDialog } from './ApplyTemplateDialog'
+import { ShareDialog } from './ShareDialog'
 import { cn, percent, plural } from '@/lib/utils'
-import { STATUS_LABEL, type Feature, type FeatureStatus } from '@/lib/types'
+import { ROLE_LABEL, STATUS_LABEL, canManage, type Feature, type FeatureStatus } from '@/lib/types'
 
 const STATUSES: FeatureStatus[] = ['todo', 'in_progress', 'done']
 
@@ -41,6 +43,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   const [search, setSearch] = useState('')
   const [creating, setCreating] = useState(false)
   const [applying, setApplying] = useState(false)
+  const [sharing, setSharing] = useState(false)
 
   const filters = useMemo(
     () => ({ status: statuses, tag, q: search }),
@@ -80,6 +83,9 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   }
 
   const stats = project.data?.stats
+  const role = project.data?.my_role
+  // Until the role is known, show the editing buttons rather than flicker them in.
+  const canEdit = role !== 'viewer'
 
   return (
     <div className="space-y-5">
@@ -99,7 +105,21 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             <Skeleton className="h-6 w-48" />
           ) : (
             <>
-              <h2 className="truncate text-base font-semibold text-ink">{project.data?.name}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="truncate text-base font-semibold text-ink">{project.data?.name}</h2>
+                {role && role !== 'owner' && (
+                  <Badge
+                    tone={role === 'admin' ? 'warning' : 'neutral'}
+                    title={
+                      role === 'admin'
+                        ? 'You are opening this as the server’s admin'
+                        : `Shared with you as ${ROLE_LABEL[role].toLowerCase()}`
+                    }
+                  >
+                    {ROLE_LABEL[role]}
+                  </Badge>
+                )}
+              </div>
               {project.data?.description && (
                 <p className="mt-0.5 text-sm text-muted">{project.data.description}</p>
               )}
@@ -124,14 +144,22 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             <Network className="h-3.5 w-3.5" />
             Dependencies
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => setApplying(true)}>
-            <LayoutTemplate className="h-3.5 w-3.5" />
-            Template
+          <Button variant="secondary" size="sm" onClick={() => setSharing(true)}>
+            <Users className="h-3.5 w-3.5" />
+            Share
           </Button>
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            New feature
-          </Button>
+          {canEdit && (
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setApplying(true)}>
+                <LayoutTemplate className="h-3.5 w-3.5" />
+                Template
+              </Button>
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <Plus className="h-3.5 w-3.5" />
+                New feature
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -277,6 +305,16 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
 
       {applying && (
         <ApplyTemplateDialog projectId={projectId} onClose={() => setApplying(false)} />
+      )}
+
+      {sharing && project.data && (
+        <ShareDialog
+          projectId={projectId}
+          projectName={project.data.name}
+          canManage={canManage(role)}
+          onClose={() => setSharing(false)}
+          onLeft={() => navigate({ name: 'projects' })}
+        />
       )}
     </div>
   )

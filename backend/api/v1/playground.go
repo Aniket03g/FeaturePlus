@@ -152,8 +152,8 @@ type OpenedRelease struct {
 // and moves those same features rather than adding new ones.
 //
 // Reading follows the rest of the API: any signed-in person can read a
-// project's features. Writing them back is the import, which keeps its own
-// owner-or-manager rule.
+// project's features. Writing them back is the import, which needs the right
+// to edit the project.
 //
 // GET /api/v1/playground/projects/:id
 func (h *PlaygroundHandler) OpenProject(c *gin.Context) {
@@ -162,9 +162,9 @@ func (h *PlaygroundHandler) OpenProject(c *gin.Context) {
 		api.Fail(c, err)
 		return
 	}
-	project, dbErr := h.projectRepo.GetProjectByID(projectID)
-	if dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	project, err := requireProject(c, h.db, projectID, canView)
+	if err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -375,13 +375,9 @@ func (h *PlaygroundHandler) Import(c *gin.Context) {
 		api.Fail(c, api.Validation("Choose a project or a new project, not both"))
 		return
 	case req.ProjectID > 0:
-		found, dbErr := h.projectRepo.GetProjectByID(req.ProjectID)
-		if dbErr != nil {
-			api.Fail(c, api.FromDB(dbErr, "Project"))
-			return
-		}
-		if found.OwnerID != userID && !api.IsManager(c) {
-			api.Fail(c, api.Forbidden("Only the project owner or a manager can add features to this project"))
+		found, err := requireProject(c, h.db, req.ProjectID, canEdit)
+		if err != nil {
+			api.Fail(c, err)
 			return
 		}
 		project = found

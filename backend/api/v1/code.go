@@ -268,8 +268,8 @@ func (h *CodeHandler) ListProjectFiles(c *gin.Context) {
 		return
 	}
 
-	if _, dbErr := h.projectRepo.GetProjectByID(projectID); dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	if _, err := requireProject(c, h.db, projectID, canView); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -298,46 +298,23 @@ func (h *CodeHandler) ListProjectFiles(c *gin.Context) {
 	api.List(c, NewFeatureFileDTOs(api.Slice(files, page)), page.Meta(total))
 }
 
-// load fetches the feature named in the path.
+// load fetches the feature named in the path, if the caller can see its
+// project.
 func (h *CodeHandler) load(c *gin.Context) (*models.Feature, error) {
-	id, err := api.IDParam(c, "featureId")
-	if err != nil {
-		return nil, err
-	}
-
-	feature, dbErr := h.featureRepo.GetFeatureByID(id)
-	if dbErr != nil {
-		return nil, api.FromDB(dbErr, "Feature")
-	}
-
-	return feature, nil
+	return h.loadAs(c, canView)
 }
 
 // loadForWrite fetches the feature and checks the caller may change its map.
 func (h *CodeHandler) loadForWrite(c *gin.Context) (*models.Feature, error) {
-	feature, err := h.load(c)
+	return h.loadAs(c, canEdit)
+}
+
+func (h *CodeHandler) loadAs(c *gin.Context, need models.ProjectRole) (*models.Feature, error) {
+	id, err := api.IDParam(c, "featureId")
 	if err != nil {
 		return nil, err
 	}
-
-	userID, err := api.UserID(c)
-	if err != nil {
-		return nil, err
-	}
-
-	if api.IsManager(c) {
-		return feature, nil
-	}
-
-	project, dbErr := h.projectRepo.GetProjectByID(feature.ProjectID)
-	if dbErr != nil {
-		return nil, api.FromDB(dbErr, "Project")
-	}
-	if project.OwnerID == userID {
-		return feature, nil
-	}
-
-	return nil, api.Forbidden("Only the project owner or a manager can map code to a feature")
+	return requireFeature(c, h.db, uint(id), need)
 }
 
 var commitHashPattern = regexp.MustCompile(`^[0-9a-f]{7,40}$`)

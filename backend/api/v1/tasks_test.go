@@ -278,6 +278,7 @@ func TestCreateTaskForbiddenForNonOwner(t *testing.T) {
 	owner, other, project := seed(t, db)
 	features := seedFeatures(t, db, project.ID, owner.ID)
 
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 	r := taskRouter(t, db, other.ID, "developer")
 	w := do(r, http.MethodPost, "/api/v1/features/"+strconv.Itoa(int(features[0].ID))+"/tasks",
 		`{"task_name":"Sneaky"}`)
@@ -396,13 +397,20 @@ func TestAddAndListComments(t *testing.T) {
 // TestAnyoneCanCommentOnATask records the deliberate difference from editing:
 // discussion is open to any authenticated user, since it changes nothing about
 // the work itself.
-func TestAnyoneCanCommentOnATask(t *testing.T) {
+func TestAnyoneOnTheProjectCanComment(t *testing.T) {
 	db := newTestDB(t)
 	owner, other, project := seed(t, db)
 	features := seedFeatures(t, db, project.ID, owner.ID)
 	tasks := seedTasks(t, db, features[0].ID, owner.ID)
 
 	r := taskRouter(t, db, other.ID, "developer")
+	if w := do(r, http.MethodPost, "/api/v1/tasks/"+strconv.Itoa(int(tasks[0].ID))+"/comments",
+		`{"content":"From outside"}`); w.Code != http.StatusNotFound {
+		t.Fatalf("outsider status %d, want 404: %s", w.Code, w.Body.String())
+	}
+
+	// A viewer cannot change the work, but can discuss it.
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 	w := do(r, http.MethodPost,
 		"/api/v1/tasks/"+strconv.Itoa(int(tasks[0].ID))+"/comments",
 		`{"content":"A question from someone else"}`)
@@ -436,6 +444,7 @@ func TestOnlyTheAuthorCanEditAComment(t *testing.T) {
 	features := seedFeatures(t, db, project.ID, owner.ID)
 	tasks := seedTasks(t, db, features[0].ID, owner.ID)
 
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 	comment := models.Comment{TaskID: tasks[0].ID, UserID: uint(other.ID), Content: "Mine"}
 	if err := db.Create(&comment).Error; err != nil {
 		t.Fatal(err)
@@ -461,8 +470,16 @@ func TestOnlyTheAuthorCanEditAComment(t *testing.T) {
 		}
 	})
 
-	t.Run("a manager can", func(t *testing.T) {
+	t.Run("a manager cannot either", func(t *testing.T) {
 		r := taskRouter(t, db, owner.ID, "manager")
+		w := do(r, http.MethodDelete, path, "")
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("status %d, want 403: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("the author can delete it", func(t *testing.T) {
+		r := taskRouter(t, db, other.ID, "developer")
 		w := do(r, http.MethodDelete, path, "")
 		if w.Code != http.StatusNoContent {
 			t.Fatalf("status %d, want 204: %s", w.Code, w.Body.String())

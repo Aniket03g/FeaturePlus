@@ -299,7 +299,13 @@ func TestCreateFeatureForbiddenForNonOwner(t *testing.T) {
 
 	w := do(r, http.MethodPost, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/features",
 		`{"title":"Sneaky"}`)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("outsider status %d, want 404: %s", w.Code, w.Body.String())
+	}
 
+	share(t, db, project.ID, other.ID, models.RoleViewer)
+	w = do(r, http.MethodPost, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/features",
+		`{"title":"Sneaky"}`)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status %d, want 403: %s", w.Code, w.Body.String())
 	}

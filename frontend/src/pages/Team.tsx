@@ -12,15 +12,15 @@ import { SearchInput } from '@/layouts/AppShell'
 import { cn, plural } from '@/lib/utils'
 import type { User } from '@/lib/types'
 
-const ROLES = ['developer', 'manager'] as const
+const ROLES = ['developer', 'manager', 'admin'] as const
 
 /**
  * The people on this instance.
  *
- * Everyone can read the list, because assigning a task and granting access to
- * a feature both need to name a person. Editing is narrower: your own account,
- * or anyone's if you are a manager — and only a manager can change a role,
- * since a user who could set their own would promote themselves.
+ * An admin sees everyone on the server; anyone else sees the people they share
+ * a project with. Editing is narrower: your own account, or anyone's if you
+ * are an admin — and only an admin can change a role, since a user who could
+ * set their own would promote themselves.
  */
 export function Team() {
   const { user: me } = useAuth()
@@ -31,7 +31,7 @@ export function Team() {
   const users = useUsers({ q: search })
   const remove = useDeleteUser()
 
-  const isManager = me?.role === 'manager'
+  const isAdmin = me?.role === 'admin'
   const items = users.data?.items ?? []
 
   async function handleDelete(user: User) {
@@ -98,7 +98,7 @@ export function Team() {
                   <EditRow
                     key={user.id}
                     user={user}
-                    canChangeRole={isManager}
+                    canChangeRole={isAdmin}
                     onDone={() => setEditing(0)}
                   />
                 ) : (
@@ -106,8 +106,8 @@ export function Team() {
                     key={user.id}
                     user={user}
                     isMe={user.id === me?.id}
-                    canEdit={isManager || user.id === me?.id}
-                    canDelete={isManager && user.id !== me?.id}
+                    canEdit={isAdmin || user.id === me?.id}
+                    canDelete={isAdmin && user.id !== me?.id}
                     onEdit={() => setEditing(user.id)}
                     onDelete={() => handleDelete(user)}
                   />
@@ -154,7 +154,7 @@ function ReadRow({
         <p className="truncate text-xs text-muted">{user.email}</p>
       </div>
 
-      <Badge tone={user.role === 'manager' ? 'accent' : 'neutral'}>{user.role}</Badge>
+      <Badge tone={user.role === 'admin' ? 'warning' : user.role === 'manager' ? 'accent' : 'neutral'}>{user.role}</Badge>
 
       <div className="flex shrink-0 gap-1">
         {canEdit && (

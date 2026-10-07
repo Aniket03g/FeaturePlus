@@ -57,3 +57,10 @@ func IsManager(c *gin.Context) bool {
 	role, ok := UserRole(c)
 	return ok && role == "manager"
 }
+
+// IsAdmin reports whether the caller runs this server. An admin can open every
+// project and manage every account; nobody else can do either.
+func IsAdmin(c *gin.Context) bool {
+	role, ok := UserRole(c)
+	return ok && role == "admin"
+}

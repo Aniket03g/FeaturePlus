@@ -10,9 +10,8 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NewReleaseDialog } from './NewReleaseDialog'
 import { GitHubPanel } from './GitHubPanel'
-import { useAuth } from '@/lib/auth'
 import { cn, plural } from '@/lib/utils'
-import { RELEASE_STATUS_LABEL, type Release, type ReleaseStatus } from '@/lib/types'
+import { RELEASE_STATUS_LABEL, canManage, type Release, type ReleaseStatus } from '@/lib/types'
 
 // All four statuses that occur, not just the two this screen creates: the
 // older Git finalize flow leaves releases as "failed" and "in_progress", and a
@@ -28,7 +27,6 @@ const STATUSES: ReleaseStatus[] = ['draft', 'published', 'in_progress', 'failed'
  */
 export function Releases({ projectId }: { projectId: number }) {
   const { navigate } = useRouter()
-  const { user } = useAuth()
 
   const [statuses, setStatuses] = useState<ReleaseStatus[]>([])
   const [search, setSearch] = useState('')
@@ -85,7 +83,8 @@ export function Releases({ projectId }: { projectId: number }) {
 
       <GitHubPanel
         projectId={projectId}
-        canEdit={!!user && (user.id === project.data?.owner_id || user.role === 'manager')}
+        canEdit={!!project.data && project.data.my_role !== 'viewer'}
+        canLink={canManage(project.data?.my_role)}
       />
 
       <Card>

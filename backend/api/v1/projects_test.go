@@ -30,7 +30,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 
 	if err := db.AutoMigrate(&models.User{}, &models.Project{}, &models.Feature{}, &models.Task{}, &models.PullRequest{}, &models.FeatureTag{}, &models.Comment{}, &models.TaskAttachment{}, &models.Dependency{}, &models.Release{}, &models.ApprovedPR{},
 		&models.FeatureFile{}, &models.FeatureCommit{}, &models.FeatureScope{},
-		&models.ContractArtifact{}, &models.ProjectGitHub{}, &models.ReleaseGitHub{}, &models.UserGitHub{}, &models.PlaygroundDraft{}); err != nil {
+		&models.ContractArtifact{}, &models.ProjectGitHub{}, &models.ReleaseGitHub{}, &models.UserGitHub{}, &models.PlaygroundDraft{}, &models.ProjectMember{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
@@ -56,6 +56,14 @@ func seed(t *testing.T, db *gorm.DB) (owner, other models.User, project models.P
 	}
 
 	return owner, other, project
+}
+
+// share adds a user to a project in a role, as the members routes would.
+func share(t *testing.T, db *gorm.DB, projectID, userID int, role models.ProjectRole) {
+	t.Helper()
+	if err := db.Create(&models.ProjectMember{ProjectID: projectID, UserID: userID, Role: role}).Error; err != nil {
+		t.Fatalf("share project: %v", err)
+	}
 }
 
 // testRouter mounts the project routes with a stubbed authenticated user, so
@@ -414,7 +422,15 @@ func TestUpdateForbiddenForNonOwner(t *testing.T) {
 	_, other, project := seed(t, db)
 	r := testRouter(t, db, other.ID, "developer")
 
+	// Someone the project is not shared with is told it does not exist.
 	w := do(r, http.MethodPatch, "/api/v1/projects/"+itoa(project.ID), `{"name":"Hijacked"}`)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("outsider status %d, want 404: %s", w.Code, w.Body.String())
+	}
+
+	// A viewer can see it, so is told why not.
+	share(t, db, project.ID, other.ID, models.RoleViewer)
+	w = do(r, http.MethodPatch, "/api/v1/projects/"+itoa(project.ID), `{"name":"Hijacked"}`)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status %d, want 403: %s", w.Code, w.Body.String())
 	}
@@ -423,14 +439,71 @@ func TestUpdateForbiddenForNonOwner(t *testing.T) {
 	}
 }
 
-func TestManagerCanUpdateAnyProject(t *testing.T) {
+func TestManagerHasNoAccessToOthersProjects(t *testing.T) {
 	db := newTestDB(t)
 	_, other, project := seed(t, db)
 	r := testRouter(t, db, other.ID, "manager")
 
-	w := do(r, http.MethodPatch, "/api/v1/projects/"+itoa(project.ID), `{"name":"By manager"}`)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status %d, want 200: %s", w.Code, w.Body.String())
+	// Manager runs the app; it does not open other people's projects.
+	if w := do(r, http.MethodGet, "/api/v1/projects/"+itoa(project.ID), ""); w.Code != http.StatusNotFound {
+		t.Fatalf("read status %d, want 404: %s", w.Code, w.Body.String())
+	}
+	if w := do(r, http.MethodPatch, "/api/v1/projects/"+itoa(project.ID), `{"name":"By manager"}`); w.Code != http.StatusNotFound {
+		t.Fatalf("update status %d, want 404: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestEditorCanUpdateButNotDelete(t *testing.T) {
+	db := newTestDB(t)
+	_, other, project := seed(t, db)
+	share(t, db, project.ID, other.ID, models.RoleEditor)
+	r := testRouter(t, db, other.ID, "developer")
+
+	if w := do(r, http.MethodPatch, "/api/v1/projects/"+itoa(project.ID), `{"name":"Renamed"}`); w.Code != http.StatusOK {
+		t.Fatalf("update status %d, want 200: %s", w.Code, w.Body.String())
+	}
+	if w := do(r, http.MethodDelete, "/api/v1/projects/"+itoa(project.ID), ""); w.Code != http.StatusForbidden {
+		t.Fatalf("delete status %d, want 403: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestListShowsOnlyOwnAndSharedProjects(t *testing.T) {
+	db := newTestDB(t)
+	owner, other, project := seed(t, db)
+	theirs := models.Project{Name: "Their own", OwnerID: other.ID}
+	if err := db.Create(&theirs).Error; err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Before sharing, each sees only their own.
+	r := testRouter(t, db, other.ID, "developer")
+	data, _ := decodeList(t, do(r, http.MethodGet, "/api/v1/projects", ""))
+	if len(data) != 1 || data[0].ID != theirs.ID || data[0].MyRole != models.RoleOwner {
+		t.Fatalf("before sharing: %+v", data)
+	}
+
+	share(t, db, project.ID, other.ID, models.RoleViewer)
+	data, _ = decodeList(t, do(r, http.MethodGet, "/api/v1/projects", ""))
+	if len(data) != 2 {
+		t.Fatalf("after sharing: got %d projects, want 2", len(data))
+	}
+	for _, p := range data {
+		if p.ID == project.ID && p.MyRole != models.RoleViewer {
+			t.Errorf("shared project role = %q, want viewer", p.MyRole)
+		}
+	}
+
+	// ?mine=true is the ones they own.
+	data, _ = decodeList(t, do(r, http.MethodGet, "/api/v1/projects?mine=true", ""))
+	if len(data) != 1 || data[0].ID != theirs.ID {
+		t.Fatalf("mine: %+v", data)
+	}
+
+	// The owner still sees only their own.
+	ro := testRouter(t, db, owner.ID, "developer")
+	data, _ = decodeList(t, do(ro, http.MethodGet, "/api/v1/projects", ""))
+	if len(data) != 1 || data[0].ID != project.ID {
+		t.Fatalf("owner: %+v", data)
 	}
 }
 
@@ -439,6 +512,7 @@ func TestDeleteForbiddenForNonOwner(t *testing.T) {
 	_, other, project := seed(t, db)
 	r := testRouter(t, db, other.ID, "developer")
 
+	share(t, db, project.ID, other.ID, models.RoleEditor)
 	w := do(r, http.MethodDelete, "/api/v1/projects/"+itoa(project.ID), "")
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status %d, want 403", w.Code)

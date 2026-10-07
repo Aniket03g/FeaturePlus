@@ -319,9 +319,14 @@ func TestGitHubLinkSyncAndPublish(t *testing.T) {
 		t.Fatalf("sync unlinked: %d %s", w.Code, w.Body.String())
 	}
 
-	// Someone else cannot link it.
+	// Someone else cannot link it, not even an editor: where a project is
+	// published is the owner's call.
+	if w := do(githubRouter(t, db, app, other.ID), http.MethodPut, base, `{"repo":"acme/trails"}`); w.Code != http.StatusNotFound {
+		t.Fatalf("link by outsider: %d", w.Code)
+	}
+	share(t, db, project.ID, other.ID, models.RoleEditor)
 	if w := do(githubRouter(t, db, app, other.ID), http.MethodPut, base, `{"repo":"acme/trails"}`); w.Code != http.StatusForbidden {
-		t.Fatalf("link by non-owner: %d", w.Code)
+		t.Fatalf("link by editor: %d", w.Code)
 	}
 	// An unknown repository is refused before anything is saved.
 	if w := do(r, http.MethodPut, base, `{"repo":"acme/nope"}`); w.Code != http.StatusNotFound {

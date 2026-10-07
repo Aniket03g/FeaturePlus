@@ -20,7 +20,7 @@ type UpdateUserRequest struct {
 	Name     *string `json:"name" binding:"omitempty,max=255"`
 	Email    *string `json:"email" binding:"omitempty,email,max=255"`
 	Username *string `json:"username" binding:"omitempty,min=1,max=255"`
-	Role     *string `json:"role" binding:"omitempty,oneof=developer manager"`
+	Role     *string `json:"role" binding:"omitempty,oneof=developer manager admin"`
 }
 
 // FeatureFileDTO is one source file mapped to a feature.

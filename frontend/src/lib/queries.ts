@@ -24,6 +24,8 @@ import type {
   GitHubRepo,
   GitHubSyncResult,
   Project,
+  ProjectMember,
+  ProjectRole,
   PullRequest,
   Release,
   ReleaseStatus,
@@ -125,6 +127,63 @@ export function useUpdateProject(id: number) {
       api.patch<Project>(`/projects/${id}`, body),
     onSuccess: (updated) => {
       queryClient.setQueryData(keys.project(id), updated)
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+}
+
+// ---------- sharing ----------
+
+const memberKeys = {
+  project: (projectId: number) => ['members', projectId] as const,
+}
+
+export function useMembers(projectId: number) {
+  return useQuery({
+    queryKey: memberKeys.project(projectId),
+    queryFn: () => api.list<ProjectMember>(`/projects/${projectId}/members`),
+    enabled: projectId > 0,
+  })
+}
+
+export function useAddMember(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { email: string; role: ProjectRole }) =>
+      api.post<ProjectMember>(`/projects/${projectId}/members`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: memberKeys.project(projectId) }),
+  })
+}
+
+export function useUpdateMember(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, role }: { userId: number; role: ProjectRole }) =>
+      api.patch<ProjectMember>(`/projects/${projectId}/members/${userId}`, { role }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: memberKeys.project(projectId) }),
+  })
+}
+
+/** Hands the project to someone else; the old owner stays on as an editor. */
+export function useTransferProject(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (email: string) => api.post<ProjectMember>(`/projects/${projectId}/transfer`, { email }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: memberKeys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: keys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+    },
+  })
+}
+
+/** Removes someone, or, with your own id, leaves the project. */
+export function useRemoveMember(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: number) => api.del(`/projects/${projectId}/members/${userId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: memberKeys.project(projectId) })
       queryClient.invalidateQueries({ queryKey: ['projects'] })
     },
   })

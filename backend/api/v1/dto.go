@@ -59,6 +59,10 @@ type ProjectDTO struct {
 	// progress without a follow-up request per project.
 	Stats *ProjectStats `json:"stats,omitempty"`
 
+	// MyRole is the caller's role in the project: owner, editor or viewer.
+	// The screens use it to hide what the caller cannot do.
+	MyRole models.ProjectRole `json:"my_role,omitempty"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

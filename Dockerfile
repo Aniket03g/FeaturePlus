@@ -64,6 +64,9 @@ VOLUME ["/app/data"]
 # Set environment variables
 ENV DATA_PATH=/app/data
 ENV FP_RESOURCE_DIR=/app
+# A hosted server serves only the React app and /api/v1, which check who each
+# project is shared with. The old htmx site and /api routes do not.
+ENV FP_LEGACY_ROUTES=off
 
 # Expose the port your app runs on
 EXPOSE 8080

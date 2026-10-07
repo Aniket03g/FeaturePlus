@@ -49,15 +49,22 @@ func (h *ProjectsHandler) List(c *gin.Context) {
 		dbErr    error
 	)
 
-	// ?mine=true narrows to the caller's own projects. The unfiltered list
-	// matches what the existing /api/projects returns, so behaviour is
-	// unchanged unless a client opts in.
+	// Only projects the caller owns or was added to. ?mine=true narrows that
+	// to the ones they own; ?all=true is every project, for an admin.
+	query := h.db.Preload("Owner")
 	if c.Query("mine") == "true" {
-		projects, dbErr = h.repo.GetProjectsByUser(userID)
+		query = query.Where("owner_id = ?", userID)
+	} else if c.Query("all") == "true" && api.IsAdmin(c) {
+		// No filter.
 	} else {
-		projects, dbErr = h.repo.GetAllProjects()
+		ids, idErr := visibleProjectIDs(h.db, userID)
+		if idErr != nil {
+			api.Fail(c, api.Internal(idErr))
+			return
+		}
+		query = query.Where("id IN ?", ids)
 	}
-	if dbErr != nil {
+	if dbErr = query.Order("id").Find(&projects).Error; dbErr != nil {
 		api.Fail(c, api.Internal(dbErr))
 		return
 	}
@@ -72,6 +79,15 @@ func (h *ProjectsHandler) List(c *gin.Context) {
 
 	dtos := NewProjectDTOs(pageItems)
 	h.attachStats(dtos)
+	if roles, roleErr := rolesIn(h.db, pageItems, userID); roleErr == nil {
+		admin := api.IsAdmin(c)
+		for i := range dtos {
+			dtos[i].MyRole = roles[dtos[i].ID]
+			if admin && dtos[i].MyRole != models.RoleOwner {
+				dtos[i].MyRole = models.RoleAdmin
+			}
+		}
+	}
 
 	api.List(c, dtos, page.Meta(total))
 }
@@ -86,6 +102,12 @@ func (h *ProjectsHandler) Get(c *gin.Context) {
 		return
 	}
 
+	_, role, err := requireProjectRole(c, h.db, id, canView)
+	if err != nil {
+		api.Fail(c, err)
+		return
+	}
+
 	project, dbErr := h.repo.GetProjectByID(id)
 	if dbErr != nil {
 		api.Fail(c, api.FromDB(dbErr, "Project"))
@@ -93,6 +115,7 @@ func (h *ProjectsHandler) Get(c *gin.Context) {
 	}
 
 	dto := NewProjectDTO(*project)
+	dto.MyRole = role
 	dtos := []ProjectDTO{dto}
 	h.attachStats(dtos)
 
@@ -136,7 +159,9 @@ func (h *ProjectsHandler) Create(c *gin.Context) {
 		return
 	}
 
-	api.Created(c, NewProjectDTO(*created))
+	dto := NewProjectDTO(*created)
+	dto.MyRole = models.RoleOwner
+	api.Created(c, dto)
 }
 
 // Update changes the fields present in the request body.
@@ -149,14 +174,14 @@ func (h *ProjectsHandler) Update(c *gin.Context) {
 		return
 	}
 
-	project, dbErr := h.repo.GetProjectByID(id)
-	if dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	if _, err := requireProject(c, h.db, id, canEdit); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
-	if err := h.authoriseWrite(c, project); err != nil {
-		api.Fail(c, err)
+	project, dbErr := h.repo.GetProjectByID(id)
+	if dbErr != nil {
+		api.Fail(c, api.FromDB(dbErr, "Project"))
 		return
 	}
 
@@ -186,13 +211,7 @@ func (h *ProjectsHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	project, dbErr := h.repo.GetProjectByID(id)
-	if dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
-		return
-	}
-
-	if err := h.authoriseWrite(c, project); err != nil {
+	if _, err := requireProject(c, h.db, id, ownerOnly); err != nil {
 		api.Fail(c, err)
 		return
 	}
@@ -201,26 +220,13 @@ func (h *ProjectsHandler) Delete(c *gin.Context) {
 		api.Fail(c, api.FromDB(dbErr, "Project"))
 		return
 	}
+	// Who it was shared with goes with it, so an id reused later is not
+	// shared with them too.
+	if dbErr := h.db.Where("project_id = ?", id).Delete(&models.ProjectMember{}).Error; dbErr != nil {
+		log.WithError(dbErr).WithField("project", id).Warn("could not remove a deleted project's members")
+	}
 
 	api.NoContent(c)
-}
-
-// authoriseWrite permits a change only by the project's owner or a manager.
-//
-// The old /api/projects routes applied role middleware but did not check
-// ownership, so any authenticated user could delete any project. This is the
-// stricter rule; it is stated here in one place so every write path shares it.
-func (h *ProjectsHandler) authoriseWrite(c *gin.Context, project *models.Project) error {
-	userID, err := api.UserID(c)
-	if err != nil {
-		return err
-	}
-
-	if project.OwnerID == userID || api.IsManager(c) {
-		return nil
-	}
-
-	return api.Forbidden("Only the project owner or a manager can change this project")
 }
 
 // filterProjects applies the ?q= search across name and description.

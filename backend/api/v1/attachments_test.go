@@ -263,10 +263,15 @@ func TestAttachmentWritesRequireOwnerOrManager(t *testing.T) {
 	r, _ := attachmentRouter(t, db, other.ID, "developer")
 	path := "/api/v1/tasks/" + strconv.Itoa(int(tasks[0].ID)) + "/attachments"
 
+	if w := do(r, http.MethodGet, path, ""); w.Code != http.StatusNotFound {
+		t.Fatalf("outsider read status %d, want 404: %s", w.Code, w.Body.String())
+	}
+
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 	if w := upload(r, path, "notes.txt", "text/plain", []byte("hi")); w.Code != http.StatusForbidden {
 		t.Fatalf("status %d, want 403: %s", w.Code, w.Body.String())
 	}
-	// Reading is open, the same as the rest of a task.
+	// A viewer can read them, the same as the rest of a task.
 	if w := do(r, http.MethodGet, path, ""); w.Code != http.StatusOK {
 		t.Fatalf("read status %d, want 200: %s", w.Code, w.Body.String())
 	}

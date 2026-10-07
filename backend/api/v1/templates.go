@@ -313,19 +313,11 @@ func (h *TemplatesHandler) find(id string) (*repositories.Template, error) {
 	return nil, api.NotFound("Template")
 }
 
-// authoriseWrite permits applying a template by the project's owner, or a
-// manager.
+// authoriseWrite permits applying a template by anyone who can edit the
+// project.
 func (h *TemplatesHandler) authoriseWrite(c *gin.Context, project *models.Project) error {
-	userID, err := api.UserID(c)
-	if err != nil {
-		return err
-	}
-
-	if project.OwnerID == userID || api.IsManager(c) {
-		return nil
-	}
-
-	return api.Forbidden("Only the project owner or a manager can apply a template")
+	_, err := requireProject(c, h.db, project.ID, canEdit)
+	return err
 }
 
 // projectContext reads the context a project is being planned in, defaulting

@@ -350,12 +350,17 @@ func TestPullRequestWritesRequireOwnerOrManager(t *testing.T) {
 	}
 
 	r := prRouter(t, db, other.ID, "developer")
+	if w := do(r, http.MethodGet, prPath(pr.ID, ""), ""); w.Code != http.StatusNotFound {
+		t.Fatalf("outsider read status %d, want 404: %s", w.Code, w.Body.String())
+	}
+
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 	if w := do(r, http.MethodPost, prPath(pr.ID, "/review"),
 		`{"status":"approved"}`); w.Code != http.StatusForbidden {
 		t.Fatalf("status %d, want 403: %s", w.Code, w.Body.String())
 	}
 
-	// Reading is open to any signed-in user.
+	// A viewer can read it.
 	if w := do(r, http.MethodGet, prPath(pr.ID, ""), ""); w.Code != http.StatusOK {
 		t.Fatalf("read status %d, want 200: %s", w.Code, w.Body.String())
 	}

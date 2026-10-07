@@ -210,8 +210,8 @@ func (h *ImportsHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if !api.IsManager(c) {
-		api.Fail(c, api.Forbidden("Only a manager can remove a saved import"))
+	if !api.IsManager(c) && !api.IsAdmin(c) {
+		api.Fail(c, api.Forbidden("Only a manager or an admin can remove a saved import"))
 		return
 	}
 

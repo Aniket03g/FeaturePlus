@@ -16,8 +16,8 @@ import (
 //
 // There is deliberately no role field. The older /api/auth/signup let the
 // caller pick "manager", which made anyone who could reach the page able to
-// edit and delete other people's projects. Roles are changed afterwards, by a
-// manager, on the Team screen.
+// edit and delete other people's projects. Roles are changed afterwards, by an
+// admin, on the Team screen.
 type SignupRequest struct {
 	Name     string `json:"name" binding:"required,max=100"`
 	Email    string `json:"email" binding:"required,email,max=254"`
@@ -26,9 +26,9 @@ type SignupRequest struct {
 
 // signupHandler creates an account and signs it in.
 //
-// The first account on an empty database becomes a manager; every later one
+// The first account on an empty database becomes the admin; every later one
 // is a developer. Without that, a fresh server would have nobody able to
-// change a role, and so no way to ever get a manager.
+// change a role, and so no way to ever get an admin.
 //
 // POST /api/v1/auth/signup
 func signupHandler(db *gorm.DB) gin.HandlerFunc {
@@ -63,7 +63,7 @@ func signupHandler(db *gorm.DB) gin.HandlerFunc {
 			}
 			role := "developer"
 			if total == 0 {
-				role = "manager"
+				role = "admin"
 			}
 
 			username, err := freeUsername(tx, email)

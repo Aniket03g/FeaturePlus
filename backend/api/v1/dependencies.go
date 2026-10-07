@@ -51,8 +51,8 @@ func (h *DependenciesHandler) Graph(c *gin.Context) {
 		return
 	}
 
-	if _, dbErr := h.projectRepo.GetProjectByID(projectID); dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	if _, err := requireProject(c, h.db, projectID, canView); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -134,20 +134,14 @@ func (h *DependenciesHandler) Create(c *gin.Context) {
 		return
 	}
 
-	project, dbErr := h.projectRepo.GetProjectByID(projectID)
-	if dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	if _, err := requireProject(c, h.db, projectID, canEdit); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
 	var req CreateDependencyRequest
 	if bindErr := api.Bind(c, &req); bindErr != nil {
 		api.Fail(c, bindErr)
-		return
-	}
-
-	if err := h.authoriseProjectWrite(c, project); err != nil {
-		api.Fail(c, err)
 		return
 	}
 
@@ -226,18 +220,8 @@ func (h *DependenciesHandler) Delete(c *gin.Context) {
 	}
 
 	// Permission follows the project the parent feature belongs to.
-	parent, dbErr := h.featureRepo.GetFeatureByID(int(dependency.ParentID))
-	if dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Feature"))
-		return
-	}
-	project, dbErr := h.projectRepo.GetProjectByID(parent.ProjectID)
-	if dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
-		return
-	}
-	if err := h.authoriseProjectWrite(c, project); err != nil {
-		api.Fail(c, err)
+	if _, err := requireFeature(c, h.db, dependency.ParentID, canEdit); err != nil {
+		api.Fail(c, asHidden(err, "Dependency"))
 		return
 	}
 
@@ -320,21 +304,6 @@ func (h *DependenciesHandler) tagsByFeature(ids []uint) map[uint][]string {
 		result[row.FeatureID] = append(result[row.FeatureID], row.TagName)
 	}
 	return result
-}
-
-// authoriseProjectWrite permits changes by the project's owner or a manager,
-// the same rule the other handlers apply.
-func (h *DependenciesHandler) authoriseProjectWrite(c *gin.Context, project *models.Project) error {
-	userID, err := api.UserID(c)
-	if err != nil {
-		return err
-	}
-
-	if project.OwnerID == userID || api.IsManager(c) {
-		return nil
-	}
-
-	return api.Forbidden("Only the project owner or a manager can change this project's dependencies")
 }
 
 // findCycles returns every cycle in the graph.

@@ -96,7 +96,7 @@ type GitHubSyncDTO struct {
 //
 // GET /api/v1/projects/:id/github
 func (h *GitHubHandler) Get(c *gin.Context) {
-	project, err := h.project(c, false)
+	project, err := h.project(c, canView)
 	if err != nil {
 		api.Fail(c, err)
 		return
@@ -116,7 +116,8 @@ func (h *GitHubHandler) Get(c *gin.Context) {
 //
 // PUT /api/v1/projects/:id/github
 func (h *GitHubHandler) Link(c *gin.Context) {
-	project, err := h.project(c, true)
+	// Choosing where a project is published is the owner's call, like sharing.
+	project, err := h.project(c, ownerOnly)
 	if err != nil {
 		api.Fail(c, err)
 		return
@@ -192,7 +193,7 @@ func (h *GitHubHandler) Link(c *gin.Context) {
 //
 // DELETE /api/v1/projects/:id/github
 func (h *GitHubHandler) Unlink(c *gin.Context) {
-	project, err := h.project(c, true)
+	project, err := h.project(c, ownerOnly)
 	if err != nil {
 		api.Fail(c, err)
 		return
@@ -209,7 +210,7 @@ func (h *GitHubHandler) Unlink(c *gin.Context) {
 //
 // POST /api/v1/projects/:id/github/sync
 func (h *GitHubHandler) Sync(c *gin.Context) {
-	project, err := h.project(c, true)
+	project, err := h.project(c, canEdit)
 	if err != nil {
 		api.Fail(c, err)
 		return
@@ -244,7 +245,7 @@ func (h *GitHubHandler) Sync(c *gin.Context) {
 //
 // GET /api/v1/projects/:id/github/plan
 func (h *GitHubHandler) Preview(c *gin.Context) {
-	project, err := h.project(c, false)
+	project, err := h.project(c, canView)
 	if err != nil {
 		api.Fail(c, err)
 		return
@@ -275,13 +276,13 @@ func (h *GitHubHandler) PublishRelease(c *gin.Context) {
 		return
 	}
 
+	if _, err := requireProject(c, h.db, release.ProjectID, canEdit); err != nil {
+		api.Fail(c, asHidden(err, "Release"))
+		return
+	}
 	project, dbErr := h.projectRepo.GetProjectByID(release.ProjectID)
 	if dbErr != nil {
 		api.Fail(c, api.FromDB(dbErr, "Project"))
-		return
-	}
-	if err := authoriseProjectWrite(c, project); err != nil {
-		api.Fail(c, err)
 		return
 	}
 
@@ -304,34 +305,21 @@ func (h *GitHubHandler) PublishRelease(c *gin.Context) {
 	api.OK(c, gin.H{"github_url": url})
 }
 
-// project loads the project in the path, checking write permission when asked.
-func (h *GitHubHandler) project(c *gin.Context, write bool) (*models.Project, error) {
+// project loads the project in the path, checking the caller has at least
+// the role `need` in it.
+func (h *GitHubHandler) project(c *gin.Context, need models.ProjectRole) (*models.Project, error) {
 	id, err := api.IDParam(c, "id")
 	if err != nil {
+		return nil, err
+	}
+	if _, err := requireProject(c, h.db, id, need); err != nil {
 		return nil, err
 	}
 	project, dbErr := h.projectRepo.GetProjectByID(id)
 	if dbErr != nil {
 		return nil, api.FromDB(dbErr, "Project")
 	}
-	if write {
-		if err := authoriseProjectWrite(c, project); err != nil {
-			return nil, err
-		}
-	}
 	return project, nil
-}
-
-// authoriseProjectWrite is the rule releases use: the owner, or a manager.
-func authoriseProjectWrite(c *gin.Context, project *models.Project) error {
-	userID, err := api.UserID(c)
-	if err != nil {
-		return err
-	}
-	if project.OwnerID == userID || api.IsManager(c) {
-		return nil
-	}
-	return api.Forbidden("Only the project owner or a manager can change where this project is published")
 }
 
 // ---------- the publisher ----------

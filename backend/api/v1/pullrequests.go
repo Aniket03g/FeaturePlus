@@ -69,8 +69,8 @@ func (h *PullRequestsHandler) ListForProject(c *gin.Context) {
 		return
 	}
 
-	if _, dbErr := h.projectRepo.GetProjectByID(projectID); dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	if _, err := requireProject(c, h.db, projectID, canView); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -509,7 +509,8 @@ func pullRequestProjects(db *gorm.DB, prs []models.PullRequest) (map[uint]int, e
 	return projects, nil
 }
 
-// load fetches the pull request named in the path.
+// load fetches the pull request named in the path, if the caller can see
+// the project it belongs to.
 func (h *PullRequestsHandler) load(c *gin.Context) (*models.PullRequest, error) {
 	id, err := api.IDParam(c, "prId")
 	if err != nil {
@@ -519,6 +520,14 @@ func (h *PullRequestsHandler) load(c *gin.Context) (*models.PullRequest, error) 
 	pr, dbErr := h.repo.GetByID(uint(id))
 	if dbErr != nil {
 		return nil, api.FromDB(dbErr, "Pull request")
+	}
+
+	feature, err := h.featureFor(pr)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := requireProject(c, h.db, feature.ProjectID, canView); err != nil {
+		return nil, asHidden(err, "Pull request")
 	}
 
 	return pr, nil
@@ -569,26 +578,10 @@ func (h *PullRequestsHandler) featureFor(pr *models.PullRequest) (*models.Featur
 	return feature, nil
 }
 
-// authoriseProject permits changes by the project's owner, or a manager.
+// authoriseProject permits changes by anyone who can edit the project.
 func (h *PullRequestsHandler) authoriseProject(c *gin.Context, projectID int) error {
-	userID, err := api.UserID(c)
-	if err != nil {
-		return err
-	}
-
-	if api.IsManager(c) {
-		return nil
-	}
-
-	project, dbErr := h.projectRepo.GetProjectByID(projectID)
-	if dbErr != nil {
-		return api.FromDB(dbErr, "Project")
-	}
-	if project.OwnerID == userID {
-		return nil
-	}
-
-	return api.Forbidden("Only the project owner or a manager can change this project's pull requests")
+	_, err := requireProject(c, h.db, projectID, canEdit)
+	return err
 }
 
 // reviewStatusLabel maps a review decision onto the status stored on the row.

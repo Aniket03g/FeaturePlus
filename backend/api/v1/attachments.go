@@ -74,8 +74,8 @@ func (h *AttachmentsHandler) List(c *gin.Context) {
 		return
 	}
 
-	if _, dbErr := h.taskRepo.GetByID(uint(taskID)); dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Task"))
+	if _, err := requireTask(c, h.db, uint(taskID), canView); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -281,7 +281,8 @@ func (h *AttachmentsHandler) Delete(c *gin.Context) {
 	api.NoContent(c)
 }
 
-// load fetches the attachment named in the path.
+// load fetches the attachment named in the path, if the caller can see the
+// project its task belongs to.
 func (h *AttachmentsHandler) load(c *gin.Context) (*models.TaskAttachment, error) {
 	id, err := api.IDParam(c, "attachmentId")
 	if err != nil {
@@ -293,35 +294,17 @@ func (h *AttachmentsHandler) load(c *gin.Context) (*models.TaskAttachment, error
 		return nil, api.FromDB(dbErr, "Attachment")
 	}
 
+	if _, err := requireTask(c, h.db, attachment.TaskID, canView); err != nil {
+		return nil, asHidden(err, "Attachment")
+	}
+
 	return attachment, nil
 }
 
-// authorise permits writes by the owner of the task's project, or a manager —
-// the same rule the task routes apply.
+// authorise permits writes by anyone who can edit the task's project.
 func (h *AttachmentsHandler) authorise(c *gin.Context, task *models.Task) error {
-	userID, err := api.UserID(c)
-	if err != nil {
-		return err
-	}
-
-	if api.IsManager(c) {
-		return nil
-	}
-
-	feature, dbErr := h.featureRepo.GetFeatureByID(int(task.FeatureID))
-	if dbErr != nil {
-		return api.FromDB(dbErr, "Feature")
-	}
-
-	project, dbErr := h.projectRepo.GetProjectByID(feature.ProjectID)
-	if dbErr != nil {
-		return api.FromDB(dbErr, "Project")
-	}
-	if project.OwnerID == userID {
-		return nil
-	}
-
-	return api.Forbidden("Only the project owner or a manager can change this task's attachments")
+	_, err := requireTask(c, h.db, task.ID, canEdit)
+	return err
 }
 
 // storedAttachmentName builds the key a file is stored under.

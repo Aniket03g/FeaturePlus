@@ -454,19 +454,34 @@ export function outsidePath(items: DraftFeature[], key: string, inGroup: (key: s
 // ---------- text in and out ----------
 
 /**
+ * The line the copied AI instructions ask an outside AI to start its answer
+ * with. Its presence is how a pasted or opened list is known to be an AI's.
+ */
+export const AI_DRAFT_MARKER = 'FeaturePlus AI draft'
+
+const MARKER_LINE = /^\s*(?:#+\s*)?featureplus ai draft\s*$/i
+
+export function isAiDraft(text: string) {
+  return text.split(/\r?\n/).some((line) => MARKER_LINE.test(line))
+}
+
+/**
  * Read a list from text. Bullets nest by indentation, the same format the
  * dependency canvas reads, so a file made for one opens in the other. Plain
  * lines with no bullets at all are taken as one feature each, which is what a
  * list pasted from anywhere else usually looks like.
  *
  * `needs:` is kept, as confirmed dependencies: whoever wrote the file meant
- * them. Status tags are read without complaint and dropped.
+ * them. Status tags are read without complaint and dropped. The exception is
+ * an outside AI's answer, marked by AI_DRAFT_MARKER: its dependencies are
+ * guesses, so they come in as suggestions to confirm, like Ask AI's.
  */
 export function fromText(text: string): { items: DraftFeature[]; problems: string[] } {
-  const lines = text.split(/\r?\n/)
+  const suggested = isAiDraft(text)
+  const lines = text.split(/\r?\n/).filter((line) => !MARKER_LINE.test(line))
   const hasBullets = lines.some((line) => /^\s*[-*+]\s+/.test(line))
   const source = hasBullets
-    ? text
+    ? lines.join('\n')
     : lines
         .map((line) => line.trim())
         .filter((line) => line && !line.startsWith('#'))
@@ -496,7 +511,7 @@ export function fromText(text: string): { items: DraftFeature[]; problems: strin
       problems.push(`"${waiting.title}" cannot wait on ${byKey.get(needed)?.title ?? 'that'}: one is inside the other`)
       continue
     }
-    waiting.needs = [...(waiting.needs ?? []), { key: needed, suggested: false }]
+    waiting.needs = [...(waiting.needs ?? []), { key: needed, suggested }]
   }
 
   return { items, problems }

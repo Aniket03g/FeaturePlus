@@ -47,15 +47,15 @@ func TestSignupCreatesAnAccountAndSignsIn(t *testing.T) {
 	}
 }
 
-func TestSignupFirstAccountIsManagerThenDevelopers(t *testing.T) {
+func TestSignupFirstAccountIsAdminThenDevelopers(t *testing.T) {
 	db := newTestDB(t)
 	r := realAuthRouter(t, db)
 
 	first := do(r, http.MethodPost, "/api/v1/auth/signup", `{"name":"A","email":"a@x.io","password":"password1"}`)
 	second := do(r, http.MethodPost, "/api/v1/auth/signup", `{"name":"B","email":"b@x.io","password":"password2","role":"manager"}`)
 
-	if got := decodeSession(t, first.Body.Bytes()).User.Role; got != "manager" {
-		t.Errorf("first account role %q, want manager", got)
+	if got := decodeSession(t, first.Body.Bytes()).User.Role; got != "admin" {
+		t.Errorf("first account role %q, want admin", got)
 	}
 	// A role in the body is ignored.
 	if got := decodeSession(t, second.Body.Bytes()).User.Role; got != "developer" {

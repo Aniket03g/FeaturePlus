@@ -100,7 +100,8 @@ func decodeScope(t *testing.T, w *httptest.ResponseRecorder) ScopeDTO {
 
 func TestListUsersNeverCarriesAPassword(t *testing.T) {
 	db := newTestDB(t)
-	owner, _, _ := seed(t, db)
+	owner, other, project := seed(t, db)
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 
 	r := workspaceRouter(t, db, owner.ID, "developer")
 	w := do(r, http.MethodGet, "/api/v1/users", "")
@@ -119,11 +120,12 @@ func TestListUsersNeverCarriesAPassword(t *testing.T) {
 
 func TestUserListFilters(t *testing.T) {
 	db := newTestDB(t)
-	owner, other, _ := seed(t, db)
+	owner, other, project := seed(t, db)
 	if err := db.Model(&models.User{}).Where("id = ?", other.ID).
 		Update("role", "manager").Error; err != nil {
 		t.Fatalf("set role: %v", err)
 	}
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 
 	r := workspaceRouter(t, db, owner.ID, "developer")
 
@@ -157,7 +159,7 @@ func TestUsersCanEditThemselvesButNotEachOther(t *testing.T) {
 	}
 }
 
-func TestOnlyAManagerCanChangeARole(t *testing.T) {
+func TestOnlyAnAdminCanChangeARole(t *testing.T) {
 	db := newTestDB(t)
 	owner, _, _ := seed(t, db)
 
@@ -178,8 +180,34 @@ func TestOnlyAManagerCanChangeARole(t *testing.T) {
 
 	manager := workspaceRouter(t, db, owner.ID, "manager")
 	if w := do(manager, http.MethodPatch, "/api/v1/users/"+strconv.Itoa(owner.ID),
+		`{"role":"admin"}`); w.Code != http.StatusForbidden {
+		t.Fatalf("manager status %d, want 403: %s", w.Code, w.Body.String())
+	}
+
+	admin := workspaceRouter(t, db, owner.ID, "admin")
+	if w := do(admin, http.MethodPatch, "/api/v1/users/"+strconv.Itoa(owner.ID),
 		`{"role":"manager"}`); w.Code != http.StatusOK {
-		t.Fatalf("manager status %d, want 200: %s", w.Code, w.Body.String())
+		t.Fatalf("admin status %d, want 200: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestTheLastAdminCannotBeDemoted(t *testing.T) {
+	db := newTestDB(t)
+	owner, other, _ := seed(t, db)
+	db.Model(&models.User{}).Where("id = ?", owner.ID).Update("role", "admin")
+
+	admin := workspaceRouter(t, db, owner.ID, "admin")
+	path := "/api/v1/users/" + strconv.Itoa(owner.ID)
+	if w := do(admin, http.MethodPatch, path, `{"role":"developer"}`); w.Code != http.StatusConflict {
+		t.Fatalf("only admin status %d, want 409: %s", w.Code, w.Body.String())
+	}
+
+	// With a second admin, stepping down is fine.
+	if w := do(admin, http.MethodPatch, "/api/v1/users/"+strconv.Itoa(other.ID), `{"role":"admin"}`); w.Code != http.StatusOK {
+		t.Fatalf("promote status %d: %s", w.Code, w.Body.String())
+	}
+	if w := do(admin, http.MethodPatch, path, `{"role":"developer"}`); w.Code != http.StatusOK {
+		t.Fatalf("step down status %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -203,7 +231,7 @@ func TestDeleteUserRefusesWhileTheyOwnProjects(t *testing.T) {
 	db := newTestDB(t)
 	owner, other, _ := seed(t, db)
 
-	r := workspaceRouter(t, db, other.ID, "manager")
+	r := workspaceRouter(t, db, other.ID, "admin")
 
 	w := do(r, http.MethodDelete, "/api/v1/users/"+strconv.Itoa(owner.ID), "")
 	if w.Code != http.StatusConflict {
@@ -344,11 +372,16 @@ func TestMappingCodeRequiresOwnerOrManager(t *testing.T) {
 	r := workspaceRouter(t, db, other.ID, "developer")
 	path := "/api/v1/features/" + strconv.Itoa(int(features[0].ID)) + "/files"
 
+	if w := do(r, http.MethodGet, path, ""); w.Code != http.StatusNotFound {
+		t.Fatalf("outsider read status %d, want 404: %s", w.Code, w.Body.String())
+	}
+
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 	if w := do(r, http.MethodPost, path,
 		`{"file_path":"a.go"}`); w.Code != http.StatusForbidden {
 		t.Fatalf("status %d, want 403: %s", w.Code, w.Body.String())
 	}
-	// Reading the map is open.
+	// A viewer can read the map.
 	if w := do(r, http.MethodGet, path, ""); w.Code != http.StatusOK {
 		t.Fatalf("read status %d, want 200: %s", w.Code, w.Body.String())
 	}
@@ -434,11 +467,12 @@ func TestOnlyTheProjectOwnerManagesAccess(t *testing.T) {
 	path := "/api/v1/features/" + strconv.Itoa(int(features[0].ID)) + "/scopes"
 	body := fmt.Sprintf(`{"user_id":%d,"access_level":"contract"}`, other.ID)
 
-	// Handing out access to somebody's source is the owner's call, so this is
-	// the one place a manager is deliberately not enough.
-	manager := workspaceRouter(t, db, other.ID, "manager")
-	if w := do(manager, http.MethodPost, path, body); w.Code != http.StatusForbidden {
-		t.Fatalf("manager status %d, want 403: %s", w.Code, w.Body.String())
+	// Handing out access to somebody's source is the owner's call: an editor
+	// is not enough.
+	share(t, db, project.ID, other.ID, models.RoleEditor)
+	editor := workspaceRouter(t, db, other.ID, "manager")
+	if w := do(editor, http.MethodPost, path, body); w.Code != http.StatusForbidden {
+		t.Fatalf("editor status %d, want 403: %s", w.Code, w.Body.String())
 	}
 
 	r := workspaceRouter(t, db, owner.ID, "developer")

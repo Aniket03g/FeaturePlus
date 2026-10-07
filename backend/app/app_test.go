@@ -34,6 +34,7 @@ func testConfig(t *testing.T) Config {
 		RequireGitHubToken: false,
 		RouteDumpPath:      "", // Don't overwrite the checked-in routes.txt
 		MaxMultipartMemory: 8 << 20,
+		LegacyRoutes:       true,
 	}
 }
 

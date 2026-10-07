@@ -41,7 +41,8 @@ export function FeatureAccess({
   const [level, setLevel] = useState<AccessLevel>('contract')
   const [error, setError] = useState('')
 
-  const isOwner = user?.id === ownerId
+  // The owner, or an admin acting for them.
+  const isOwner = user?.id === ownerId || user?.role === 'admin'
   const items = scopes.data?.items ?? []
 
   // Somebody already granted, and the project's owner, are not candidates: the

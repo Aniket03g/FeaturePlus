@@ -200,16 +200,22 @@ func TestPlaygroundImportIsAllOrNothing(t *testing.T) {
 	}
 }
 
-func TestPlaygroundImportNeedsOwnerOrManager(t *testing.T) {
+func TestPlaygroundImportNeedsEditAccess(t *testing.T) {
 	db := newTestDB(t)
 	_, other, project := seed(t, db)
 	body := `{"project_id":` + strconv.Itoa(project.ID) + `,` + nestedList + `}`
+	r := playgroundRouter(t, db, other.ID, "manager")
 
-	if w := do(playgroundRouter(t, db, other.ID, "developer"), http.MethodPost, "/api/v1/playground/import", body); w.Code != http.StatusForbidden {
-		t.Errorf("another developer: status %d, want 403", w.Code)
+	if w := do(r, http.MethodPost, "/api/v1/playground/import", body); w.Code != http.StatusNotFound {
+		t.Errorf("not shared, even as a manager: status %d, want 404", w.Code)
 	}
-	if w := do(playgroundRouter(t, db, other.ID, "manager"), http.MethodPost, "/api/v1/playground/import", body); w.Code != http.StatusCreated {
-		t.Errorf("a manager: status %d, want 201: %s", w.Code, w.Body.String())
+	share(t, db, project.ID, other.ID, models.RoleViewer)
+	if w := do(r, http.MethodPost, "/api/v1/playground/import", body); w.Code != http.StatusForbidden {
+		t.Errorf("a viewer: status %d, want 403", w.Code)
+	}
+	db.Model(&models.ProjectMember{}).Where("user_id = ?", other.ID).Update("role", models.RoleEditor)
+	if w := do(r, http.MethodPost, "/api/v1/playground/import", body); w.Code != http.StatusCreated {
+		t.Errorf("an editor: status %d, want 201: %s", w.Code, w.Body.String())
 	}
 }
 

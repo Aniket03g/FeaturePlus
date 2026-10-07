@@ -75,8 +75,8 @@ func (h *ScopesHandler) ListForProject(c *gin.Context) {
 		return
 	}
 
-	if _, dbErr := h.projectRepo.GetProjectByID(projectID); dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	if _, err := requireProject(c, h.db, projectID, canView); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -209,41 +209,21 @@ func (h *ScopesHandler) Revoke(c *gin.Context) {
 	api.NoContent(c)
 }
 
-// load fetches the feature named in the path.
+// load fetches the feature named in the path, if the caller can see its
+// project.
 func (h *ScopesHandler) load(c *gin.Context) (*models.Feature, error) {
 	id, err := api.IDParam(c, "featureId")
 	if err != nil {
 		return nil, err
 	}
-
-	feature, dbErr := h.featureRepo.GetFeatureByID(id)
-	if dbErr != nil {
-		return nil, api.FromDB(dbErr, "Feature")
-	}
-
-	return feature, nil
+	return requireFeature(c, h.db, uint(id), canView)
 }
 
 // loadForOwner fetches the feature and checks the caller owns its project.
 func (h *ScopesHandler) loadForOwner(c *gin.Context) (*models.Feature, error) {
-	feature, err := h.load(c)
+	id, err := api.IDParam(c, "featureId")
 	if err != nil {
 		return nil, err
 	}
-
-	userID, err := api.UserID(c)
-	if err != nil {
-		return nil, err
-	}
-
-	project, dbErr := h.projectRepo.GetProjectByID(feature.ProjectID)
-	if dbErr != nil {
-		return nil, api.FromDB(dbErr, "Project")
-	}
-
-	if project.OwnerID != userID {
-		return nil, api.Forbidden("Only the project owner can change who has access")
-	}
-
-	return feature, nil
+	return requireFeature(c, h.db, uint(id), ownerOnly)
 }

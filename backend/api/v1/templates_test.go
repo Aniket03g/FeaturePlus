@@ -299,16 +299,17 @@ func TestApplyTemplateRequiresOwnerOrManager(t *testing.T) {
 	_ = owner
 	repo := writeCatalogue(t, sampleCatalogue)
 
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 	r := templateRouter(t, db, other.ID, "developer", repo)
 	if w := do(r, http.MethodPost, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/template",
 		`{"template_id":"go-api"}`); w.Code != http.StatusForbidden {
 		t.Fatalf("status %d, want 403: %s", w.Code, w.Body.String())
 	}
 
-	manager := templateRouter(t, db, other.ID, "manager", repo)
-	if w := do(manager, http.MethodPost, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/template",
+	db.Model(&models.ProjectMember{}).Where("user_id = ?", other.ID).Update("role", models.RoleEditor)
+	if w := do(r, http.MethodPost, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/template",
 		`{"template_id":"go-api"}`); w.Code != http.StatusOK {
-		t.Fatalf("manager status %d, want 200: %s", w.Code, w.Body.String())
+		t.Fatalf("editor status %d, want 200: %s", w.Code, w.Body.String())
 	}
 }
 

@@ -73,8 +73,8 @@ func (h *ReleasesHandler) ListForProject(c *gin.Context) {
 		return
 	}
 
-	if _, dbErr := h.projectRepo.GetProjectByID(projectID); dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	if _, err := requireProject(c, h.db, projectID, canView); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -149,20 +149,14 @@ func (h *ReleasesHandler) Create(c *gin.Context) {
 		return
 	}
 
-	project, dbErr := h.projectRepo.GetProjectByID(projectID)
-	if dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Project"))
+	if _, err := requireProject(c, h.db, projectID, canEdit); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
 	var req CreateReleaseRequest
 	if bindErr := api.Bind(c, &req); bindErr != nil {
 		api.Fail(c, bindErr)
-		return
-	}
-
-	if err := h.authoriseWrite(c, project); err != nil {
-		api.Fail(c, err)
 		return
 	}
 
@@ -613,8 +607,20 @@ func (h *ReleasesHandler) respondWithDetail(c *gin.Context, release *models.Rele
 	api.OK(c, dto)
 }
 
-// load fetches the release named in the path.
+// load fetches the release named in the path, if the caller can see its
+// project.
 func (h *ReleasesHandler) load(c *gin.Context) (*models.Release, error) {
+	return h.loadAs(c, canView)
+}
+
+// loadForWrite fetches the release and checks the caller may change it.
+// Permission follows the release's project, as it does for every other
+// resource hanging off one.
+func (h *ReleasesHandler) loadForWrite(c *gin.Context) (*models.Release, error) {
+	return h.loadAs(c, canEdit)
+}
+
+func (h *ReleasesHandler) loadAs(c *gin.Context, need models.ProjectRole) (*models.Release, error) {
 	id, err := api.IDParam(c, "releaseId")
 	if err != nil {
 		return nil, err
@@ -625,42 +631,11 @@ func (h *ReleasesHandler) load(c *gin.Context) (*models.Release, error) {
 		return nil, api.FromDB(dbErr, "Release")
 	}
 
+	if _, err := requireProject(c, h.db, release.ProjectID, need); err != nil {
+		return nil, asHidden(err, "Release")
+	}
+
 	return &release, nil
-}
-
-// loadForWrite fetches the release and checks the caller may change it.
-// Permission follows the release's project, as it does for every other
-// resource hanging off one.
-func (h *ReleasesHandler) loadForWrite(c *gin.Context) (*models.Release, error) {
-	release, err := h.load(c)
-	if err != nil {
-		return nil, err
-	}
-
-	project, dbErr := h.projectRepo.GetProjectByID(release.ProjectID)
-	if dbErr != nil {
-		return nil, api.FromDB(dbErr, "Project")
-	}
-
-	if err := h.authoriseWrite(c, project); err != nil {
-		return nil, err
-	}
-
-	return release, nil
-}
-
-// authoriseWrite permits changes by the project's owner, or a manager.
-func (h *ReleasesHandler) authoriseWrite(c *gin.Context, project *models.Project) error {
-	userID, err := api.UserID(c)
-	if err != nil {
-		return err
-	}
-
-	if project.OwnerID == userID || api.IsManager(c) {
-		return nil
-	}
-
-	return api.Forbidden("Only the project owner or a manager can change this project's releases")
 }
 
 // plannedFeatures loads the features assigned to a release.

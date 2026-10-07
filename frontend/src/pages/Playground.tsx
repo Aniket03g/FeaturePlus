@@ -17,6 +17,7 @@ import {
   ChevronRight,
   ClipboardPaste,
   CloudOff,
+  Copy,
   Loader2,
   Download,
   FileUp,
@@ -37,6 +38,7 @@ import {
   X,
 } from 'lucide-react'
 import {
+  AI_DRAFT_MARKER,
   addFeature,
   addNeed,
   addRelease,
@@ -93,6 +95,7 @@ import {
 } from '@/lib/queries'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from '@/lib/router'
+import { AI_INSTRUCTIONS } from '@/lib/ai-instructions'
 import { ApiError } from '@/lib/api'
 import { cn, plural } from '@/lib/utils'
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/ui/card'
@@ -195,8 +198,12 @@ function forgetLegacyDraft() {
 
 /** The first `# Heading` of a file, used as the suggested project name. */
 function headingOf(text: string) {
-  const match = /^#\s+(.+)$/m.exec(text)
-  return match ? match[1].trim() : ''
+  // The AI-draft marker can come back as a heading too; it is not the name.
+  for (const match of text.matchAll(/^#\s+(.+)$/gm)) {
+    const heading = match[1].trim()
+    if (heading.toLowerCase() !== AI_DRAFT_MARKER.toLowerCase()) return heading
+  }
+  return ''
 }
 
 /**
@@ -424,6 +431,7 @@ function PlaygroundEditor({ initial, takeOver, offline }: { initial: Saved; take
         <div className="flex flex-wrap items-center gap-2">
           <OpenProjectPicker busy={opening} onOpen={openProject} />
           <FileButton onFile={openFile} />
+          <CopyInstructionsButton />
           <Button variant="secondary" size="sm" onClick={() => setPasting(true)}>
             <ClipboardPaste className="h-3.5 w-3.5" />
             Paste
@@ -2069,6 +2077,36 @@ function NeedsPanel({
 }
 
 // ---------- getting a list in ----------
+
+/**
+ * Copies the instructions that make any outside chat AI answer in the format
+ * Paste and Open file read, for when Ask AI has no key to use.
+ */
+function CopyInstructionsButton() {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(AI_INSTRUCTIONS)
+      setState('copied')
+    } catch {
+      setState('failed')
+    }
+    window.setTimeout(() => setState('idle'), 2000)
+  }
+
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={copy}
+      title="Copy instructions to paste after your prompt in ChatGPT, Grok or any chat AI. Its answer opens here with Paste or Open file."
+    >
+      {state === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      {state === 'copied' ? 'Copied' : state === 'failed' ? 'Could not copy' : 'Copy AI instructions'}
+    </Button>
+  )
+}
 
 function FileButton({ onFile }: { onFile: (file: File | undefined) => void }) {
   return (

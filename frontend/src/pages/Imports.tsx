@@ -34,7 +34,7 @@ export function Imports() {
   const imports = useImports()
   const remove = useDeleteImport()
 
-  const isManager = user?.role === 'manager'
+  const isManager = user?.role === 'manager' || user?.role === 'admin'
   const items = imports.data?.items ?? []
 
   return (

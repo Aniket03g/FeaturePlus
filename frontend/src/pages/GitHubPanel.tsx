@@ -33,7 +33,19 @@ const RETURN_NOTICE: Record<string, { ok: boolean; text: string }> = {
  * copy only goes one way: FeaturePlus writes the plan file, as you, and an
  * edit made to it on GitHub is replaced on the next sync.
  */
-export function GitHubPanel({ projectId, canEdit }: { projectId: number; canEdit: boolean }) {
+/**
+ * `canEdit` lets someone sync the plan; `canLink` lets them choose or drop the
+ * repository, which is the owner's call alone.
+ */
+export function GitHubPanel({
+  projectId,
+  canEdit,
+  canLink,
+}: {
+  projectId: number
+  canEdit: boolean
+  canLink: boolean
+}) {
   const account = useGitHubAccount()
   const link = useGitHubLink(projectId)
   const connected = !!account.data?.connected
@@ -48,7 +60,7 @@ export function GitHubPanel({ projectId, canEdit }: { projectId: number; canEdit
   const [notice, setNotice] = useState('')
 
   const linked = !!link.data?.linked
-  const wantRepos = connected && canEdit && (!linked || choosing)
+  const wantRepos = connected && canLink && (!linked || choosing)
   const repos = useGitHubRepos(wantRepos)
 
   // Read ?github= once after returning from GitHub, then take it off the
@@ -164,19 +176,23 @@ export function GitHubPanel({ projectId, canEdit }: { projectId: number; canEdit
 
           {linked && canEdit && connected && !choosing && (
             <div className="flex shrink-0 flex-wrap gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setChoosing(true)}>
-                Change
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleUnlink}
-                loading={unlinkProject.isPending}
-                title="Stop publishing this project to GitHub. Nothing on GitHub is removed."
-              >
-                <Unlink className="h-3.5 w-3.5" />
-                Stop publishing
-              </Button>
+              {canLink && (
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => setChoosing(true)}>
+                    Change
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleUnlink}
+                    loading={unlinkProject.isPending}
+                    title="Stop publishing this project to GitHub. Nothing on GitHub is removed."
+                  >
+                    <Unlink className="h-3.5 w-3.5" />
+                    Stop publishing
+                  </Button>
+                </>
+              )}
               <Button size="sm" onClick={handleSync} loading={sync.isPending}>
                 <RefreshCw className="h-3.5 w-3.5" />
                 Sync to GitHub

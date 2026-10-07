@@ -43,14 +43,30 @@ func (h *UsersHandler) Register(g *gin.RouterGroup) {
 //
 // GET /api/v1/users?q=&role=
 //
-// Reading the list is open to any signed-in user: assigning a task or granting
-// access to a feature both need to name a person, so hiding the roster would
-// break the screens that depend on it.
+// An admin, who runs the server, sees every account. Anyone else sees only the
+// people they share a project with, and themselves: that is everyone they can
+// assign work to or grant access to, and it keeps one team's roster hidden from
+// another's on a shared server.
 func (h *UsersHandler) List(c *gin.Context) {
 	users, dbErr := h.repo.GetAllUsers()
 	if dbErr != nil {
 		api.Fail(c, api.Internal(dbErr))
 		return
+	}
+
+	if !api.IsAdmin(c) {
+		known, err := h.knownUsers(c)
+		if err != nil {
+			api.Fail(c, err)
+			return
+		}
+		kept := make([]models.User, 0, len(users))
+		for _, user := range users {
+			if known[user.ID] {
+				kept = append(kept, user)
+			}
+		}
+		users = kept
 	}
 
 	roles := lowerSet(c.QueryArray("role"))
@@ -96,6 +112,18 @@ func (h *UsersHandler) Get(c *gin.Context) {
 		return
 	}
 
+	if !api.IsAdmin(c) {
+		known, err := h.knownUsers(c)
+		if err != nil {
+			api.Fail(c, err)
+			return
+		}
+		if !known[id] {
+			api.Fail(c, api.NotFound("User"))
+			return
+		}
+	}
+
 	user, dbErr := h.repo.GetUserByID(id)
 	if dbErr != nil {
 		api.Fail(c, api.FromDB(dbErr, "User"))
@@ -136,14 +164,20 @@ func (h *UsersHandler) Update(c *gin.Context) {
 		return
 	}
 
-	isManager := api.IsManager(c)
-	if id != callerID && !isManager {
-		api.Fail(c, api.Forbidden("Only a manager can change someone else's account"))
+	isAdmin := api.IsAdmin(c)
+	if id != callerID && !isAdmin {
+		api.Fail(c, api.Forbidden("Only an admin can change someone else's account"))
 		return
 	}
-	if req.Role != nil && !isManager {
-		api.Fail(c, api.Forbidden("Only a manager can change a role"))
+	if req.Role != nil && !isAdmin {
+		api.Fail(c, api.Forbidden("Only an admin can change a role"))
 		return
+	}
+	if req.Role != nil && *req.Role != "admin" {
+		if err := h.keepAnAdmin(id); err != nil {
+			api.Fail(c, err)
+			return
+		}
 	}
 
 	// Email and username are unique columns. Asking first turns a driver-level
@@ -227,8 +261,8 @@ func (h *UsersHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if !api.IsManager(c) {
-		api.Fail(c, api.Forbidden("Only a manager can remove a user"))
+	if !api.IsAdmin(c) {
+		api.Fail(c, api.Forbidden("Only an admin can remove a user"))
 		return
 	}
 	if id == callerID {
@@ -259,6 +293,9 @@ func (h *UsersHandler) Delete(c *gin.Context) {
 		if err := tx.Where("user_id = ?", id).Delete(&models.FeatureScope{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("user_id = ?", id).Delete(&models.ProjectMember{}).Error; err != nil {
+			return err
+		}
 		return tx.Delete(&models.User{}, id).Error
 	}); dbErr != nil {
 		api.Fail(c, api.Internal(dbErr))
@@ -276,4 +313,54 @@ func (h *UsersHandler) taken(column, value string, exceptID int) (bool, error) {
 		Where(column+" = ? AND id <> ?", value, exceptID).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// keepAnAdmin refuses a change that would leave the server with no admin,
+// since nobody else could then make one.
+func (h *UsersHandler) keepAnAdmin(losingID int) error {
+	var user models.User
+	if err := h.db.First(&user, losingID).Error; err != nil {
+		return api.FromDB(err, "User")
+	}
+	if user.Role != "admin" {
+		return nil
+	}
+	var admins int64
+	if err := h.db.Model(&models.User{}).Where("role = ?", "admin").Count(&admins).Error; err != nil {
+		return api.Internal(err)
+	}
+	if admins <= 1 {
+		return api.Conflict("This is the only admin. Make someone else an admin first.")
+	}
+	return nil
+}
+
+// knownUsers is the caller and everyone who owns or was added to a project the
+// caller can see.
+func (h *UsersHandler) knownUsers(c *gin.Context) (map[int]bool, error) {
+	userID, err := api.UserID(c)
+	if err != nil {
+		return nil, err
+	}
+	known := map[int]bool{userID: true}
+
+	projectIDs, dbErr := visibleProjectIDs(h.db, userID)
+	if dbErr != nil {
+		return nil, api.Internal(dbErr)
+	}
+	if len(projectIDs) == 0 {
+		return known, nil
+	}
+
+	var owners, members []int
+	if dbErr := h.db.Model(&models.Project{}).Where("id IN ?", projectIDs).Pluck("owner_id", &owners).Error; dbErr != nil {
+		return nil, api.Internal(dbErr)
+	}
+	if dbErr := h.db.Model(&models.ProjectMember{}).Where("project_id IN ?", projectIDs).Pluck("user_id", &members).Error; dbErr != nil {
+		return nil, api.Internal(dbErr)
+	}
+	for _, id := range append(owners, members...) {
+		known[id] = true
+	}
+	return known, nil
 }

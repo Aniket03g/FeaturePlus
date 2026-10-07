@@ -24,8 +24,36 @@ export interface Project {
   owner?: User
   config: Record<string, unknown>
   stats?: ProjectStats
+  /** The signed-in person's role in this project. */
+  my_role?: ProjectRole
   created_at: string
   updated_at: string
+}
+
+/**
+ * What someone may do in a project: owner shares and deletes, editor changes,
+ * viewer looks. Admin is someone running the server, with the owner's powers
+ * in a project that is not theirs.
+ */
+export type ProjectRole = 'owner' | 'editor' | 'viewer' | 'admin'
+
+export const ROLE_LABEL: Record<ProjectRole, string> = {
+  owner: 'Owner',
+  editor: 'Editor',
+  viewer: 'Viewer',
+  admin: 'Admin',
+}
+
+/** Owner or admin: can share, transfer, delete and link GitHub. */
+export function canManage(role: ProjectRole | undefined) {
+  return role === 'owner' || role === 'admin'
+}
+
+/** One person a project is shared with. The owner is listed too, first. */
+export interface ProjectMember {
+  user: User
+  role: ProjectRole
+  added_at?: string
 }
 
 export interface Session {

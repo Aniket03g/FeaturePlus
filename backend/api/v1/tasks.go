@@ -64,8 +64,8 @@ func (h *TasksHandler) ListForFeature(c *gin.Context) {
 		return
 	}
 
-	if _, dbErr := h.featureRepo.GetFeatureByID(featureID); dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Feature"))
+	if _, err := requireFeature(c, h.db, uint(featureID), canView); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -113,6 +113,11 @@ func (h *TasksHandler) Get(c *gin.Context) {
 		return
 	}
 
+	if _, err := requireTask(c, h.db, uint(id), canView); err != nil {
+		api.Fail(c, err)
+		return
+	}
+
 	task, dbErr := h.repo.GetByID(uint(id))
 	if dbErr != nil {
 		api.Fail(c, api.FromDB(dbErr, "Task"))
@@ -140,20 +145,15 @@ func (h *TasksHandler) Create(c *gin.Context) {
 		return
 	}
 
-	feature, dbErr := h.featureRepo.GetFeatureByID(featureID)
-	if dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Feature"))
+	feature, err := requireFeature(c, h.db, uint(featureID), canEdit)
+	if err != nil {
+		api.Fail(c, err)
 		return
 	}
 
 	var req CreateTaskRequest
 	if bindErr := api.Bind(c, &req); bindErr != nil {
 		api.Fail(c, bindErr)
-		return
-	}
-
-	if err := h.authoriseFeatureWrite(c, feature); err != nil {
-		api.Fail(c, err)
 		return
 	}
 
@@ -251,8 +251,8 @@ func (h *TasksHandler) ListComments(c *gin.Context) {
 		return
 	}
 
-	if _, dbErr := h.repo.GetByID(uint(id)); dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Task"))
+	if _, err := requireTask(c, h.db, uint(id), canView); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -278,8 +278,11 @@ func (h *TasksHandler) AddComment(c *gin.Context) {
 		return
 	}
 
-	if _, dbErr := h.repo.GetByID(uint(id)); dbErr != nil {
-		api.Fail(c, api.FromDB(dbErr, "Task"))
+	// Anyone the project is shared with may comment, viewers included:
+	// discussion is the point, and unlike editing a task it changes nothing
+	// about the work itself.
+	if _, err := requireTask(c, h.db, uint(id), canView); err != nil {
+		api.Fail(c, err)
 		return
 	}
 
@@ -304,8 +307,6 @@ func (h *TasksHandler) AddComment(c *gin.Context) {
 		return
 	}
 
-	// Commenting is open to any authenticated user: discussion is the point,
-	// and unlike editing a task it changes nothing about the work itself.
 	comment := models.Comment{
 		TaskID:       uint(id),
 		UserID:       uint(userID),
@@ -386,18 +387,13 @@ func (h *TasksHandler) loadForWrite(c *gin.Context) (*models.Task, error) {
 		return nil, err
 	}
 
+	if _, err := requireTask(c, h.db, uint(id), canEdit); err != nil {
+		return nil, err
+	}
+
 	task, dbErr := h.repo.GetByID(uint(id))
 	if dbErr != nil {
 		return nil, api.FromDB(dbErr, "Task")
-	}
-
-	feature, dbErr := h.featureRepo.GetFeatureByID(int(task.FeatureID))
-	if dbErr != nil {
-		return nil, api.FromDB(dbErr, "Feature")
-	}
-
-	if err := h.authoriseFeatureWrite(c, feature); err != nil {
-		return nil, err
 	}
 
 	return task, nil
@@ -405,9 +401,10 @@ func (h *TasksHandler) loadForWrite(c *gin.Context) (*models.Task, error) {
 
 // loadCommentForWrite fetches a comment and checks the caller may change it.
 //
-// A comment belongs to whoever wrote it: its author may edit or delete it, and
-// so may a manager. The project owner deliberately cannot edit someone else's
-// words, only remove the task they hang from.
+// A comment belongs to whoever wrote it: only its author may edit or delete
+// it, and only while they can still see the project. The project owner
+// deliberately cannot edit someone else's words, only remove the task they
+// hang from.
 func (h *TasksHandler) loadCommentForWrite(c *gin.Context) (*models.Comment, error) {
 	id, err := api.IDParam(c, "commentId")
 	if err != nil {
@@ -419,39 +416,20 @@ func (h *TasksHandler) loadCommentForWrite(c *gin.Context) (*models.Comment, err
 		return nil, api.FromDB(dbErr, "Comment")
 	}
 
+	if _, err := requireTask(c, h.db, comment.TaskID, canView); err != nil {
+		return nil, asHidden(err, "Comment")
+	}
+
 	userID, err := api.UserID(c)
 	if err != nil {
 		return nil, err
 	}
 
-	if comment.UserID != uint(userID) && !api.IsManager(c) {
+	if comment.UserID != uint(userID) {
 		return nil, api.Forbidden("Only the author can change this comment")
 	}
 
 	return comment, nil
-}
-
-// authoriseFeatureWrite permits changes by the owner of the feature's project,
-// or a manager — the same rule the project and feature handlers apply.
-func (h *TasksHandler) authoriseFeatureWrite(c *gin.Context, feature *models.Feature) error {
-	userID, err := api.UserID(c)
-	if err != nil {
-		return err
-	}
-
-	if api.IsManager(c) {
-		return nil
-	}
-
-	project, dbErr := h.projectRepo.GetProjectByID(feature.ProjectID)
-	if dbErr != nil {
-		return api.FromDB(dbErr, "Project")
-	}
-	if project.OwnerID == userID {
-		return nil
-	}
-
-	return api.Forbidden("Only the project owner or a manager can change this project's tasks")
 }
 
 // taskCompletion reports, for many tasks at once, whether each has a pull

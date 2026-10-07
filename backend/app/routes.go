@@ -16,7 +16,9 @@ import (
 // registerRoutes wires every route onto the router. The grouping and order are
 // unchanged from main.go — this is a move, not a redesign.
 func registerRoutes(router *gin.Engine, d *dependencies, cfg *Config) {
-	routes.RegisterAuthRoutes(router, d.db.DB)
+	if cfg.LegacyRoutes {
+		routes.RegisterAuthRoutes(router, d.db.DB)
+	}
 
 	// The versioned JSON API the React frontend and the desktop window use.
 	// Registered before the legacy /api group so its own 404 envelope wins
@@ -30,17 +32,31 @@ func registerRoutes(router *gin.Engine, d *dependencies, cfg *Config) {
 		Contracts:   d.contracts,
 	})
 
-	registerAPIRoutes(router, d)
+	router.GET("/api/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "ok",
+			"version": "1.0.0",
+			"mode":    string(cfg.Mode),
+		})
+	})
 
-	routes.RegisterReleaseRoutes(router, d.db.DB)
-	routes.RegisterDependencyRoutes(router, d.db.DB)
-	routes.RegisterGuidanceRoutes(router, d.db.DB)
-	routes.RegisterTemplateRoutes(router, d.db.DB)
-	routes.RegisterImportRoutes(router, d.db.DB)
+	// The old htmx site and its API. They do not check who a project is
+	// shared with, so a hosted server turns them off; see Config.LegacyRoutes.
+	if cfg.LegacyRoutes {
+		registerAPIRoutes(router, d)
 
-	registerWebRoutes(router, d)
-	registerFragmentRoutes(router, d)
-	registerMiscRoutes(router, d, cfg)
+		routes.RegisterReleaseRoutes(router, d.db.DB)
+		routes.RegisterDependencyRoutes(router, d.db.DB)
+		routes.RegisterGuidanceRoutes(router, d.db.DB)
+		routes.RegisterTemplateRoutes(router, d.db.DB)
+		routes.RegisterImportRoutes(router, d.db.DB)
+
+		registerWebRoutes(router, d)
+		registerFragmentRoutes(router, d)
+		registerMiscRoutes(router, d, cfg)
+	} else {
+		log.Info("Old htmx site and /api routes are off (FP_LEGACY_ROUTES=off)")
+	}
 
 	// The React frontend, served from inside the binary at /app. It runs
 	// alongside the htmx site rather than replacing it, so both are
@@ -223,17 +239,9 @@ func registerFragmentRoutes(router *gin.Engine, d *dependencies) {
 	}
 }
 
-// registerMiscRoutes covers the health check, the upload debug page, and the
-// PR routes that sit outside the /api and /web groups.
+// registerMiscRoutes covers the upload debug page and the PR routes that sit
+// outside the /api and /web groups.
 func registerMiscRoutes(router *gin.Engine, d *dependencies, cfg *Config) {
-	router.GET("/api/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"version": "1.0.0",
-			"mode":    string(cfg.Mode),
-		})
-	})
-
 	// Minimal test upload page, for debugging attachments
 	router.StaticFile("/test-upload", cfg.TemplatePath("task-attachments-test.html"))
 
