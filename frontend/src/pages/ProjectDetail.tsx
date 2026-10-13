@@ -715,11 +715,13 @@ function FeatureRow({
           title={`Add a feature inside ${feature.title} (L${depth + 1})`}
           aria-label={`Add a feature inside ${feature.title}`}
           aria-expanded={adding}
+          // Always shown on touch screens, which have no hover; with a mouse it
+          // appears when the row is hovered, so the list stays quiet.
           className={cn(
-            'mr-3 grid h-7 w-7 shrink-0 place-items-center rounded-md border transition',
+            'mr-3 grid h-9 w-9 shrink-0 place-items-center rounded-md border transition [@media(hover:hover)]:h-7 [@media(hover:hover)]:w-7',
             adding
               ? 'border-accent bg-accent-soft text-accent'
-              : 'border-border text-muted opacity-0 hover:border-accent hover:text-accent focus-visible:opacity-100 group-hover/row:opacity-100',
+              : 'border-border text-muted hover:border-accent hover:text-accent [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-visible:opacity-100 [@media(hover:hover)]:group-hover/row:opacity-100',
           )}
         >
           <Plus className="h-3.5 w-3.5" />
