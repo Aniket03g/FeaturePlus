@@ -100,6 +100,7 @@ func openDatabase(cfg Config) (*database.Database, error) {
 		&models.User{}, &models.Project{}, &models.Feature{}, &models.SubFeature{},
 		&models.Task{}, &models.FeatureTag{}, &models.TaskAttachment{}, &models.Comment{},
 		&models.PullRequest{}, &models.Dependency{},
+		&models.Release{}, // also creates release_prs, which the release migration above reads
 		&models.ApprovedPR{},
 		&models.FeatureFile{}, &models.FeatureCommit{}, // File and commit mappings
 		&models.FeatureScope{},     // Scoped Contracts: per-feature access grants

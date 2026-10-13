@@ -439,6 +439,37 @@ func TestDeleteFeatureWithoutChildren(t *testing.T) {
 	}
 }
 
+// TestDeleteFeatureTakesItsDependenciesWithIt: an arrow left behind would
+// point at nothing, and a feature that later reused the id would inherit it.
+func TestDeleteFeatureTakesItsDependenciesWithIt(t *testing.T) {
+	db := newTestDB(t)
+	owner, _, project := seed(t, db)
+	features := seedFeatures(t, db, project.ID, owner.ID)
+
+	link := func(parent, child models.Feature) {
+		dep := models.Dependency{ParentID: parent.ID, ParentType: models.EntityTypeFeature,
+			ChildID: child.ID, ChildType: models.EntityTypeFeature}
+		if err := db.Create(&dep).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	link(features[0], features[1]) // goes with features[1]
+	link(features[1], features[2]) // goes with features[1]
+	link(features[0], features[2]) // stays
+
+	r := featureRouter(t, db, owner.ID, "developer")
+	w := do(r, http.MethodDelete, "/api/v1/features/"+strconv.Itoa(int(features[1].ID)), "")
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status %d, want 204: %s", w.Code, w.Body.String())
+	}
+
+	var left []models.Dependency
+	db.Unscoped().Find(&left)
+	if len(left) != 1 || left[0].ParentID != features[0].ID || left[0].ChildID != features[2].ID {
+		t.Errorf("dependencies left = %+v, want only %d→%d", left, features[0].ID, features[2].ID)
+	}
+}
+
 func TestFeatureTaskCounts(t *testing.T) {
 	db := newTestDB(t)
 	owner, _, project := seed(t, db)

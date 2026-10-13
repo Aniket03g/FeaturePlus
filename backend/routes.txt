@@ -164,6 +164,7 @@ Method: POST, Path: /api/v1/tasks/:taskId/pull-requests
 Method: POST, Path: /api/v1/tasks/:taskId/attachments
 Method: POST, Path: /api/v1/imports/project
 Method: POST, Path: /api/v1/imports/github
+Method: POST, Path: /api/v1/me/password
 Method: POST, Path: /api/pr
 Method: POST, Path: /api/projects/:id/settings
 Method: POST, Path: /api/projects/:id/suggest

@@ -61,6 +61,7 @@ func Register(router *gin.Engine, db *gorm.DB, deps Deps) {
 	authed := v1.Group("", requireAuth(db))
 
 	authed.GET("/me", meHandler(db))
+	authed.POST("/me/password", changePasswordHandler(db))
 
 	NewProjectsHandler(repositories.NewProjectRepository(db), db).Register(authed)
 	NewMembersHandler(db).Register(authed)

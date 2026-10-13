@@ -471,7 +471,13 @@ export function routeEdges(
   }
 
   /** How many free columns to try before accepting the straight route. */
-  const COLUMN_TRIES = 24
+  const COLUMN_TRIES = 120
+
+  // Lanes are offered at a few distances beside each card, not just one. With
+  // a single lane per edge, a second long arrow that found it taken had nothing
+  // nearby left and fell back to the edge of the canvas, crossing the whole map
+  // to get there. The extra lanes let it run alongside the first one instead.
+  const LANE_OFFSETS = [18, 32, 46]
 
   const corner = (points: [number, number][], radius: number) => {
     let d = `M${round(points[0][0])} ${round(points[0][1])}`
@@ -503,13 +509,13 @@ export function routeEdges(
     // The cards this arrow could run into, and the columns either side of
     // them, worked out once rather than on every route attempted.
     const obstacles: Rect[] = []
-    const columns: number[] = [c.x1, c.x2, 22, canvasWidth - 22]
+    const columns: number[] = [c.x1, c.x2]
     for (const id of ids) {
       if (skip.has(id)) continue
       const rect = pos.get(id)!
       if (rect.y + rect.h < top - 8 || rect.y > bottom + 8) continue
       obstacles.push(rect)
-      columns.push(rect.x - 18, rect.x + rect.w + 18)
+      for (const offset of LANE_OFFSETS) columns.push(rect.x - offset, rect.x + rect.w + offset)
     }
 
     let points: [number, number][] =
@@ -521,8 +527,13 @@ export function routeEdges(
       // Try free vertical corridors, nearest to the straight line first, and
       // give up after a bounded number rather than searching the whole width.
       const centre = (c.x1 + c.x2) / 2
-      columns.sort((p, q) => Math.abs(p - centre) - Math.abs(q - centre))
-      const tries = columns.slice(0, COLUMN_TRIES)
+      // Nested boxes share edges, so many lanes land within a few pixels of
+      // each other; one of each is enough.
+      const distinct = [...new Map(columns.map((x) => [Math.round(x / 6), x])).values()]
+      distinct.sort((p, q) => Math.abs(p - centre) - Math.abs(q - centre))
+      // The canvas edges always stay in as the last resort: going round the
+      // whole map is better than drawing straight through cards.
+      const tries = [...distinct.slice(0, COLUMN_TRIES), 22, canvasWidth - 22]
 
       outer: for (const yA of [top + 12, top + 7, top + 24, top + 38]) {
         for (const yB of [bottom - 14, bottom - 8, bottom - 28]) {

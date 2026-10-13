@@ -5,15 +5,18 @@ import {
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
+  Download,
   FileCode,
   LayoutTemplate,
   ListChecks,
+  Loader2,
   Network,
   Plus,
   Users,
   X,
 } from 'lucide-react'
 import { useFeatures, useProject, useProjectTags } from '@/lib/queries'
+import { downloadFeatureFile, FEATURE_FILE_NAME } from '@/lib/feature-file'
 import { useRouter } from '@/lib/router'
 import { ApiError } from '@/lib/api'
 import { Card, CardBody } from '@/components/ui/card'
@@ -269,6 +272,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             <Network className="h-3.5 w-3.5" />
             Dependencies
           </Button>
+          <DownloadFileButton projectId={projectId} />
           <Button variant="secondary" size="sm" onClick={() => setSharing(true)}>
             <Users className="h-3.5 w-3.5" />
             Share
@@ -651,5 +655,34 @@ function FeatureRow({
         </div>
       </button>
     </div>
+  )
+}
+
+/** Saves the project's features as FEATURES.md, ready to commit to the repo. */
+function DownloadFileButton({ projectId }: { projectId: number }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
+
+  async function download() {
+    setState('busy')
+    try {
+      await downloadFeatureFile(projectId)
+      setState('idle')
+    } catch {
+      setState('failed')
+    }
+  }
+
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={download}
+      disabled={state === 'busy'}
+      title={state === 'failed' ? 'Download failed. Click to try again.' : `Save the feature list as ${FEATURE_FILE_NAME}`}
+      className={cn(state === 'failed' && 'text-danger')}
+    >
+      {state === 'busy' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+      {state === 'failed' ? 'Download failed' : 'Download .md'}
+    </Button>
   )
 }

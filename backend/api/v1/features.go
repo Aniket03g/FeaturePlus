@@ -257,7 +257,18 @@ func (h *FeaturesHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	if dbErr := h.repo.DeleteFeature(int(feature.ID)); dbErr != nil {
+	// The feature's dependencies go with it. Left behind they would point at a
+	// feature that no longer exists, and a later feature that reused the id
+	// would inherit somebody else's arrows.
+	if dbErr := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Unscoped().
+			Where("(parent_type = ? AND parent_id = ?) OR (child_type = ? AND child_id = ?)",
+				models.EntityTypeFeature, feature.ID, models.EntityTypeFeature, feature.ID).
+			Delete(&models.Dependency{}).Error; err != nil {
+			return err
+		}
+		return tx.Unscoped().Delete(&models.Feature{}, feature.ID).Error
+	}); dbErr != nil {
 		api.Fail(c, api.FromDB(dbErr, "Feature"))
 		return
 	}

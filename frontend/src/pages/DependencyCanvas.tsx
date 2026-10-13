@@ -10,26 +10,32 @@ import {
 import {
   AlertTriangle,
   ArrowLeft,
+  Download,
   FileText,
   Info,
   Maximize2,
   Minimize2,
   Loader2,
+  Pencil,
+  Plus,
   Search,
   Trash2,
   X,
 } from 'lucide-react'
 import {
   useCreateDependency,
+  useCreateFeature,
   useDeleteDependency,
+  useDeleteFeature,
   useDependencyGraph,
   useProject,
+  useUpdateFeature,
 } from '@/lib/queries'
+import { downloadFeatureFile, FEATURE_FILE_NAME } from '@/lib/feature-file'
 import { useRouter } from '@/lib/router'
 import { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardBody } from '@/components/ui/card'
-import { NewFeatureDialog } from '@/pages/NewFeatureDialog'
 import { cn, plural } from '@/lib/utils'
 import {
   buildTree,
@@ -44,7 +50,7 @@ import {
   type Tree,
 } from '@/lib/dependency-layout'
 import { MARKDOWN_EXAMPLE, parseDependencyMarkdown } from '@/lib/dependency-markdown'
-import { STATUS_LABEL, type FeatureStatus, type GraphNode } from '@/lib/types'
+import { type GraphNode } from '@/lib/types'
 import '@/styles/dependency-canvas.css'
 
 /**
@@ -65,12 +71,9 @@ import '@/styles/dependency-canvas.css'
  * lib/dependency-layout.ts.
  */
 
-const DOT: Record<FeatureStatus, string> = {
-  todo: 'hsl(var(--dc-todo))',
-  in_progress: 'hsl(var(--dc-doing))',
-  done: 'hsl(var(--dc-done))',
-}
-
+// Progress (to do / in progress / done) is not drawn on the map: the canvas is
+// for shaping features and their dependencies, and progress lives on the
+// feature page. Blocked is the exception, because it comes from the arrows.
 const BLOCKED_DOT = 'hsl(var(--dc-blocked))'
 
 // One sketch per project. A single shared key made every project's canvas show
@@ -89,6 +92,9 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
   const graph = useDependencyGraph(projectId)
   const createDependency = useCreateDependency(projectId)
   const deleteDependency = useDeleteDependency(projectId)
+  const createFeature = useCreateFeature(projectId)
+  const updateFeature = useUpdateFeature(projectId)
+  const deleteFeature = useDeleteFeature(projectId)
 
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [selected, setSelected] = useState<number | null>(null)
@@ -97,9 +103,11 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
   const [blockedMode, setBlockedMode] = useState(false)
   const [indexOpen, setIndexOpen] = useState(false)
   const [connectedOnly, setConnectedOnly] = useState(false)
-  const [hideDone, setHideDone] = useState(false)
   const [selectedEdge, setSelectedEdge] = useState<RoutedEdge | null>(null)
-  const [addChildTo, setAddChildTo] = useState<number | null>(null)
+  // The top-level quick-add box, opened from the header.
+  const [addingTop, setAddingTop] = useState(false)
+  // A double-clicked card opens its panel with the name ready to edit.
+  const [renameId, setRenameId] = useState<number | null>(null)
   const [message, setMessage] = useState('')
   const [warning, setWarning] = useState('')
 
@@ -119,12 +127,6 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
   // its own mode rather than the browser's fullscreen, so the app's own
   // keyboard and scrolling keep behaving normally.
   const [filling, setFilling] = useState(false)
-
-  // A dependency being drawn: the blocker it started from, and where the
-  // pointer is now, in canvas coordinates.
-  const [connectFrom, setConnectFrom] = useState<number | null>(null)
-  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null)
-  const [dropTarget, setDropTarget] = useState<number | null>(null)
 
   const canvasRef = useRef<HTMLDivElement>(null)
 
@@ -185,16 +187,23 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
     return out
   }, [allEdges])
 
-  // What each feature waits on and what waits on it, by title, for the panel.
+  // What each feature waits on and what waits on it, for the panel. Each
+  // entry keeps the dependency's id so the panel can remove it.
   const relations = useMemo(() => {
-    const blockedBy = new Map<number, string[]>()
-    const blocks = new Map<number, string[]>()
+    const blockedBy = new Map<number, Relation[]>()
+    const blocks = new Map<number, Relation[]>()
     for (const edge of allEdges) {
       const parent = tree.byId.get(edge.parent_id)
       const child = tree.byId.get(edge.child_id)
       if (!parent || !child) continue
-      blockedBy.set(child.id, [...(blockedBy.get(child.id) ?? []), parent.title])
-      blocks.set(parent.id, [...(blocks.get(parent.id) ?? []), child.title])
+      blockedBy.set(child.id, [
+        ...(blockedBy.get(child.id) ?? []),
+        { edgeId: edge.id, featureId: parent.id, title: parent.title },
+      ])
+      blocks.set(parent.id, [
+        ...(blocks.get(parent.id) ?? []),
+        { edgeId: edge.id, featureId: child.id, title: child.title },
+      ])
     }
     return { blockedBy, blocks }
   }, [allEdges, tree])
@@ -226,27 +235,77 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
 
   // --- Measurement --------------------------------------------------------
 
+  // Fit to screen shrinks the map with CSS zoom. Cards are still measured in
+  // screen pixels, so measurements are divided by the zoom to get back to the
+  // map's own coordinates, which is what the arrows are drawn in.
+  const [zoom, setZoom] = useState(1)
+  const zoomRef = useRef(1)
+  zoomRef.current = zoom
+
   const [pos, setPos] = useState<Map<number, Rect>>(new Map())
   const [canvasWidth, setCanvasWidth] = useState(1200)
   const posKey = useRef('')
+
+  // Keeping the map steady. Every edit re-lays the map out — that is what
+  // makes a card sit below what it waits on — so cards do move. What must not
+  // move is the card being worked on: before an edit its place on screen is
+  // remembered, and after each repaint the canvas scrolls so it is back there.
+  // The hold lasts a moment, long enough for the server's answer to arrive.
+  const anchor = useRef<{ id: number; top: number; left: number; until: number } | null>(null)
+
+  const holdSteady = useCallback((id: number | null | undefined) => {
+    const canvas = canvasRef.current
+    const el = id == null ? null : canvas?.querySelector<HTMLElement>(`[data-node="${id}"]`)
+    if (id == null || !el) {
+      anchor.current = null
+      return
+    }
+    const box = el.getBoundingClientRect()
+    anchor.current = { id, top: box.top, left: box.left, until: Date.now() + 2500 }
+  }, [])
+
+  // A new top-level feature lands wherever the layout puts it, often in the
+  // independent corral at the bottom. It is scrolled into view once it exists.
+  const reveal = useRef<number | null>(null)
 
   const measure = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
+    const held = anchor.current
+    if (held) {
+      const el = canvas.querySelector<HTMLElement>(`[data-node="${held.id}"]`)
+      if (Date.now() > held.until || !el) {
+        anchor.current = null
+      } else {
+        const box = el.getBoundingClientRect()
+        canvas.scrollTop += box.top - held.top
+        canvas.scrollLeft += box.left - held.left
+      }
+    }
+
+    if (reveal.current !== null) {
+      const el = canvas.querySelector<HTMLElement>(`[data-node="${reveal.current}"]`)
+      if (el) {
+        el.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        reveal.current = null
+      }
+    }
+
     const origin = canvas.getBoundingClientRect()
     const next = new Map<number, Rect>()
     for (const el of canvas.querySelectorAll<HTMLElement>('[data-node]')) {
       const box = el.getBoundingClientRect()
+      const z = zoomRef.current
       next.set(Number(el.dataset.node), {
-        x: Math.round(box.left - origin.left),
-        y: Math.round(box.top - origin.top + canvas.scrollTop),
-        w: Math.round(box.width),
-        h: Math.round(box.height),
+        x: Math.round((box.left - origin.left + canvas.scrollLeft) / z),
+        y: Math.round((box.top - origin.top + canvas.scrollTop) / z),
+        w: Math.round(box.width / z),
+        h: Math.round(box.height / z),
       })
     }
 
-    const key = JSON.stringify([...next])
+    const key = JSON.stringify([zoomRef.current, ...next])
     if (key === posKey.current) return
     posKey.current = key
     setPos(next)
@@ -267,7 +326,7 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
 
     if (document.fonts?.ready) void document.fonts.ready.then(measure)
     return () => observer.disconnect()
-  }, [measure, visible, hideDone])
+  }, [measure, visible])
 
   const routed = useMemo(
     () => routeEdges(tree, lifted, pos, canvasWidth),
@@ -277,10 +336,38 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
   // Picking a feature narrows the map to its chain. Without this a map of a
   // hundred features is a wall of arrows: the picture can show every path at
   // once, but it cannot show you *one*.
-  const focus = useMemo(
-    () => (selected === null ? null : chainFrom(tree, selected, lifted)),
-    [selected, tree, lifted],
-  )
+  const focus = useMemo(() => {
+    if (selected === null) return null
+    const chain = chainFrom(tree, selected, lifted)
+    // What is inside the picked feature stays bright too: those are the
+    // features being worked on, often ones that were only just added.
+    const stack = [...(tree.childrenOf.get(selected) ?? [])]
+    const seen = new Set<number>()
+    while (stack.length > 0) {
+      const id = stack.pop()!
+      if (seen.has(id)) continue
+      seen.add(id)
+      chain.nodes.add(id)
+      stack.push(...(tree.childrenOf.get(id) ?? []))
+    }
+    return chain
+  }, [selected, tree, lifted])
+
+  function toggleFit() {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    if (zoom < 1) {
+      setZoom(1)
+      return
+    }
+    // The map's natural size is its scroll size at full scale.
+    const fit = Math.min(
+      canvas.clientWidth / canvas.scrollWidth,
+      canvas.clientHeight / canvas.scrollHeight,
+      1,
+    )
+    setZoom(Math.max(0.3, Math.floor(fit * 100) / 100))
+  }
 
   // --- Search -------------------------------------------------------------
 
@@ -297,6 +384,16 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
     }
     return { onCanvas, nested }
   }, [needle, nodes, visible])
+
+  // A match already on the map may be scrolled out of sight, where its
+  // highlight helps nobody. The first one is brought into view as you type.
+  const firstOnCanvas = matches.onCanvas[0]
+  useEffect(() => {
+    if (firstOnCanvas === undefined) return
+    canvasRef.current
+      ?.querySelector<HTMLElement>(`[data-node="${firstOnCanvas}"]`)
+      ?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+  }, [firstOnCanvas])
 
   // --- Actions ------------------------------------------------------------
 
@@ -342,102 +439,53 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
       })
       setQuery('')
       setSelected(id)
+      reveal.current = id
     },
     [tree],
   )
 
-  const connect = useCallback(
-    async (from: number, to: number) => {
-      setMessage('')
-      setWarning('')
-      try {
-        const created = await createDependency.mutateAsync({ parent_id: from, child_id: to })
-        if (created.creates_cycle) {
-          setWarning('That dependency closes a loop. The features now block each other.')
-        }
-      } catch (error) {
-        setMessage(error instanceof ApiError ? error.message : 'Could not add that dependency')
-      }
-    },
-    [createDependency],
-  )
+  // Dependencies are added and removed by name in the side panel, not drawn.
+  // Drawing made it too easy to leave a wrong arrow behind: a drag that
+  // started a few pixels off a card, or a click on the wrong card after
+  // "Add dependency". The canvas only shows the arrows.
 
-  // Drawing a dependency. The listeners go on at pointerdown rather than from
-  // an effect: a quick drag can be over before React has re-rendered, and an
-  // effect would attach them too late to see it. The ref carries the live
-  // values into handlers that outlive the render they were made in.
-  const dragRef = useRef<{ from: number; target: number | null } | null>(null)
+  /** `waiter` cannot start until `blocker` is finished. Throws on failure. */
+  async function addDependency(blocker: number, waiter: number) {
+    setWarning('')
+    holdSteady(waiter)
+    const created = await createDependency.mutateAsync({ parent_id: blocker, child_id: waiter })
+    if (created.creates_cycle) {
+      setWarning('That dependency closes a loop. The features now wait on each other.')
+    }
+  }
 
-  const beginConnect = useCallback(
-    (from: number, event: React.PointerEvent) => {
-      event.stopPropagation()
-      event.preventDefault()
+  async function removeDependency(edgeId: number, keepInView: number) {
+    holdSteady(keepInView)
+    await deleteDependency.mutateAsync(edgeId)
+  }
 
-      dragRef.current = { from, target: null }
-      setConnectFrom(from)
-      setDropTarget(null)
+  /** Add a feature by name only; details can be filled in later. */
+  async function addFeature(title: string, parentId?: number) {
+    if (parentId !== undefined) holdSteady(parentId)
+    const created = await createFeature.mutateAsync({
+      title,
+      ...(parentId !== undefined ? { parent_feature_id: parentId } : {}),
+    })
+    // A child added to a closed card should be seen, so its parent opens.
+    if (parentId !== undefined) setExpanded((current) => new Set(current).add(parentId))
+    else reveal.current = created.id
+  }
 
-      const onMove = (moved: PointerEvent) => {
-        const canvas = canvasRef.current
-        const drag = dragRef.current
-        if (!canvas || !drag) return
+  async function renameFeature(id: number, title: string) {
+    holdSteady(id)
+    await updateFeature.mutateAsync({ id, title })
+  }
 
-        const origin = canvas.getBoundingClientRect()
-        setPointer({
-          x: moved.clientX - origin.left,
-          y: moved.clientY - origin.top + canvas.scrollTop,
-        })
-
-        const card = document
-          .elementFromPoint(moved.clientX, moved.clientY)
-          ?.closest<HTMLElement>('[data-node]')
-        const id = card ? Number(card.dataset.node) : null
-        const target = id !== null && id !== drag.from ? id : null
-        drag.target = target
-        setDropTarget(target)
-      }
-
-      const stop = () => {
-        window.removeEventListener('pointermove', onMove)
-        window.removeEventListener('pointerup', onUp)
-        window.removeEventListener('keydown', onKey)
-        dragRef.current = null
-        setConnectFrom(null)
-        setPointer(null)
-        setDropTarget(null)
-      }
-
-      const onUp = (released: PointerEvent) => {
-        const drag = dragRef.current
-        stop()
-        if (!drag) return
-
-        // A quick flick can release without a single move in between, so the
-        // drop is resolved from where the pointer actually came up rather than
-        // from the last move that happened to be seen.
-        const card = document
-          .elementFromPoint(released.clientX, released.clientY)
-          ?.closest<HTMLElement>('[data-node]')
-        const under = card ? Number(card.dataset.node) : null
-        const target = drag.target ?? (under !== null && under !== drag.from ? under : null)
-
-        if (target !== null) void connect(drag.from, target)
-      }
-
-      const onKey = (pressed: KeyboardEvent) => {
-        if (pressed.key === 'Escape') stop()
-      }
-
-      window.addEventListener('pointermove', onMove)
-      window.addEventListener('pointerup', onUp)
-      window.addEventListener('keydown', onKey)
-    },
-    [connect],
-  )
-
-  // "Add dependency" in the panel is the same thing without a drag: the next
-  // card picked becomes the one that waits.
-  const [armedFrom, setArmedFrom] = useState<number | null>(null)
+  async function removeFeature(id: number) {
+    holdSteady(tree.parentOf.get(id))
+    await deleteFeature.mutateAsync(id)
+    setSelected(null)
+  }
 
   async function removeSelectedEdge() {
     if (!selectedEdge) return
@@ -458,7 +506,6 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
     setSelected(null)
     setHovered(null)
     setSelectedEdge(null)
-    setArmedFrom(null)
     setBlockedMode(false)
     setQuery('')
   }, [preview])
@@ -490,9 +537,8 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
     setBlockedMode(false)
     setIndexOpen(false)
     setConnectedOnly(false)
-    setHideDone(false)
     setSelectedEdge(null)
-    setArmedFrom(null)
+    setZoom(1)
   }
 
   // --- Render -------------------------------------------------------------
@@ -522,21 +568,12 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
     tree,
     expanded,
     selected,
-    hideDone,
-    dropTarget,
-    connecting: connectFrom !== null,
     blocked,
     blockedWithin,
     lifted,
     connected,
     focus,
     onPick: (id: number) => {
-      if (armedFrom !== null) {
-        const from = armedFrom
-        setArmedFrom(null)
-        if (from !== id) void connect(from, id)
-        return
-      }
       setSelected(id)
       setIndexOpen(false)
       setHovered(null)
@@ -545,7 +582,14 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
     onHover: setHovered,
     onToggle: toggle,
     readOnly: preview,
-    onStartConnect: beginConnect,
+    onRename: (id: number) => {
+      if (preview) return
+      setSelected(id)
+      setRenameId(id)
+      setIndexOpen(false)
+      setHovered(null)
+      setSelectedEdge(null)
+    },
   }
 
   return (
@@ -597,6 +641,10 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
           projectName={project.data?.name ?? 'Project'}
           query={query}
           onQuery={setQuery}
+          onPickFirst={() => {
+            const first = matches.onCanvas[0] ?? matches.nested[0]
+            if (first !== undefined) revealNested(first)
+          }}
           nestedMatches={matches.nested.map((id) => ({
             id,
             title: tree.byId.get(id)?.title ?? '',
@@ -621,8 +669,15 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
           }}
           filling={filling}
           onToggleFilling={() => setFilling((v) => !v)}
+          projectId={projectId}
           preview={preview}
           sketchOpen={sketchOpen}
+          adding={addingTop}
+          onToggleAdding={() => {
+            setAddingTop((v) => !v)
+            setSelected(null)
+            setIndexOpen(false)
+          }}
           onToggleSketch={() => {
             setSketchOpen((v) => !v)
             setIndexOpen(false)
@@ -652,9 +707,13 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
               hasFeatures={allNodes.length > 0}
               filtered={connectedOnly}
               onClearFilters={() => setConnectedOnly(false)}
+              onAdd={(title) => addFeature(title)}
             />
           ) : (
-            <div className="relative flex min-h-full flex-col gap-20 px-6 pb-28 pt-[74px]">
+            <div
+              className="relative flex min-h-full flex-col gap-20 px-6 pb-16 pt-[74px]"
+              style={zoom < 1 ? { zoom } : undefined}
+            >
               <Legend />
 
               <EdgeLayer
@@ -665,12 +724,7 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
                   setSelectedEdge(edge)
                   setSelected(null)
                 }}
-                drag={
-                  connectFrom !== null && pointer && pos.has(connectFrom)
-                    ? { from: pos.get(connectFrom)!, to: pointer }
-                    : null
-                }
-              />
+/>
 
               <Container
                 container={null}
@@ -727,19 +781,48 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
             />
           )}
 
+          {addingTop && !preview && tree.roots.length > 0 && (
+            <div
+              className="dc-panel absolute right-4 top-4 z-[16] w-[320px] rounded-[12px] border p-3"
+              style={{ borderColor: 'hsl(var(--dc-violet) / 0.45)' }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <span className="dc-eyebrow">NEW TOP-LEVEL FEATURE</span>
+                <button
+                  onClick={() => setAddingTop(false)}
+                  aria-label="Close"
+                  style={{ color: 'hsl(var(--dc-faint))' }}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <QuickAdd
+                placeholder="Feature name"
+                onAdd={(title) => addFeature(title)}
+                onDone={() => setAddingTop(false)}
+              />
+            </div>
+          )}
+
           {selectedNode && (
             <DetailPanel
+              key={selectedNode.id}
               node={selectedNode}
               tree={tree}
               readOnly={preview}
               blockedBy={relations.blockedBy.get(selectedNode.id) ?? []}
               blocks={relations.blocks.get(selectedNode.id) ?? []}
+              startRenaming={renameId === selectedNode.id}
+              onRenamingDone={() => setRenameId(null)}
               onClose={() => setSelected(null)}
-              onAddDependency={() => {
-                setArmedFrom(selectedNode.id)
-                setSelected(null)
-              }}
-              onAddChild={() => setAddChildTo(selectedNode.id)}
+              candidates={dependencyCandidates(tree, selectedNode.id)}
+              onAddWaitsOn={(blocker) => addDependency(blocker, selectedNode.id)}
+              onAddNeededBy={(waiter) => addDependency(selectedNode.id, waiter)}
+              onRemoveDependency={(edgeId) => removeDependency(edgeId, selectedNode.id)}
+              onAddChild={(title) => addFeature(title, selectedNode.id)}
+              onRename={(title) => renameFeature(selectedNode.id, title)}
+              onDelete={() => removeFeature(selectedNode.id)}
               onOpen={() =>
                 navigate({ name: 'feature', projectId, featureId: selectedNode.id })
               }
@@ -769,40 +852,27 @@ export function DependencyCanvas({ projectId }: { projectId: number }) {
             />
           )}
 
+        </div>
+
+        <div className="dc-chrome flex items-center gap-2.5 border-t px-5 py-2 text-xs text-muted">
+          <Info className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">
+            {preview
+              ? 'Previewing a map written by hand. Indentation nests a feature inside another; "needs:" adds a dependency. Nothing here is saved to the project.'
+              : 'Click a card to add features inside it, rename it, delete it, or set what it waits on. An arrow means "waits on"; a box means "inside".'}
+          </span>
           {tree.roots.length > 0 && (preview || !graph.isLoading) && (
             <BottomBar
               connectedOnly={connectedOnly}
-              hideDone={hideDone}
               onConnectedOnly={setConnectedOnly}
-              onToggleHideDone={() => setHideDone((v) => !v)}
               onReset={reset}
+              fitted={zoom < 1}
+              onToggleFit={toggleFit}
             />
           )}
         </div>
-
-        <div className="dc-chrome flex items-center gap-2.5 border-t px-5 py-3 text-xs text-muted">
-          <Info className="h-3.5 w-3.5 shrink-0" />
-          {preview
-            ? 'Previewing a map written by hand. Indentation nests a feature inside another; "needs:" adds a dependency. Nothing here is saved to the project.'
-            : connectFrom !== null
-            ? 'Drop on the feature that has to wait. Escape cancels.'
-            : armedFrom !== null
-              ? `Now click the feature that waits on ${tree.byId.get(armedFrom)?.title}.`
-              : 'Drag from the dot under one card onto another to add a dependency. A card sits below whatever must be finished first. Arrows mean dependency; boundaries mean hierarchy.'}
-        </div>
       </div>
 
-      {addChildTo !== null && (
-        <NewFeatureDialog
-          projectId={projectId}
-          parentFeatureId={addChildTo}
-          parentTitle={tree.byId.get(addChildTo)?.title}
-          onClose={() => {
-            setExpanded((current) => new Set(current).add(addChildTo))
-            setAddChildTo(null)
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -829,9 +899,6 @@ interface Ctx {
   tree: Tree
   expanded: Set<number>
   selected: number | null
-  hideDone: boolean
-  dropTarget: number | null
-  connecting: boolean
   blocked: Map<number, string[]>
   blockedWithin: (id: number) => boolean
   lifted: LiftedEdge[]
@@ -843,7 +910,8 @@ interface Ctx {
   onPick: (id: number) => void
   onHover: (id: number | null) => void
   onToggle: (id: number) => void
-  onStartConnect: (id: number, event: React.PointerEvent) => void
+  /** Double-click: select a feature with its name ready to edit. */
+  onRename: (id: number) => void
 }
 
 /**
@@ -897,7 +965,7 @@ function Container({
           <div className="flex w-full items-start">
             <div className="w-[84px] flex-none" />
             <div className="dc-corral">
-              <span className="dc-corral-tag dc-eyebrow">INDEPENDENT · NO DEPENDENCIES</span>
+              <span className="dc-corral-tag dc-eyebrow">NO DEPENDENCIES</span>
               {free.map((id) => (
                 <NodeOrBranch key={id} id={id} independent ctx={ctx} />
               ))}
@@ -942,12 +1010,18 @@ function Branch({ id, ctx }: { id: number; ctx: Ctx }) {
       data-node={id}
       className={cn('dc-branch', ctx.focus && !ctx.focus.nodes.has(id) && 'dc-dim')}
     >
-      <div className="dc-branch-tag">
-        <span className="dc-dot !h-[7px] !w-[7px]" style={{ background: statusColour(node, ctx) }} />
+      <div className="dc-branch-tag select-none">
+        {ctx.blockedWithin(id) && (
+          <span className="dc-dot !h-[7px] !w-[7px]" style={{ background: BLOCKED_DOT }} />
+        )}
         <button
           onClick={(event) => {
             event.stopPropagation()
             ctx.onPick(id)
+          }}
+          onDoubleClick={(event) => {
+            event.stopPropagation()
+            ctx.onRename(id)
           }}
           className="text-[11.5px] font-semibold"
           style={{ color: 'hsl(var(--dc-violet-2))' }}
@@ -955,10 +1029,11 @@ function Branch({ id, ctx }: { id: number; ctx: Ctx }) {
           {node.title}
         </button>
         <span
-          className="dc-mono text-[8.5px] font-medium tracking-[0.14em]"
+          className="dc-mono text-[9px] font-medium"
           style={{ color: 'hsl(var(--dc-violet-2) / 0.75)' }}
+          title={`${plural(children.length, 'feature')} inside`}
         >
-          PART OF
+          {children.length}
         </span>
         <button
           aria-label={`Collapse ${node.title}`}
@@ -997,18 +1072,6 @@ function NodeCard({
   // container, and is drawn to read as the start of the chain.
   const isAnchor = !isRoot && !independent && ctx.lifted.every((e) => e.to !== id)
 
-  if (ctx.hideDone && node.status === 'done') {
-    return (
-      <div
-        data-node={id}
-        className="dc-eyebrow flex items-center justify-center rounded-xl border border-dashed px-4 py-3"
-        style={{ borderColor: 'hsl(var(--dc-line) / 0.16)' }}
-      >
-        DONE · HIDDEN
-      </div>
-    )
-  }
-
   const blockedHere = ctx.blocked.has(id) || (children.length > 0 && ctx.blockedWithin(id))
 
   return (
@@ -1018,27 +1081,25 @@ function NodeCard({
         event.stopPropagation()
         ctx.onPick(id)
       }}
+      onDoubleClick={(event) => {
+        event.stopPropagation()
+        ctx.onRename(id)
+      }}
       onMouseEnter={() => ctx.onHover(id)}
       onMouseLeave={() => ctx.onHover(null)}
       className={cn(
+        'select-none',
         independent ? 'dc-card-indep' : isRoot ? 'dc-card-root' : isAnchor ? 'dc-card-anchor' : 'dc-card',
         ctx.focus && !ctx.focus.nodes.has(id) && 'dc-dim',
         ctx.selected === id && 'dc-sel',
-        ctx.dropTarget === id && 'dc-drop',
         blockedHere && !ctx.selected && 'dc-cycle',
-        ctx.connecting && 'dc-connecting',
       )}
     >
-      <span
-        className="dc-dot"
-        style={{ background: blockedHere ? BLOCKED_DOT : statusColour(node, ctx) }}
-      />
+      {blockedHere && <span className="dc-dot" style={{ background: BLOCKED_DOT }} />}
       <span className="dc-name" title={node.title}>
         {node.title}
       </span>
 
-      {isRoot && !independent && <span className="dc-chip dc-chip-root">ROOT</span>}
-      {independent && <span className="dc-chip">INDEP</span>}
 
       {children.length > 0 && (
         <>
@@ -1061,20 +1122,8 @@ function NodeCard({
         </>
       )}
 
-      {!ctx.readOnly && (
-        <span
-          className="dc-handle"
-          title="Drag onto the feature that waits on this one"
-          onPointerDown={(event) => ctx.onStartConnect(id, event)}
-        />
-      )}
     </div>
   )
-}
-
-function statusColour(node: GraphNode, ctx: Ctx) {
-  if (ctx.blocked.has(node.id)) return BLOCKED_DOT
-  return DOT[node.status] ?? DOT.todo
 }
 
 // --- Arrows -----------------------------------------------------------------
@@ -1084,13 +1133,11 @@ function EdgeLayer({
   focus,
   selectedId,
   onPick,
-  drag,
 }: {
   edges: RoutedEdge[]
   focus: Set<string> | null
   selectedId: number | null
   onPick: (edge: RoutedEdge) => void
-  drag: { from: Rect; to: { x: number; y: number } } | null
 }) {
   return (
     <svg className="pointer-events-none absolute inset-0 z-[1] h-full w-full">
@@ -1135,25 +1182,49 @@ function EdgeLayer({
         )
       })}
 
-      {drag && (
-        <path
-          d={`M${drag.from.x + drag.from.w / 2} ${drag.from.y + drag.from.h} L${drag.to.x} ${drag.to.y}`}
-          fill="none"
-          stroke="hsl(var(--dc-violet))"
-          strokeWidth={1.8}
-          strokeDasharray="5 5"
-        />
-      )}
     </svg>
   )
 }
 
 // --- Chrome -----------------------------------------------------------------
 
+/** Saves the project's features as FEATURES.md, ready to commit to the repo. */
+function DownloadFileButton({ projectId }: { projectId: number }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
+
+  async function download() {
+    setState('busy')
+    try {
+      await downloadFeatureFile(projectId)
+      setState('idle')
+    } catch {
+      setState('failed')
+    }
+  }
+
+  return (
+    <button
+      onClick={download}
+      disabled={state === 'busy'}
+      title={state === 'failed' ? 'Download failed. Click to try again.' : `Save the feature list as ${FEATURE_FILE_NAME}`}
+      className="flex items-center gap-2 rounded-[9px] border px-3 py-2 text-[12.5px] font-medium"
+      style={
+        state === 'failed'
+          ? { borderColor: 'hsl(var(--dc-blocked) / 0.6)', color: 'hsl(var(--dc-blocked))' }
+          : { borderColor: 'hsl(var(--dc-line) / 0.12)', color: 'hsl(var(--dc-muted))' }
+      }
+    >
+      {state === 'busy' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+      {state === 'failed' ? 'Download failed' : 'Download .md'}
+    </button>
+  )
+}
+
 function Header({
   projectName,
   query,
   onQuery,
+  onPickFirst,
   nestedMatches,
   onOpenNested,
   maxLevel,
@@ -1166,13 +1237,17 @@ function Header({
   onToggleIndex,
   filling,
   onToggleFilling,
+  projectId,
   preview,
   sketchOpen,
   onToggleSketch,
+  adding,
+  onToggleAdding,
 }: {
   projectName: string
   query: string
   onQuery: (value: string) => void
+  onPickFirst: () => void
   nestedMatches: { id: number; title: string; where: string }[]
   onOpenNested: (id: number) => void
   maxLevel: number
@@ -1185,11 +1260,15 @@ function Header({
   onToggleIndex: () => void
   filling: boolean
   onToggleFilling: () => void
+  projectId: number
   preview: boolean
   sketchOpen: boolean
   onToggleSketch: () => void
+  adding: boolean
+  onToggleAdding: () => void
 }) {
-  const levels = Array.from({ length: Math.min(maxLevel, 4) + 1 }, (_, i) => i)
+  // Levels have no fixed limit, so the control offers every level there is.
+  const levels = Array.from({ length: maxLevel + 1 }, (_, i) => i)
 
   return (
     <div className="dc-chrome relative z-20 flex min-h-[60px] flex-wrap items-center gap-2 border-b px-5 py-2.5">
@@ -1209,8 +1288,23 @@ function Header({
 
       <div className="flex-1" />
 
+      {!preview && (
+        <button
+          onClick={onToggleAdding}
+          className="flex items-center gap-1.5 rounded-[9px] border px-3 py-2 text-[12.5px] font-semibold"
+          style={
+            adding
+              ? { borderColor: 'hsl(var(--dc-violet))', background: 'hsl(var(--dc-violet))', color: '#fff' }
+              : { borderColor: 'hsl(var(--dc-violet) / 0.45)', color: 'hsl(var(--dc-violet-2))' }
+          }
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Feature
+        </button>
+      )}
+
       <div
-        className="relative flex w-[224px] items-center gap-2 rounded-[9px] border px-3 py-2"
+        className="relative flex w-[180px] items-center gap-2 rounded-[9px] border px-3 py-2"
         style={{
           borderColor: 'hsl(var(--dc-line) / 0.14)',
           background: 'hsl(var(--dc-line) / 0.05)',
@@ -1222,6 +1316,8 @@ function Header({
           onChange={(event) => onQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Escape') onQuery('')
+            // Enter selects the first match, the same as clicking it.
+            if (event.key === 'Enter') onPickFirst()
           }}
           placeholder="Search features"
           className="min-w-0 flex-1 bg-transparent text-[12.5px] font-medium outline-none"
@@ -1331,6 +1427,8 @@ function Header({
         Options index
       </button>
 
+      {!preview && <DownloadFileButton projectId={projectId} />}
+
       <button
         onClick={onToggleSketch}
         className="flex items-center gap-2 rounded-[9px] border px-3 py-2 text-[12.5px] font-medium"
@@ -1370,12 +1468,7 @@ function Header({
 }
 
 function Legend() {
-  const items: [string, string][] = [
-    ['NOT STARTED', DOT.todo],
-    ['IN PROGRESS', DOT.in_progress],
-    ['DONE', DOT.done],
-    ['BLOCKED', BLOCKED_DOT],
-  ]
+  const items: [string, string][] = [['BLOCKED · WAITING ON SOMETHING UNFINISHED', BLOCKED_DOT]]
 
   return (
     <div
@@ -1518,7 +1611,7 @@ function HoverCard({ node, rect, tree }: { node: GraphNode; rect?: Rect; tree: T
         {node.title}
       </div>
       <div className="dc-mono mt-1.5 text-[10.5px] font-medium" style={{ color: 'hsl(var(--dc-muted))' }}>
-        {STATUS_LABEL[node.status] ?? node.status} · {node.category || 'general'} · {where}
+        {node.category || 'general'} · {where}
       </div>
       {node.tags.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1539,23 +1632,79 @@ function DetailPanel({
   readOnly,
   blockedBy,
   blocks,
+  candidates,
+  startRenaming,
+  onRenamingDone,
   onClose,
-  onAddDependency,
+  onAddWaitsOn,
+  onAddNeededBy,
+  onRemoveDependency,
   onAddChild,
+  onRename,
+  onDelete,
   onOpen,
 }: {
   node: GraphNode
   tree: Tree
   readOnly: boolean
-  blockedBy: string[]
-  blocks: string[]
+  blockedBy: Relation[]
+  blocks: Relation[]
+  candidates: Candidate[]
+  startRenaming: boolean
+  onRenamingDone: () => void
   onClose: () => void
-  onAddDependency: () => void
-  onAddChild: () => void
+  onAddWaitsOn: (featureId: number) => Promise<void>
+  onAddNeededBy: (featureId: number) => Promise<void>
+  onRemoveDependency: (edgeId: number) => Promise<void>
+  onAddChild: (title: string) => Promise<void>
+  onRename: (title: string) => Promise<void>
+  onDelete: () => Promise<void>
   onOpen: () => void
 }) {
   const level = tree.levelOf.get(node.id) ?? 0
   const parent = tree.parentOf.get(node.id)
+  const childCount = tree.childrenOf.get(node.id)?.length ?? 0
+
+  const [renaming, setRenaming] = useState(startRenaming && !readOnly)
+
+  // A double-click selects the card on its first click, so the panel is
+  // usually already open when the request to rename arrives.
+  useEffect(() => {
+    if (startRenaming && !readOnly) setRenaming(true)
+  }, [startRenaming, readOnly])
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  async function run(action: () => Promise<void>, failure: string) {
+    setBusy(true)
+    setError('')
+    try {
+      await action()
+      return true
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : failure)
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Escape closes the name box, which can also fire its blur on the way out;
+  // this keeps that blur from saving what Escape meant to throw away.
+  const cancelRename = useRef(false)
+
+  async function saveName(value: string) {
+    if (cancelRename.current) {
+      cancelRename.current = false
+      return
+    }
+    const title = value.trim()
+    setRenaming(false)
+    onRenamingDone()
+    if (!title || title === node.title) return
+    await run(() => onRename(title), 'Could not rename this feature')
+  }
 
   return (
     <div
@@ -1573,61 +1722,99 @@ function DetailPanel({
           </button>
         </div>
 
-        <div
-          className="mt-3.5 text-[21px] font-semibold leading-tight tracking-[-0.4px]"
-          style={{ color: 'hsl(var(--dc-ink-2))' }}
-        >
-          {node.title}
-        </div>
+        {renaming ? (
+          <input
+            autoFocus
+            defaultValue={node.title}
+            maxLength={255}
+            aria-label="Feature name"
+            onFocus={(event) => {
+              cancelRename.current = false
+              event.currentTarget.select()
+            }}
+            onBlur={(event) => void saveName(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur()
+              if (event.key === 'Escape') {
+                // Escape here cancels the rename only, not full screen.
+                event.stopPropagation()
+                cancelRename.current = true
+                setRenaming(false)
+                onRenamingDone()
+              }
+            }}
+            className="mt-3 w-full rounded-[8px] border bg-transparent px-2 py-1 text-[19px] font-semibold leading-tight outline-none"
+            style={{ borderColor: 'hsl(var(--dc-violet))', color: 'hsl(var(--dc-ink-2))' }}
+          />
+        ) : (
+          <div className="mt-3.5 flex items-start gap-2">
+            <div
+              className="min-w-0 flex-1 break-words text-[21px] font-semibold leading-tight tracking-[-0.4px]"
+              style={{ color: 'hsl(var(--dc-ink-2))' }}
+              onDoubleClick={() => !readOnly && setRenaming(true)}
+            >
+              {node.title}
+            </div>
+            {!readOnly && (
+              <button
+                onClick={() => setRenaming(true)}
+                title="Rename"
+                aria-label="Rename"
+                className="mt-1 flex-none rounded-md p-1 hover:bg-[hsl(var(--dc-violet)/0.14)]"
+                style={{ color: 'hsl(var(--dc-muted))' }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
 
-        <div className="mt-3.5 flex flex-wrap gap-2">
-          <span
-            className="dc-mono flex items-center gap-1.5 rounded-[7px] border px-2.5 py-1.5 text-[11px] font-medium"
-            style={{ borderColor: 'hsl(var(--dc-line) / 0.1)', color: 'hsl(var(--dc-muted))' }}
-          >
-            <span className="dc-dot !h-[7px] !w-[7px]" style={{ background: DOT[node.status] }} />
-            {(STATUS_LABEL[node.status] ?? node.status).toUpperCase()}
-          </span>
-          <span
-            className="dc-mono rounded-[7px] border px-2.5 py-1.5 text-[11px] font-medium"
-            style={{ borderColor: 'hsl(var(--dc-line) / 0.1)', color: 'hsl(var(--dc-muted))' }}
-          >
-            {(node.category || 'general').toUpperCase()}
-          </span>
-        </div>
+        {error && (
+          <p role="alert" className="mt-2 text-[11.5px]" style={{ color: 'hsl(var(--dc-blocked))' }}>
+            {error}
+          </p>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto">
-        <PanelList
-          label="BLOCKED BY"
-          items={blockedBy}
-          empty="Nothing — this can start now"
-          direction="down"
-        />
-        <PanelList
-          label="BLOCKS"
-          hint="breaks downstream if this slips"
-          items={blocks}
-          empty="Nothing downstream"
-          direction="up"
-        />
+        {!readOnly && (
+          <div className="border-b px-5 py-4" style={{ borderColor: 'hsl(var(--dc-line) / 0.1)' }}>
+            <div className="flex items-baseline gap-2">
+              <span className="dc-eyebrow">ADD INSIDE</span>
+              <span className="text-[11px]" style={{ color: 'hsl(var(--dc-faint))' }}>
+                one level deeper
+              </span>
+            </div>
+            <div className="mt-2.5">
+              <QuickAdd placeholder={`New feature in ${node.title}`} onAdd={onAddChild} />
+            </div>
+          </div>
+        )}
 
-        <div className="px-5 py-4">
-          <div className="flex items-baseline gap-2">
-            <span className="dc-eyebrow">OPTIONS</span>
-            <span className="text-[11px]" style={{ color: 'hsl(var(--dc-faint))' }}>
-              not on the canvas
-            </span>
-          </div>
-          <div
-            className="mt-3 rounded-[9px] border border-dashed px-3 py-4 text-[11.5px] leading-relaxed"
-            style={{ borderColor: 'hsl(var(--dc-line) / 0.16)', color: 'hsl(var(--dc-muted))' }}
-          >
-            Settings and limits — a time window, a cap, a list of choices — belong to a feature but
-            are not features themselves, so they live here rather than as cards on the map.
-            FeaturePlus does not record them yet.
-          </div>
-        </div>
+        <DependencyList
+          label="WAITS ON"
+          hint="must be finished first"
+          items={blockedBy}
+          empty="Nothing. This can start any time."
+          direction="down"
+          readOnly={readOnly}
+          candidates={candidates.filter((c) => !blockedBy.some((r) => r.featureId === c.id))}
+          placeholder="Add: type a feature name"
+          onAdd={onAddWaitsOn}
+          onRemove={onRemoveDependency}
+        />
+        <DependencyList
+          label="NEEDED BY"
+          hint="waits for this one"
+          items={blocks}
+          empty="Nothing waits on this yet."
+          direction="up"
+          readOnly={readOnly}
+          candidates={candidates.filter((c) => !blocks.some((r) => r.featureId === c.id))}
+          placeholder="Add: type a feature name"
+          onAdd={onAddNeededBy}
+          onRemove={onRemoveDependency}
+        />
       </div>
 
       <div
@@ -1638,54 +1825,222 @@ function DetailPanel({
           <p className="text-center text-[11.5px]" style={{ color: 'hsl(var(--dc-faint))' }}>
             Previewing markdown — edit the document to change this.
           </p>
+        ) : confirmingDelete ? (
+          <div className="space-y-2.5">
+            <p className="text-[12px] leading-relaxed" style={{ color: 'hsl(var(--dc-ink))' }}>
+              {childCount > 0
+                ? `"${node.title}" has ${plural(childCount, 'feature')} inside it. Delete those first.`
+                : `Delete "${node.title}"? Its dependencies go with it. This cannot be undone.`}
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                onClick={() => setConfirmingDelete(false)}
+                className="flex-1 rounded-[9px] border py-2 text-[12.5px] font-semibold"
+                style={{ borderColor: 'hsl(var(--dc-line) / 0.2)', color: 'hsl(var(--dc-muted))' }}
+              >
+                Cancel
+              </button>
+              {childCount === 0 && (
+                <button
+                  disabled={busy}
+                  onClick={async () => {
+                    const ok = await run(onDelete, 'Could not delete this feature')
+                    if (!ok) setConfirmingDelete(false)
+                  }}
+                  className="flex-1 rounded-[9px] py-2 text-[12.5px] font-semibold text-white disabled:opacity-60"
+                  style={{ background: 'hsl(var(--dc-blocked))' }}
+                >
+                  {busy ? 'Deleting…' : 'Delete'}
+                </button>
+              )}
+            </div>
+          </div>
         ) : (
-        <>
-        <div className="flex gap-2.5">
-          <button
-            onClick={onAddDependency}
-            className="flex-1 rounded-[9px] py-2.5 text-[12.5px] font-semibold text-white"
-            style={{ background: 'hsl(var(--dc-violet))' }}
-          >
-            Add dependency
-          </button>
-          <button
-            onClick={onAddChild}
-            className="flex-1 rounded-[9px] border py-2.5 text-[12.5px] font-semibold"
-            style={{
-              borderColor: 'hsl(var(--dc-violet) / 0.45)',
-              color: 'hsl(var(--dc-violet-2))',
-            }}
-          >
-            + Add child
-          </button>
-        </div>
-        <button
-          onClick={onOpen}
-          className="py-0.5 text-[11.5px] font-medium"
-          style={{ color: 'hsl(var(--dc-muted))' }}
-        >
-          Open feature
-        </button>
-        </>
+          <>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={onOpen}
+                className="py-0.5 text-[11.5px] font-medium"
+                style={{ color: 'hsl(var(--dc-muted))' }}
+              >
+                Open feature
+              </button>
+              <button
+                onClick={() => {
+                  setError('')
+                  setConfirmingDelete(true)
+                }}
+                className="flex items-center gap-1 py-0.5 text-[11.5px] font-medium"
+                style={{ color: 'hsl(var(--dc-blocked))' }}
+              >
+                <Trash2 className="h-3 w-3" />
+                Delete
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
   )
 }
 
-function PanelList({
+/**
+ * Add features by name: type, press Enter, type the next. The box stays open
+ * and keeps focus, because brainstorming is a run of names, not one at a time.
+ * Everything else about a feature can be filled in later on its own page.
+ */
+function QuickAdd({
+  placeholder,
+  onAdd,
+  onDone,
+}: {
+  placeholder: string
+  onAdd: (title: string) => Promise<void>
+  onDone?: () => void
+}) {
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  async function submit() {
+    const title = value.trim()
+    if (!title || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await onAdd(title)
+      setValue('')
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Could not add that feature')
+    } finally {
+      setBusy(false)
+      inputRef.current?.focus()
+    }
+  }
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-2 rounded-[9px] border px-3 py-2"
+        style={{ borderColor: 'hsl(var(--dc-line) / 0.16)', background: 'hsl(var(--dc-line) / 0.04)' }}
+      >
+        <Plus className="h-3.5 w-3.5 flex-none" style={{ color: 'hsl(var(--dc-violet-2))' }} />
+        <input
+          ref={inputRef}
+          autoFocus={onDone !== undefined}
+          value={value}
+          maxLength={255}
+          onChange={(event) => setValue(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              void submit()
+            }
+            if (event.key === 'Escape') {
+              // Escape closes this box only, not full screen.
+              event.stopPropagation()
+              if (value) setValue('')
+              else onDone?.()
+            }
+          }}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          className="min-w-0 flex-1 bg-transparent text-[12.5px] font-medium outline-none"
+          style={{ color: 'hsl(var(--dc-ink))' }}
+        />
+      </div>
+      <p className="mt-1.5 text-[10.5px]" style={{ color: error ? 'hsl(var(--dc-blocked))' : 'hsl(var(--dc-faint))' }}>
+        {error || 'Enter adds it and keeps the box open for the next one.'}
+      </p>
+    </div>
+  )
+}
+
+interface Relation {
+  edgeId: number
+  featureId: number
+  title: string
+}
+
+interface Candidate {
+  id: number
+  title: string
+  /** The feature it sits inside, to tell apart two features with one name. */
+  where: string
+}
+
+/**
+ * Features a dependency could point at. A feature cannot wait on itself, on
+ * a feature inside it, or on the feature it sits inside: being inside is
+ * already "part of", and an arrow between the two would say nothing more.
+ */
+function dependencyCandidates(tree: Tree, id: number): Candidate[] {
+  const excluded = new Set<number>([id])
+  let parent = tree.parentOf.get(id)
+  while (parent !== undefined && !excluded.has(parent)) {
+    excluded.add(parent)
+    parent = tree.parentOf.get(parent)
+  }
+  const stack = [...(tree.childrenOf.get(id) ?? [])]
+  while (stack.length > 0) {
+    const next = stack.pop()!
+    if (excluded.has(next)) continue
+    excluded.add(next)
+    stack.push(...(tree.childrenOf.get(next) ?? []))
+  }
+
+  const out: Candidate[] = []
+  for (const node of tree.byId.values()) {
+    if (excluded.has(node.id)) continue
+    const parentId = tree.parentOf.get(node.id)
+    out.push({
+      id: node.id,
+      title: node.title,
+      where: parentId !== undefined ? (tree.byId.get(parentId)?.title ?? '') : '',
+    })
+  }
+  return out.sort((a, b) => a.title.localeCompare(b.title))
+}
+
+function DependencyList({
   label,
   hint,
   items,
   empty,
   direction,
+  readOnly,
+  candidates,
+  placeholder,
+  onAdd,
+  onRemove,
 }: {
   label: string
   hint?: string
-  items: string[]
+  items: Relation[]
   empty: string
   direction: 'up' | 'down'
+  readOnly: boolean
+  candidates: Candidate[]
+  placeholder: string
+  onAdd: (featureId: number) => Promise<void>
+  onRemove: (edgeId: number) => Promise<void>
 }) {
+  const [error, setError] = useState('')
+  const [removing, setRemoving] = useState<number | null>(null)
+
+  async function remove(edgeId: number) {
+    setError('')
+    setRemoving(edgeId)
+    try {
+      await onRemove(edgeId)
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Could not remove that dependency')
+    } finally {
+      setRemoving(null)
+    }
+  }
+
   return (
     <div className="border-b px-5 py-4" style={{ borderColor: 'hsl(var(--dc-line) / 0.1)' }}>
       <div className="flex items-baseline gap-2">
@@ -1702,10 +2057,10 @@ function PanelList({
             {empty}
           </div>
         ) : (
-          items.map((item, index) => (
+          items.map((item) => (
             <div
-              key={`${item}-${index}`}
-              className="flex items-center gap-2.5 rounded-[9px] border px-3 py-2.5 text-[12.5px] font-medium"
+              key={item.edgeId}
+              className="flex items-center gap-2.5 rounded-[9px] border px-3 py-2 text-[12.5px] font-medium"
               style={{
                 borderColor: 'hsl(var(--dc-line) / 0.08)',
                 background: 'hsl(var(--dc-line) / 0.035)',
@@ -1720,11 +2075,146 @@ function PanelList({
                   strokeWidth="1.4"
                 />
               </svg>
-              {item}
+              <span className="min-w-0 flex-1 truncate">{item.title}</span>
+              {!readOnly && (
+                <button
+                  onClick={() => void remove(item.edgeId)}
+                  disabled={removing === item.edgeId}
+                  title={`Remove: no longer ${direction === 'down' ? 'waits on' : 'needed by'} ${item.title}`}
+                  aria-label={`Remove ${item.title}`}
+                  className="flex-none rounded p-0.5 hover:bg-[hsl(var(--dc-blocked)/0.16)] disabled:opacity-40"
+                  style={{ color: 'hsl(var(--dc-faint))' }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           ))
         )}
+
+        {!readOnly && (
+          <FeaturePicker
+            candidates={candidates}
+            placeholder={placeholder}
+            onPick={async (id) => {
+              setError('')
+              try {
+                await onAdd(id)
+              } catch (caught) {
+                setError(caught instanceof ApiError ? caught.message : 'Could not add that dependency')
+              }
+            }}
+          />
+        )}
+        {error && (
+          <p role="alert" className="text-[11px]" style={{ color: 'hsl(var(--dc-blocked))' }}>
+            {error}
+          </p>
+        )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Type part of a name, pick a feature. Only existing features can be picked,
+ * so a typo never becomes a dependency on nothing.
+ */
+function FeaturePicker({
+  candidates,
+  placeholder,
+  onPick,
+}: {
+  candidates: Candidate[]
+  placeholder: string
+  onPick: (id: number) => Promise<void>
+}) {
+  const [text, setText] = useState('')
+  const [active, setActive] = useState(0)
+  const [busy, setBusy] = useState(false)
+
+  const needle = text.trim().toLowerCase()
+  const matches = needle
+    ? candidates.filter((c) => c.title.toLowerCase().includes(needle)).slice(0, 6)
+    : []
+
+  async function pick(candidate: Candidate | undefined) {
+    if (!candidate || busy) return
+    setBusy(true)
+    try {
+      await onPick(candidate.id)
+      setText('')
+      setActive(0)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="relative">
+      <input
+        value={text}
+        maxLength={255}
+        onChange={(event) => {
+          setText(event.target.value)
+          setActive(0)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            setActive((i) => Math.min(i + 1, Math.max(matches.length - 1, 0)))
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            setActive((i) => Math.max(i - 1, 0))
+          }
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            void pick(matches[active])
+          }
+          if (event.key === 'Escape' && text) {
+            // Escape clears the box first, and only then leaves full screen.
+            event.stopPropagation()
+            setText('')
+          }
+        }}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="w-full rounded-[9px] border border-dashed bg-transparent px-3 py-2 text-[12px] outline-none focus:border-solid"
+        style={{ borderColor: 'hsl(var(--dc-line) / 0.2)', color: 'hsl(var(--dc-ink))' }}
+      />
+      {needle && (
+        <div
+          className="dc-panel absolute left-0 right-0 top-full z-30 mt-1 rounded-[9px] border p-1"
+          style={{ borderColor: 'hsl(var(--dc-violet) / 0.35)' }}
+        >
+          {matches.length === 0 ? (
+            <div className="px-2 py-1.5 text-[11.5px]" style={{ color: 'hsl(var(--dc-faint))' }}>
+              No feature by that name
+            </div>
+          ) : (
+            matches.map((candidate, index) => (
+              <button
+                key={candidate.id}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => void pick(candidate)}
+                onMouseEnter={() => setActive(index)}
+                className="flex w-full items-center justify-between gap-2 rounded-[7px] px-2 py-1.5 text-left"
+                style={index === active ? { background: 'hsl(var(--dc-violet) / 0.16)' } : undefined}
+              >
+                <span className="truncate text-[12px] font-medium" style={{ color: 'hsl(var(--dc-ink))' }}>
+                  {candidate.title}
+                </span>
+                {candidate.where && (
+                  <span className="dc-mono flex-none text-[10px]" style={{ color: 'hsl(var(--dc-violet-2))' }}>
+                    in {candidate.where}
+                  </span>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1923,16 +2413,16 @@ function EdgeActions({
 
 function BottomBar({
   connectedOnly,
-  hideDone,
   onConnectedOnly,
-  onToggleHideDone,
   onReset,
+  fitted,
+  onToggleFit,
 }: {
   connectedOnly: boolean
-  hideDone: boolean
   onConnectedOnly: (value: boolean) => void
-  onToggleHideDone: () => void
   onReset: () => void
+  fitted: boolean
+  onToggleFit: () => void
 }) {
   const pill = (active: boolean): CSSProperties =>
     active
@@ -1941,35 +2431,36 @@ function BottomBar({
 
   return (
     <div
-      className="dc-panel absolute bottom-5 left-1/2 z-[12] flex w-fit -translate-x-1/2 items-center gap-1 rounded-[13px] border p-1.5"
+      className="flex flex-none items-center gap-1"
       onClick={(event) => event.stopPropagation()}
     >
       <button
         onClick={() => onConnectedOnly(false)}
-        className="rounded-[9px] px-3.5 py-2 text-[12.5px]"
+        className="rounded-[8px] px-3 py-1.5 text-[12px]"
         style={pill(!connectedOnly)}
       >
         All features
       </button>
       <button
         onClick={() => onConnectedOnly(true)}
-        className="rounded-[9px] px-3.5 py-2 text-[12.5px]"
+        className="rounded-[8px] px-3 py-1.5 text-[12px]"
         style={pill(connectedOnly)}
       >
         Connected only
       </button>
       <span className="mx-1 h-5 w-px" style={{ background: 'hsl(var(--dc-line) / 0.12)' }} />
       <button
-        onClick={onToggleHideDone}
-        aria-pressed={hideDone}
-        className="rounded-[9px] px-3.5 py-2 text-[12.5px]"
-        style={pill(hideDone)}
+        onClick={onToggleFit}
+        aria-pressed={fitted}
+        title={fitted ? 'Back to actual size' : 'Shrink the map to fit the window'}
+        className="rounded-[8px] px-3 py-1.5 text-[12px]"
+        style={pill(fitted)}
       >
-        Hide done
+        {fitted ? 'Actual size' : 'Fit to screen'}
       </button>
       <button
         onClick={onReset}
-        className="rounded-[9px] px-3.5 py-2 text-[12.5px]"
+        className="rounded-[8px] px-3 py-1.5 text-[12px]"
         style={{ color: 'hsl(var(--dc-muted))' }}
       >
         Reset view
@@ -2010,11 +2501,13 @@ function EmptyCanvas({
   hasFeatures,
   filtered,
   onClearFilters,
+  onAdd,
 }: {
   preview: boolean
   hasFeatures: boolean
   filtered: boolean
   onClearFilters: () => void
+  onAdd: (title: string) => Promise<void>
 }) {
   return (
     <div className="grid h-full place-items-center px-6 text-center">
@@ -2044,12 +2537,17 @@ function EmptyCanvas({
             ? 'No feature in this project has a dependency at either end.'
             : hasFeatures
               ? 'This project has features but nothing depends on anything yet. Drag from the dot under one card onto another to record the first dependency.'
-              : 'This project has no features, so there is nothing to depend on anything.'}
+              : 'Start with the big areas of the project. You can add features inside each one afterwards.'}
         </p>
         {filtered && !preview && (
           <Button variant="secondary" size="sm" className="mt-4" onClick={onClearFilters}>
             Show all features
           </Button>
+        )}
+        {!preview && !filtered && !hasFeatures && (
+          <div className="mx-auto mt-5 w-[320px] text-left">
+            <QuickAdd placeholder="First feature" onAdd={onAdd} />
+          </div>
         )}
       </div>
     </div>

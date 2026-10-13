@@ -200,6 +200,8 @@ export function useCreateFeature(projectId: number) {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: keys.project(projectId) })
       queryClient.invalidateQueries({ queryKey: keys.tags(projectId) })
+      // The dependency canvas draws from its own query, not the feature list.
+      queryClient.invalidateQueries({ queryKey: graphKeys.graph(projectId) })
     },
   })
 }
@@ -214,6 +216,7 @@ export function useUpdateFeature(projectId: number) {
       queryClient.invalidateQueries({ queryKey: ['features', projectId] })
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: keys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: graphKeys.graph(projectId) })
     },
   })
 }
@@ -226,6 +229,7 @@ export function useDeleteFeature(projectId: number) {
       queryClient.invalidateQueries({ queryKey: ['features', projectId] })
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: keys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: graphKeys.graph(projectId) })
     },
   })
 }

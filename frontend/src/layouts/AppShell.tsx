@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import {
   LayoutDashboard,
   FolderKanban,
@@ -20,11 +20,13 @@ import {
   LayoutTemplate,
   Boxes,
   Shapes,
+  KeyRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/lib/theme'
 import { Button } from '@/components/ui/button'
+import { ChangePasswordDialog } from '@/pages/ChangePasswordDialog'
 
 /**
  * The frame every screen sits inside: a collapsible sidebar, a top bar, and
@@ -240,6 +242,11 @@ function UserMenu({
   role: string
   onSignOut: () => void
 }) {
+  const [changingPassword, setChangingPassword] = useState(false)
+  // Stable, so a re-render of the shell does not re-run the dialog's open
+  // effect and pull focus back to its first field mid-typing.
+  const closePasswordDialog = useCallback(() => setChangingPassword(false), [])
+
   return (
     <div className="flex items-center gap-2.5">
       <div className="hidden text-right sm:block">
@@ -253,12 +260,23 @@ function UserMenu({
         variant="ghost"
         size="sm"
         className="h-8 w-8 p-0"
+        onClick={() => setChangingPassword(true)}
+        title="Change password"
+        aria-label="Change password"
+      >
+        <KeyRound className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 w-8 p-0"
         onClick={onSignOut}
         title="Sign out"
         aria-label="Sign out"
       >
         <LogOut className="h-4 w-4" />
       </Button>
+      {changingPassword && <ChangePasswordDialog onClose={closePasswordDialog} />}
     </div>
   )
 }
