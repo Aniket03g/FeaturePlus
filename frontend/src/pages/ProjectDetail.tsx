@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
@@ -15,7 +15,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { useFeatures, useProject, useProjectTags } from '@/lib/queries'
+import { useCreateFeature, useFeatures, useProject, useProjectTags } from '@/lib/queries'
 import { downloadFeatureFile, FEATURE_FILE_NAME } from '@/lib/feature-file'
 import { useRouter } from '@/lib/router'
 import { ApiError } from '@/lib/api'
@@ -161,6 +161,20 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   // With no filters set this is the same query as the one above.
   const allFeatures = useFeatures(projectId, NO_FILTERS)
   const tags = useProjectTags(projectId)
+  const createFeature = useCreateFeature(projectId)
+
+  // Where the quick-add box is open: under a feature (its id), at the end of
+  // the list for a top-level feature ('top'), or nowhere.
+  const [addingTo, setAddingTo] = useState<number | 'top' | null>(null)
+
+  async function addFeature(title: string, parentId: number | null) {
+    await createFeature.mutateAsync({
+      title,
+      ...(parentId !== null ? { parent_feature_id: parentId } : {}),
+    })
+    // A child added under a closed feature should be seen, so its parent opens.
+    if (parentId !== null) setOpen((current) => ({ ...current, [parentId]: true }))
+  }
 
   const hasFilters = statuses.length > 0 || tag !== '' || search !== ''
   const items = features.data?.items ?? []
@@ -433,19 +447,53 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
               )}
             >
               {rows.map((node) => (
-                <FeatureRow
-                  key={node.feature.id}
-                  node={node}
-                  open={isOpen(node)}
-                  canToggle={!hasFilters}
-                  onToggle={() =>
-                    setOpen((current) => ({ ...current, [node.feature.id]: !isOpen(node) }))
-                  }
-                  onOpen={() =>
-                    navigate({ name: 'feature', projectId, featureId: node.feature.id })
-                  }
-                />
+                <div key={node.feature.id} className="divide-y divide-border">
+                  <FeatureRow
+                    node={node}
+                    open={isOpen(node)}
+                    canToggle={!hasFilters}
+                    onToggle={() =>
+                      setOpen((current) => ({ ...current, [node.feature.id]: !isOpen(node) }))
+                    }
+                    onOpen={() =>
+                      navigate({ name: 'feature', projectId, featureId: node.feature.id })
+                    }
+                    adding={addingTo === node.feature.id}
+                    onAddInside={
+                      canEdit && !hasFilters
+                        ? () => setAddingTo(addingTo === node.feature.id ? null : node.feature.id)
+                        : undefined
+                    }
+                  />
+                  {addingTo === node.feature.id && (
+                    <QuickAddRow
+                      depth={node.depth + 1}
+                      placeholder={`New feature in ${node.feature.title}`}
+                      onAdd={(title) => addFeature(title, node.feature.id)}
+                      onClose={() => setAddingTo(null)}
+                    />
+                  )}
+                </div>
               ))}
+
+              {canEdit &&
+                !hasFilters &&
+                (addingTo === 'top' ? (
+                  <QuickAddRow
+                    depth={0}
+                    placeholder="New top-level feature"
+                    onAdd={(title) => addFeature(title, null)}
+                    onClose={() => setAddingTo(null)}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setAddingTo('top')}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-xs font-medium text-muted transition-colors hover:bg-raised hover:text-ink"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add feature
+                  </button>
+                ))}
             </div>
           )}
         </CardBody>
@@ -539,12 +587,18 @@ function FeatureRow({
   canToggle,
   onToggle,
   onOpen,
+  adding,
+  onAddInside,
 }: {
   node: TreeNode
   open: boolean
   canToggle: boolean
   onToggle: () => void
   onOpen: () => void
+  /** The quick-add box under this row is open. */
+  adding: boolean
+  /** Missing when the person cannot edit, or while filters are on. */
+  onAddInside?: () => void
 }) {
   const { feature, depth, children, context, parts } = node
   const tasks = feature.tasks
@@ -552,7 +606,7 @@ function FeatureRow({
   return (
     <div
       className={cn(
-        'relative flex items-center transition-colors hover:bg-raised',
+        'group/row relative flex items-center transition-colors hover:bg-raised',
         context && 'opacity-50',
       )}
     >
@@ -654,6 +708,108 @@ function FeatureRow({
           )}
         </div>
       </button>
+
+      {onAddInside && (
+        <button
+          onClick={onAddInside}
+          title={`Add a feature inside ${feature.title} (L${depth + 1})`}
+          aria-label={`Add a feature inside ${feature.title}`}
+          aria-expanded={adding}
+          className={cn(
+            'mr-3 grid h-7 w-7 shrink-0 place-items-center rounded-md border transition',
+            adding
+              ? 'border-accent bg-accent-soft text-accent'
+              : 'border-border text-muted opacity-0 hover:border-accent hover:text-accent focus-visible:opacity-100 group-hover/row:opacity-100',
+          )}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+/**
+ * An inline box for adding features by name, one level below the row above
+ * it. Enter adds and keeps the box open for the next name; Escape, or leaving
+ * it empty, closes it.
+ */
+function QuickAddRow({
+  depth,
+  placeholder,
+  onAdd,
+  onClose,
+}: {
+  depth: number
+  placeholder: string
+  onAdd: (title: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [title, setTitle] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const input = useRef<HTMLInputElement>(null)
+
+  async function submit() {
+    const name = title.trim()
+    if (!name) {
+      onClose()
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      await onAdd(name)
+      setTitle('')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not add the feature')
+    } finally {
+      setSaving(false)
+      // The input was disabled while saving, so focus goes back for the next name.
+      setTimeout(() => input.current?.focus(), 0)
+    }
+  }
+
+  return (
+    <div className="relative flex items-center bg-accent-soft/40 py-2 pr-4">
+      {/* The same guide lines as the rows, so the box sits in the outline. */}
+      {Array.from({ length: depth }).map((_, i) => (
+        <span
+          key={i}
+          aria-hidden
+          className="absolute inset-y-0 w-px bg-border"
+          style={{ left: 16 + 9 + i * INDENT }}
+        />
+      ))}
+      <div
+        className="flex min-w-0 flex-1 items-center gap-2"
+        style={{ paddingLeft: 16 + depth * INDENT + 18 + 8 }}
+      >
+        <span className="shrink-0 rounded border border-accent/50 px-1 font-mono text-2xs text-accent">
+          L{depth}
+        </span>
+        <input
+          ref={input}
+          autoFocus
+          value={title}
+          disabled={saving}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit()
+            if (e.key === 'Escape') onClose()
+          }}
+          onBlur={() => {
+            if (!title.trim() && !saving) onClose()
+          }}
+          placeholder={placeholder}
+          aria-label={placeholder}
+          className="h-8 min-w-0 flex-1 rounded-md border border-accent/60 bg-bg px-2.5 text-sm text-ink placeholder:text-faint focus:outline-none focus:ring-2 focus:ring-accent/40"
+        />
+        {saving && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted" />}
+      </div>
+      <span className="ml-3 hidden shrink-0 text-2xs sm:block">
+        {error ? <span className="text-danger">{error}</span> : <span className="text-faint">Enter adds · Esc closes</span>}
+      </span>
     </div>
   )
 }
