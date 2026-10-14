@@ -4,6 +4,7 @@ import {
   useCreateFeature,
   useDeleteFeature,
   useFeature,
+  useFeatures,
   useProject,
   useReplaceTags,
   useUpdateFeature,
@@ -25,8 +26,69 @@ import {
   PRIORITY_LABEL,
   STATUS_LABEL,
   type FeaturePriority,
+  type Feature,
   type FeatureStatus,
 } from '@/lib/types'
+
+/** No filters: the same key the project's feature list uses, so both share one request. */
+const ALL_FEATURES = { status: [], tag: '', q: '' }
+
+/** Indent per level in the sub-features box, in pixels, as in the feature list. */
+const SUB_INDENT = 20
+
+interface SubRow {
+  feature: Feature
+  /** Levels below the open feature, starting at 0 for its direct children. */
+  depth: number
+  /** The level the feature list shows: L0 at the top of the project. */
+  level: number
+  parts: { done: number; total: number }
+}
+
+/**
+ * Every feature below `rootId`, in reading order: each one followed by what is
+ * inside it. A feature caught in a loop of parents is listed once.
+ */
+function descendants(all: Feature[], rootId: number): { rows: SubRow[]; rootLevel: number } {
+  const byId = new Map(all.map((f) => [f.id, f]))
+  const kids = new Map<number, Feature[]>()
+  for (const f of all) {
+    if (f.parent_feature_id == null) continue
+    kids.set(f.parent_feature_id, [...(kids.get(f.parent_feature_id) ?? []), f])
+  }
+
+  // The open feature's own level: how many parents it has.
+  let rootLevel = 0
+  const climbed = new Set<number>([rootId])
+  let parent = byId.get(rootId)?.parent_feature_id ?? null
+  while (parent != null && byId.has(parent) && !climbed.has(parent)) {
+    climbed.add(parent)
+    rootLevel += 1
+    parent = byId.get(parent)?.parent_feature_id ?? null
+  }
+
+  const rows: SubRow[] = []
+  const seen = new Set<number>([rootId])
+  const walk = (id: number, depth: number) => {
+    for (const child of kids.get(id) ?? []) {
+      if (seen.has(child.id)) continue
+      seen.add(child.id)
+      const inside = kids.get(child.id) ?? []
+      rows.push({
+        feature: child,
+        depth,
+        level: rootLevel + 1 + depth,
+        parts: {
+          done: inside.filter((f) => f.status === 'done').length,
+          total: inside.length,
+        },
+      })
+      walk(child.id, depth + 1)
+    }
+  }
+  walk(rootId, 0)
+  return { rows, rootLevel }
+}
 
 /**
  * A single feature.
@@ -45,6 +107,8 @@ export function FeatureDetail({
   const { navigate } = useRouter()
   const feature = useFeature(featureId)
   const project = useProject(projectId)
+  // The same query as the project's feature list, so it is usually cached.
+  const allFeatures = useFeatures(projectId, ALL_FEATURES)
   const update = useUpdateFeature(projectId)
   const replaceTags = useReplaceTags(projectId)
   const remove = useDeleteFeature(projectId)
@@ -56,7 +120,8 @@ export function FeatureDetail({
   const [error, setError] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [openTaskId, setOpenTaskId] = useState(0)
-  const [addingSub, setAddingSub] = useState(false)
+  // The feature the add box is open under: this one, one in the tree, or none.
+  const [addingUnder, setAddingUnder] = useState<number | null>(null)
 
   // Seed the editing fields whenever the loaded feature changes.
   useEffect(() => {
@@ -91,6 +156,19 @@ export function FeatureDetail({
 
   const data = feature.data
   const tasks = data.tasks
+  // Everything below this feature, nested. Until the project's list arrives,
+  // the direct children the feature came with are shown flat.
+  const tree = allFeatures.data ? descendants(allFeatures.data.items, featureId) : null
+  const subRows: SubRow[] =
+    tree?.rows ??
+    (data.sub_features ?? []).map((f) => ({
+      feature: f,
+      depth: 0,
+      level: 1,
+      parts: { done: 0, total: 0 },
+    }))
+  // Unknown until the project's list arrives; the add box then shows no level.
+  const ownLevel = tree?.rootLevel ?? null
   // Until the role is known, show the add box rather than flicker it in.
   const canEdit = project.data?.my_role !== 'viewer'
 
@@ -255,7 +333,11 @@ export function FeatureDetail({
             <CardHeader className="flex items-center justify-between gap-3">
               <CardTitle>Sub-features</CardTitle>
               {canEdit && (
-                <Button size="sm" variant="ghost" onClick={() => setAddingSub((a) => !a)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setAddingUnder(addingUnder === featureId ? null : featureId)}
+                >
                   <Plus className="h-3.5 w-3.5" />
                   Add
                 </Button>
@@ -263,41 +345,110 @@ export function FeatureDetail({
             </CardHeader>
             <CardBody className="p-0">
               <div className="divide-y divide-border">
-                {canEdit && addingSub && (
+                {canEdit && addingUnder === featureId && (
                   <AddSubFeature
                     projectId={projectId}
                     parentId={featureId}
-                    onClose={() => setAddingSub(false)}
+                    parentTitle={data.title}
+                    level={ownLevel === null ? null : ownLevel + 1}
+                    depth={0}
+                    onClose={() => setAddingUnder(null)}
                   />
                 )}
 
-                {(data.sub_features ?? []).map((child) => (
-                  <button
-                    key={child.id}
-                    onClick={() =>
-                      navigate({ name: 'feature', projectId, featureId: child.id })
-                    }
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-raised"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-sm text-ink">
-                      {child.title}
-                    </span>
-                    <StatusPill status={child.status} />
-                  </button>
+                {subRows.map(({ feature: child, depth, level, parts }) => (
+                  <div key={child.id} className="divide-y divide-border">
+                    {/* A div rather than a button, so the "+" can be a button of its
+                        own; the title is the button keyboard users reach. */}
+                    <div
+                      onClick={() =>
+                        navigate({ name: 'feature', projectId, featureId: child.id })
+                      }
+                      className="group/row relative flex w-full cursor-pointer items-center gap-2 py-2.5 pr-4 text-left transition-colors hover:bg-raised"
+                      style={{ paddingLeft: 16 + depth * SUB_INDENT }}
+                    >
+                      {/* One guide line per level above this one, as in the feature list. */}
+                      {Array.from({ length: depth }).map((_, i) => (
+                        <span
+                          key={i}
+                          aria-hidden
+                          className="absolute inset-y-0 w-px bg-border"
+                          style={{ left: 16 + 9 + i * SUB_INDENT }}
+                        />
+                      ))}
+                      <span
+                        className="shrink-0 rounded border border-border px-1 font-mono text-2xs text-faint"
+                        title={`Level ${level}`}
+                      >
+                        L{level}
+                      </span>
+                      <button
+                        type="button"
+                        className="min-w-0 truncate rounded-sm text-left text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                      >
+                        {child.title}
+                      </button>
+                      {parts.total > 0 && (
+                        <span
+                          className={cn(
+                            'shrink-0 text-2xs tabular-nums',
+                            parts.done === parts.total ? 'text-success' : 'text-faint',
+                          )}
+                        >
+                          {parts.done}/{parts.total} done
+                        </span>
+                      )}
+                      {canEdit && tree && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setAddingUnder(addingUnder === child.id ? null : child.id)
+                          }}
+                          title={`Add a feature inside ${child.title} (L${level + 1})`}
+                          aria-label={`Add a feature inside ${child.title}`}
+                          aria-expanded={addingUnder === child.id}
+                          // Always shown on touch screens, which have no hover; with
+                          // a mouse it appears when the row is hovered.
+                          className={cn(
+                            'grid h-8 w-8 shrink-0 place-items-center rounded-md border transition [@media(hover:hover)]:h-6 [@media(hover:hover)]:w-6',
+                            addingUnder === child.id
+                              ? 'border-accent bg-accent-soft text-accent'
+                              : 'border-border text-muted hover:border-accent hover:text-accent [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-visible:opacity-100 [@media(hover:hover)]:group-hover/row:opacity-100',
+                          )}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      <span className="flex-1" />
+                      <StatusPill status={child.status} />
+                    </div>
+
+                    {canEdit && addingUnder === child.id && (
+                      <AddSubFeature
+                        projectId={projectId}
+                        parentId={child.id}
+                        parentTitle={child.title}
+                        level={level + 1}
+                        depth={depth + 1}
+                        onClose={() => setAddingUnder(null)}
+                      />
+                    )}
+                  </div>
                 ))}
 
-                {(data.sub_features ?? []).length === 0 && (
+                {subRows.length === 0 && (
                   <div className="px-4 py-8 text-center">
                     <p className="text-sm text-muted">No sub-features yet</p>
                     <p className="mt-0.5 text-xs text-faint">
                       A sub-feature is the next level down inside this feature.
                     </p>
-                    {canEdit && !addingSub && (
+                    {canEdit && addingUnder !== featureId && (
                       <Button
                         size="sm"
                         variant="secondary"
                         className="mt-3"
-                        onClick={() => setAddingSub(true)}
+                        onClick={() => setAddingUnder(featureId)}
                       >
                         <Plus className="h-3.5 w-3.5" />
                         Add the first sub-feature
@@ -490,10 +641,19 @@ function ConfirmDelete({
 function AddSubFeature({
   projectId,
   parentId,
+  parentTitle,
+  level,
+  depth,
   onClose,
 }: {
   projectId: number
   parentId: number
+  /** Named in the box, so it is clear where the new feature goes. */
+  parentTitle: string
+  /** The level the new feature will have; null while it is not known yet. */
+  level: number | null
+  /** How far the box is indented, in tree levels below the open feature. */
+  depth: number
   onClose: () => void
 }) {
   const create = useCreateFeature(projectId)
@@ -517,8 +677,28 @@ function AddSubFeature({
   }
 
   return (
-    <div className="bg-raised/40 px-4 py-2.5">
+    <div
+      className="relative bg-accent-soft/40 py-2.5 pr-4"
+      style={{ paddingLeft: 16 + depth * SUB_INDENT }}
+    >
+      {/* The same guide lines as the rows, so the box sits in the tree. */}
+      {Array.from({ length: depth }).map((_, i) => (
+        <span
+          key={i}
+          aria-hidden
+          className="absolute inset-y-0 w-px bg-border"
+          style={{ left: 16 + 9 + i * SUB_INDENT }}
+        />
+      ))}
       <div className="flex items-center gap-2">
+        {level !== null && (
+          <span
+            className="shrink-0 rounded border border-accent/50 px-1 font-mono text-2xs text-accent"
+            title={`The new feature will be level ${level}`}
+          >
+            L{level}
+          </span>
+        )}
         <input
           ref={input}
           value={title}
@@ -530,8 +710,8 @@ function AddSubFeature({
           }}
           autoFocus
           enterKeyHint="enter"
-          placeholder="Sub-feature name"
-          aria-label="Add a sub-feature"
+          placeholder={`New feature inside ${parentTitle}`}
+          aria-label={`New feature inside ${parentTitle}`}
           className="h-8 min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
         />
         <Button size="sm" variant="secondary" onClick={submit} disabled={!title.trim()} loading={create.isPending}>
@@ -541,7 +721,14 @@ function AddSubFeature({
           Cancel
         </Button>
       </div>
-      {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+      {error ? (
+        <p className="mt-1.5 text-xs text-danger">{error}</p>
+      ) : (
+        <p className="mt-1.5 text-2xs text-faint">
+          Goes inside <span className="font-medium text-muted">{parentTitle}</span>
+          {level !== null && <> as an L{level} feature</>}. Enter adds and keeps the box open.
+        </p>
+      )}
     </div>
   )
 }
