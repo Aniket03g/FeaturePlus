@@ -194,7 +194,11 @@ export function useCreateFeature(projectId: number) {
   return useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       api.post<Feature>(`/projects/${projectId}/features`, body),
-    onSuccess: () => {
+    onSuccess: (_created, body) => {
+      // A parent's page lists its sub-features, so it is refreshed too.
+      if (typeof body.parent_feature_id === 'number') {
+        queryClient.invalidateQueries({ queryKey: keys.feature(body.parent_feature_id) })
+      }
       // The project's stats change too, so both lists are refreshed.
       queryClient.invalidateQueries({ queryKey: ['features', projectId] })
       queryClient.invalidateQueries({ queryKey: ['projects'] })

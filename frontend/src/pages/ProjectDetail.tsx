@@ -643,9 +643,12 @@ function FeatureRow({
         )}
       </div>
 
-      <button
+      {/* The whole row opens the feature. It is a div, not a button, so the
+          "+" after the title can be a button of its own; the title is the
+          button that keyboard users reach, and its click bubbles up here. */}
+      <div
         onClick={onOpen}
-        className="flex min-w-0 flex-1 items-center gap-4 py-3 pl-2 pr-4 text-left"
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 py-3 pl-2 pr-4 text-left"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -655,7 +658,12 @@ function FeatureRow({
             >
               L{depth}
             </span>
-            <span className="truncate text-sm font-medium text-ink">{feature.title}</span>
+            <button
+              type="button"
+              className="truncate rounded-sm text-left text-sm font-medium text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              {feature.title}
+            </button>
             {parts.total > 0 && (
               <span
                 className={cn(
@@ -666,6 +674,28 @@ function FeatureRow({
               >
                 {parts.done}/{parts.total} done
               </span>
+            )}
+            {onAddInside && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAddInside()
+                }}
+                title={`Add a feature inside ${feature.title} (L${depth + 1})`}
+                aria-label={`Add a feature inside ${feature.title}`}
+                aria-expanded={adding}
+                // Always shown on touch screens, which have no hover; with a
+                // mouse it appears when the row is hovered, so the list stays quiet.
+                className={cn(
+                  'grid h-8 w-8 shrink-0 place-items-center rounded-md border transition [@media(hover:hover)]:h-6 [@media(hover:hover)]:w-6',
+                  adding
+                    ? 'border-accent bg-accent-soft text-accent'
+                    : 'border-border text-muted hover:border-accent hover:text-accent [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-visible:opacity-100 [@media(hover:hover)]:group-hover/row:opacity-100',
+                )}
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
             )}
             {feature.category && feature.category !== 'general' && (
               <Badge>{feature.category}</Badge>
@@ -707,26 +737,7 @@ function FeatureRow({
             <p className="text-xs text-faint">No tasks</p>
           )}
         </div>
-      </button>
-
-      {onAddInside && (
-        <button
-          onClick={onAddInside}
-          title={`Add a feature inside ${feature.title} (L${depth + 1})`}
-          aria-label={`Add a feature inside ${feature.title}`}
-          aria-expanded={adding}
-          // Always shown on touch screens, which have no hover; with a mouse it
-          // appears when the row is hovered, so the list stays quiet.
-          className={cn(
-            'mr-3 grid h-9 w-9 shrink-0 place-items-center rounded-md border transition [@media(hover:hover)]:h-7 [@media(hover:hover)]:w-7',
-            adding
-              ? 'border-accent bg-accent-soft text-accent'
-              : 'border-border text-muted hover:border-accent hover:text-accent [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-visible:opacity-100 [@media(hover:hover)]:group-hover/row:opacity-100',
-          )}
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
-      )}
+      </div>
     </div>
   )
 }

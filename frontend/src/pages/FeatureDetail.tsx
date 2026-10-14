@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import { AlertCircle, ArrowLeft, Check, Pencil, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { AlertCircle, ArrowLeft, Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import {
+  useCreateFeature,
   useDeleteFeature,
   useFeature,
   useProject,
@@ -89,6 +90,8 @@ export function FeatureDetail({
 
   const data = feature.data
   const tasks = data.tasks
+  // Until the role is known, show the add box rather than flicker it in.
+  const canEdit = project.data?.my_role !== 'viewer'
 
   async function saveEdits() {
     setError('')
@@ -253,31 +256,42 @@ export function FeatureDetail({
             onOpenTask={setOpenTaskId}
           />
 
-          {data.sub_features && data.sub_features.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Sub-features</CardTitle>
-              </CardHeader>
-              <CardBody className="p-0">
-                <div className="divide-y divide-border">
-                  {data.sub_features.map((child) => (
-                    <button
-                      key={child.id}
-                      onClick={() =>
-                        navigate({ name: 'feature', projectId, featureId: child.id })
-                      }
-                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-raised"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-sm text-ink">
-                        {child.title}
-                      </span>
-                      <StatusPill status={child.status} />
-                    </button>
-                  ))}
-                </div>
-              </CardBody>
-            </Card>
-          )}
+          <Card>
+            <CardHeader>
+              <CardTitle>Sub-features</CardTitle>
+            </CardHeader>
+            <CardBody className="p-0">
+              <div className="divide-y divide-border">
+                {(data.sub_features ?? []).map((child) => (
+                  <button
+                    key={child.id}
+                    onClick={() =>
+                      navigate({ name: 'feature', projectId, featureId: child.id })
+                    }
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-raised"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                      {child.title}
+                    </span>
+                    <StatusPill status={child.status} />
+                  </button>
+                ))}
+
+                {(data.sub_features ?? []).length === 0 && (
+                  <div className="px-4 py-5 text-center">
+                    <p className="text-sm text-muted">No sub-features yet.</p>
+                    <p className="mt-0.5 text-xs text-faint">
+                      {canEdit
+                        ? 'Add one below and it becomes the next level down.'
+                        : 'Nothing has been added one level below this feature.'}
+                    </p>
+                  </div>
+                )}
+
+                {canEdit && <AddSubFeature projectId={projectId} parentId={featureId} />}
+              </div>
+            </CardBody>
+          </Card>
         </div>
 
         <div className="space-y-4">
@@ -443,6 +457,58 @@ function ConfirmDelete({
           </Button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Adds features one level below this one, by name. Enter adds and keeps the
+ * box ready for the next name, the same as the quick add in the feature list.
+ */
+function AddSubFeature({ projectId, parentId }: { projectId: number; parentId: number }) {
+  const create = useCreateFeature(projectId)
+  const [title, setTitle] = useState('')
+  const [error, setError] = useState('')
+  const input = useRef<HTMLInputElement>(null)
+
+  async function submit() {
+    const name = title.trim()
+    if (!name) return
+    setError('')
+    try {
+      await create.mutateAsync({ title: name, parent_feature_id: parentId })
+      setTitle('')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not add the sub-feature')
+    } finally {
+      // The input was disabled while saving, so focus goes back for the next name.
+      setTimeout(() => input.current?.focus(), 0)
+    }
+  }
+
+  return (
+    <div className="px-4 py-2.5">
+      <div className="flex items-center gap-2">
+        <Plus className="h-3.5 w-3.5 shrink-0 text-faint" />
+        <input
+          ref={input}
+          value={title}
+          disabled={create.isPending}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit()
+            if (e.key === 'Escape') setTitle('')
+          }}
+          enterKeyHint="enter"
+          placeholder="Add a sub-feature (next level down)"
+          aria-label="Add a sub-feature"
+          className="h-8 min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
+        />
+        <Button size="sm" variant="secondary" onClick={submit} disabled={!title.trim()} loading={create.isPending}>
+          Add
+        </Button>
+      </div>
+      {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
     </div>
   )
 }
