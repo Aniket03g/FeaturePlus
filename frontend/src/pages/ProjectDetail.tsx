@@ -697,9 +697,8 @@ function FeatureRow({
                 <Plus className="h-3.5 w-3.5" />
               </button>
             )}
-            {feature.category && feature.category !== 'general' && (
-              <Badge>{feature.category}</Badge>
-            )}
+            {/* Categories are not shown in the list for now: the tree already
+                groups features, and the label sat apart from the name. */}
           </div>
           {feature.description && (
             <p className="mt-0.5 truncate text-xs text-muted">{feature.description}</p>

@@ -56,6 +56,7 @@ export function FeatureDetail({
   const [error, setError] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [openTaskId, setOpenTaskId] = useState(0)
+  const [addingSub, setAddingSub] = useState(false)
 
   // Seed the editing fields whenever the loaded feature changes.
   useEffect(() => {
@@ -250,18 +251,26 @@ export function FeatureDetail({
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <TaskList
-            featureId={featureId}
-            projectId={projectId}
-            onOpenTask={setOpenTaskId}
-          />
-
           <Card>
-            <CardHeader>
+            <CardHeader className="flex items-center justify-between gap-3">
               <CardTitle>Sub-features</CardTitle>
+              {canEdit && (
+                <Button size="sm" variant="ghost" onClick={() => setAddingSub((a) => !a)}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </Button>
+              )}
             </CardHeader>
             <CardBody className="p-0">
               <div className="divide-y divide-border">
+                {canEdit && addingSub && (
+                  <AddSubFeature
+                    projectId={projectId}
+                    parentId={featureId}
+                    onClose={() => setAddingSub(false)}
+                  />
+                )}
+
                 {(data.sub_features ?? []).map((child) => (
                   <button
                     key={child.id}
@@ -278,20 +287,33 @@ export function FeatureDetail({
                 ))}
 
                 {(data.sub_features ?? []).length === 0 && (
-                  <div className="px-4 py-5 text-center">
-                    <p className="text-sm text-muted">No sub-features yet.</p>
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-sm text-muted">No sub-features yet</p>
                     <p className="mt-0.5 text-xs text-faint">
-                      {canEdit
-                        ? 'Add one below and it becomes the next level down.'
-                        : 'Nothing has been added one level below this feature.'}
+                      A sub-feature is the next level down inside this feature.
                     </p>
+                    {canEdit && !addingSub && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="mt-3"
+                        onClick={() => setAddingSub(true)}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add the first sub-feature
+                      </Button>
+                    )}
                   </div>
                 )}
-
-                {canEdit && <AddSubFeature projectId={projectId} parentId={featureId} />}
               </div>
             </CardBody>
           </Card>
+
+          <TaskList
+            featureId={featureId}
+            projectId={projectId}
+            onOpenTask={setOpenTaskId}
+          />
         </div>
 
         <div className="space-y-4">
@@ -465,7 +487,15 @@ function ConfirmDelete({
  * Adds features one level below this one, by name. Enter adds and keeps the
  * box ready for the next name, the same as the quick add in the feature list.
  */
-function AddSubFeature({ projectId, parentId }: { projectId: number; parentId: number }) {
+function AddSubFeature({
+  projectId,
+  parentId,
+  onClose,
+}: {
+  projectId: number
+  parentId: number
+  onClose: () => void
+}) {
   const create = useCreateFeature(projectId)
   const [title, setTitle] = useState('')
   const [error, setError] = useState('')
@@ -487,9 +517,8 @@ function AddSubFeature({ projectId, parentId }: { projectId: number; parentId: n
   }
 
   return (
-    <div className="px-4 py-2.5">
+    <div className="bg-raised/40 px-4 py-2.5">
       <div className="flex items-center gap-2">
-        <Plus className="h-3.5 w-3.5 shrink-0 text-faint" />
         <input
           ref={input}
           value={title}
@@ -497,15 +526,19 @@ function AddSubFeature({ projectId, parentId }: { projectId: number; parentId: n
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') submit()
-            if (e.key === 'Escape') setTitle('')
+            if (e.key === 'Escape') onClose()
           }}
+          autoFocus
           enterKeyHint="enter"
-          placeholder="Add a sub-feature (next level down)"
+          placeholder="Sub-feature name"
           aria-label="Add a sub-feature"
           className="h-8 min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
         />
         <Button size="sm" variant="secondary" onClick={submit} disabled={!title.trim()} loading={create.isPending}>
           Add
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onClose}>
+          Cancel
         </Button>
       </div>
       {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
