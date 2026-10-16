@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertCircle, Check, Pencil, Trash2, Users, X } from 'lucide-react'
-import { useDeleteUser, useUpdateUser, useUsers } from '@/lib/queries'
+import { useDeleteUser, useResetUserPassword, useUpdateUser, useUsers } from '@/lib/queries'
 import { useAuth } from '@/lib/auth'
 import { ApiError } from '@/lib/api'
 import { Card, CardBody } from '@/components/ui/card'
@@ -21,6 +21,10 @@ const ROLES = ['developer', 'manager', 'admin'] as const
  * a project with. Editing is narrower: your own account, or anyone's if you
  * are an admin — and only an admin can change a role, since a user who could
  * set their own would promote themselves.
+ *
+ * An admin editing someone else can also set a new password for them, for when
+ * they have forgotten it. The old one cannot be shown: only its hash is stored.
+ * Your own password is changed from the user menu, which asks for the current one.
  */
 export function Team() {
   const { user: me } = useAuth()
@@ -99,6 +103,7 @@ export function Team() {
                     key={user.id}
                     user={user}
                     canChangeRole={isAdmin}
+                    canResetPassword={isAdmin && user.id !== me?.id}
                     onDone={() => setEditing(0)}
                   />
                 ) : (
@@ -187,17 +192,21 @@ function ReadRow({
 function EditRow({
   user,
   canChangeRole,
+  canResetPassword,
   onDone,
 }: {
   user: User
   canChangeRole: boolean
+  canResetPassword: boolean
   onDone: () => void
 }) {
   const update = useUpdateUser()
+  const resetPassword = useResetUserPassword()
 
   const [name, setName] = useState(user.name)
   const [email, setEmail] = useState(user.email)
   const [role, setRole] = useState(user.role)
+  const [newPassword, setNewPassword] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState('')
 
@@ -210,6 +219,9 @@ function EditRow({
 
     try {
       await update.mutateAsync(body as { id: number })
+      if (newPassword) {
+        await resetPassword.mutateAsync({ id: user.id, newPassword })
+      }
       onDone()
     } catch (err) {
       if (err instanceof ApiError) {
@@ -240,6 +252,18 @@ function EditRow({
         />
       </div>
 
+      {canResetPassword && (
+        <Input
+          label="New password"
+          type="text"
+          autoComplete="off"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          error={fieldErrors.new_password}
+          hint="Leave empty to keep their password. Otherwise at least 8 characters; tell them what you set so they can sign in and change it."
+        />
+      )}
+
       {canChangeRole && (
         <div className="space-y-1.5">
           <span className="block text-xs font-medium text-muted">Role</span>
@@ -269,7 +293,7 @@ function EditRow({
           <X className="h-3 w-3" />
           Cancel
         </Button>
-        <Button size="sm" onClick={save} loading={update.isPending}>
+        <Button size="sm" onClick={save} loading={update.isPending || resetPassword.isPending}>
           <Check className="h-3 w-3" />
           Save
         </Button>

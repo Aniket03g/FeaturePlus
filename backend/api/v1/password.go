@@ -74,3 +74,71 @@ func changePasswordHandler(db *gorm.DB) gin.HandlerFunc {
 		api.NoContent(c)
 	}
 }
+
+// ResetPasswordRequest is the accepted body for an admin setting someone
+// else's password. Same length rules as sign-up.
+type ResetPasswordRequest struct {
+	NewPassword string `json:"new_password" binding:"required,min=8,max=72"`
+}
+
+// resetPasswordHandler lets an admin set a new password for another user, for
+// when that person has forgotten theirs. Passwords are stored as bcrypt
+// hashes, so the old one cannot be looked up — only replaced.
+//
+// POST /api/v1/users/:userId/password
+//
+// No current password is asked for: not knowing it is the reason for the
+// call. An admin cannot use this on their own account; that goes through
+// /me/password, which does ask, so an open admin session cannot be turned into
+// a silent takeover of the admin account itself.
+//
+// As with changing your own password, sessions the user already has open stay
+// signed in until their token expires.
+func resetPasswordHandler(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !api.IsAdmin(c) {
+			api.Fail(c, api.Forbidden("Only an admin can reset someone's password"))
+			return
+		}
+
+		id, err := api.IDParam(c, "userId")
+		if err != nil {
+			api.Fail(c, err)
+			return
+		}
+		callerID, err := api.UserID(c)
+		if err != nil {
+			api.Fail(c, err)
+			return
+		}
+		if id == callerID {
+			api.Fail(c, api.Conflict("Change your own password from the user menu"))
+			return
+		}
+
+		var req ResetPasswordRequest
+		if err := api.Bind(c, &req); err != nil {
+			api.Fail(c, err)
+			return
+		}
+
+		var user models.User
+		if dbErr := db.First(&user, id).Error; dbErr != nil {
+			api.Fail(c, api.FromDB(dbErr, "User"))
+			return
+		}
+
+		if err := user.HashPassword(req.NewPassword); err != nil {
+			api.Fail(c, api.Internal(err))
+			return
+		}
+		// Same single-column write as changePasswordHandler, for the same reason.
+		if dbErr := db.Model(&user).Update("password", user.Password).Error; dbErr != nil {
+			api.Fail(c, api.Internal(dbErr))
+			return
+		}
+
+		log.WithField("user_id", id).WithField("admin_id", callerID).Info("password reset by admin")
+		api.NoContent(c)
+	}
+}

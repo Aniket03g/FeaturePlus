@@ -675,6 +675,14 @@ export function useUpdateUser() {
   })
 }
 
+/** An admin setting a new password for someone who forgot theirs. */
+export function useResetUserPassword() {
+  return useMutation({
+    mutationFn: ({ id, newPassword }: { id: number; newPassword: string }) =>
+      api.post(`/users/${id}/password`, { new_password: newPassword }),
+  })
+}
+
 export function useDeleteUser() {
   const queryClient = useQueryClient()
   return useMutation({
