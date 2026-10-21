@@ -20,6 +20,10 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
  *   /app/projects/:id/code                   the file and commit map
  *   /app/projects/:id/contracts              contracts, with a viewer
  *   /app/projects/:id/briefing               the collaborator briefing
+ *   /app/projects/:id/versions               saved versions of the feature list
+ *   /app/projects/:id/versions/copies        the same page, on its Copies tab
+ *   /app/projects/:id/copies/:copyId/merge   merging a published copy into the list
+ *   /app/projects/:id/compare/:from/:to      two lists compared as a tree (a version id, c+copy id, or current)
  *   /app/team                                people and roles
  *   /app/templates                           the template catalogue
  *   /app/imports                             saved analyses and GitHub import
@@ -40,6 +44,9 @@ export type Route =
   | { name: 'code'; projectId: number }
   | { name: 'contracts'; projectId: number }
   | { name: 'briefing'; projectId: number }
+  | { name: 'versions'; projectId: number; tab?: 'copies' }
+  | { name: 'merge'; projectId: number; copyId: number }
+  | { name: 'compare'; projectId: number; from: string; to: string }
   | { name: 'team' }
   | { name: 'templates' }
   | { name: 'imports' }
@@ -60,6 +67,7 @@ const PROJECT_SECTIONS: Record<string, Route['name']> = {
   code: 'code',
   contracts: 'contracts',
   briefing: 'briefing',
+  versions: 'versions',
 }
 
 /** Parse a pathname into a route, falling back to the dashboard. */
@@ -77,6 +85,15 @@ export function parseRoute(pathname: string): Route {
 
   const projectId = Number(parts[1])
   if (!Number.isFinite(projectId) || projectId <= 0) return { name: 'projects' }
+
+  if (parts[2] === 'versions' && parts[3] === 'copies') return { name: 'versions', projectId, tab: 'copies' }
+
+  if (parts[2] === 'compare' && parts[3] && parts[4]) return { name: 'compare', projectId, from: parts[3], to: parts[4] }
+
+  if (parts[2] === 'copies' && parts[4] === 'merge') {
+    const copyId = Number(parts[3])
+    if (Number.isFinite(copyId) && copyId > 0) return { name: 'merge', projectId, copyId }
+  }
 
   const section = PROJECT_SECTIONS[parts[2]]
   if (section) {
@@ -128,6 +145,12 @@ export function routeToPath(route: Route): string {
       return `${BASE}/projects/${route.projectId}/contracts`
     case 'briefing':
       return `${BASE}/projects/${route.projectId}/briefing`
+    case 'versions':
+      return `${BASE}/projects/${route.projectId}/versions${route.tab === 'copies' ? '/copies' : ''}`
+    case 'compare':
+      return `${BASE}/projects/${route.projectId}/compare/${route.from}/${route.to}`
+    case 'merge':
+      return `${BASE}/projects/${route.projectId}/copies/${route.copyId}/merge`
     case 'team':
       return `${BASE}/team`
     case 'templates':

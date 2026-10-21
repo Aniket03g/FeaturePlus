@@ -225,6 +225,13 @@ func (h *ProjectsHandler) Delete(c *gin.Context) {
 	if dbErr := h.db.Where("project_id = ?", id).Delete(&models.ProjectMember{}).Error; dbErr != nil {
 		log.WithError(dbErr).WithField("project", id).Warn("could not remove a deleted project's members")
 	}
+	// Its saved versions go too: they are copies of a list that no longer exists.
+	if dbErr := h.db.Where("project_id = ?", id).Delete(&models.FeatureVersion{}).Error; dbErr != nil {
+		log.WithError(dbErr).WithField("project", id).Warn("could not remove a deleted project's versions")
+	}
+	if dbErr := h.db.Where("project_id = ?", id).Delete(&models.FeatureCopy{}).Error; dbErr != nil {
+		log.WithError(dbErr).WithField("project", id).Warn("could not remove a deleted project's copies")
+	}
 
 	api.NoContent(c)
 }

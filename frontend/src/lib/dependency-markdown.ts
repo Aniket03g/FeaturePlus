@@ -16,6 +16,10 @@ import type { DependencyGraph, FeatureStatus, GraphEdge, GraphNode } from '@/lib
  *
  * Headings and anything that is not a bullet are ignored, so a document can
  * still be titled and annotated.
+ *
+ * A bullet may end in a hidden `<!-- fp:KEY -->`, which a downloaded version
+ * writes so an edited file can be matched back feature by feature. It is
+ * taken off the name and handed back in `refs`.
  */
 
 export const MARKDOWN_EXAMPLE = `# Store
@@ -48,6 +52,8 @@ export interface ParsedMarkdown {
   graph: DependencyGraph
   /** Lines that could not be used, said plainly enough to fix. */
   problems: string[]
+  /** The hidden key each node's bullet carried, by node id. */
+  refs: Map<number, string>
 }
 
 const STATUSES: Record<string, FeatureStatus> = {
@@ -66,6 +72,7 @@ const PRIORITIES = new Set(['low', 'medium', 'high'])
 
 const BULLET = /^(\s*)[-*+]\s+(.*)$/
 const NEEDS = /^\s*(?:>\s*)?(?:needs|depends on|blocked by)\s*:\s*(.*)$/i
+const REF = /<!--\s*fp:([\w-]{1,64})\s*-->/
 
 /** Split a trailing "needs: a, b" off a bullet, whichever separator was used. */
 function splitNeeds(text: string): { title: string; needs: string } {
@@ -106,6 +113,7 @@ export function parseDependencyMarkdown(source: string): ParsedMarkdown {
   const nodes: GraphNode[] = []
   const byName = new Map<string, GraphNode>()
   const wants: { from: number; names: string[]; line: number }[] = []
+  const refs = new Map<number, string>()
 
   // Each open bullet and how far it was indented, so a deeper bullet can find
   // the one it belongs to whatever width the file indents by.
@@ -126,7 +134,8 @@ export function parseDependencyMarkdown(source: string): ParsedMarkdown {
     }
 
     const indent = bullet[1].replace(/\t/g, '  ').length
-    const { title: withTags, needs } = splitNeeds(bullet[2])
+    const ref = REF.exec(bullet[2])?.[1]
+    const { title: withTags, needs } = splitNeeds(bullet[2].replace(REF, ''))
     const { title, status, priority } = splitTags(withTags)
 
     if (!title) {
@@ -152,6 +161,7 @@ export function parseDependencyMarkdown(source: string): ParsedMarkdown {
     }
 
     nodes.push(node)
+    if (ref) refs.set(node.id, ref)
     byName.set(title.toLowerCase(), node)
     open.push({ indent, id: node.id })
     last = node
@@ -168,7 +178,12 @@ export function parseDependencyMarkdown(source: string): ParsedMarkdown {
     for (const name of want.names) {
       const blocker = byName.get(name.toLowerCase())
       if (!blocker) {
-        problems.push(`Line ${want.line}: nothing here is called "${name}"`)
+        const from = nodes.find((n) => n.id === want.from)?.title ?? 'A feature'
+        const guess = closestName(name, [...byName.values()].map((n) => n.title))
+        problems.push(
+          `Line ${want.line}: "${from}" needs "${name}", but there’s no feature called that.` +
+            (guess ? ` Did you mean “${guess}”?` : ''),
+        )
         continue
       }
       if (blocker.id === want.from) {
@@ -189,7 +204,40 @@ export function parseDependencyMarkdown(source: string): ParsedMarkdown {
   return {
     graph: { project_id: 0, nodes, edges, cycles },
     problems,
+    refs,
   }
+}
+
+/**
+ * The name a mistyped one most likely meant: the closest by edit distance,
+ * ignoring case, if it is close enough to be a typo rather than a different
+ * feature: at most two edits, or a quarter of the name for long ones.
+ */
+export function closestName(name: string, candidates: string[]): string | null {
+  const target = name.toLowerCase()
+  let best: string | null = null
+  let bestDistance = Infinity
+  for (const candidate of candidates) {
+    const distance = editDistance(target, candidate.toLowerCase())
+    if (distance < bestDistance) {
+      best = candidate
+      bestDistance = distance
+    }
+  }
+  const allowed = Math.max(2, Math.floor(target.length / 4))
+  return best !== null && bestDistance > 0 && bestDistance <= allowed ? best : null
+}
+
+function editDistance(a: string, b: string) {
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i]
+    for (let j = 1; j <= b.length; j++) {
+      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    previous = current
+  }
+  return previous[b.length]
 }
 
 /**

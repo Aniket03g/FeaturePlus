@@ -109,6 +109,8 @@ func openDatabase(cfg Config) (*database.Database, error) {
 		&models.ProjectGitHub{}, &models.ReleaseGitHub{}, &models.UserGitHub{}, // GitHub connection
 		&models.PlaygroundDraft{}, // Each person's playground draft
 		&models.ProjectMember{},   // Who each project is shared with
+		&models.FeatureVersion{},  // Saved copies of a project's feature list
+		&models.FeatureCopy{},     // Each person's own edited copy of a version
 		&internalModels.ProjectConnection{},
 	); err != nil {
 		return nil, fmt.Errorf("failed to migrate database: %w", err)

@@ -18,10 +18,13 @@ import { PullRequests } from '@/pages/PullRequests'
 import { LinkedCode } from '@/pages/LinkedCode'
 import { Contracts } from '@/pages/Contracts'
 import { BriefingPage } from '@/pages/BriefingPage'
+import { VersionsPage } from '@/pages/VersionsPage'
 import { Team } from '@/pages/Team'
 import { Templates } from '@/pages/Templates'
 import { Imports } from '@/pages/Imports'
 import { Playground } from '@/pages/Playground'
+import { MergePage } from '@/pages/MergePage'
+import { ComparePage } from '@/pages/ComparePage'
 
 /**
  * Which sidebar section a route belongs to. A feature page still shows
@@ -40,6 +43,9 @@ const SECTION: Record<Route['name'], string> = {
   code: 'code',
   contracts: 'contracts',
   briefing: 'briefing',
+  versions: 'projects',
+  merge: 'projects',
+  compare: 'projects',
   team: 'team',
   templates: 'templates',
   imports: 'imports',
@@ -134,6 +140,13 @@ export function App() {
       {route.name === 'code' && <LinkedCode projectId={route.projectId} />}
       {route.name === 'contracts' && <Contracts projectId={route.projectId} />}
       {route.name === 'briefing' && <BriefingPage projectId={route.projectId} />}
+      {route.name === 'versions' && (
+        <VersionsPage key={route.tab ?? 'versions'} projectId={route.projectId} initialTab={route.tab ?? 'versions'} />
+      )}
+      {route.name === 'merge' && <MergePage projectId={route.projectId} copyId={route.copyId} />}
+      {route.name === 'compare' && (
+        <ComparePage projectId={route.projectId} from={route.from} to={route.to} />
+      )}
       {route.name === 'team' && <Team />}
       {route.name === 'templates' && <Templates />}
       {route.name === 'imports' && <Imports />}
@@ -165,6 +178,9 @@ const SCOPED_TITLE: Partial<Record<Route['name'], string>> = {
   code: 'Linked code',
   contracts: 'Contracts',
   briefing: 'Briefing',
+  versions: 'Versions',
+  merge: 'Merge a copy',
+  compare: 'Compare',
 }
 
 function Title() {

@@ -517,16 +517,26 @@ export function fromText(text: string): { items: DraftFeature[]; problems: strin
   return { items, problems }
 }
 
-/** The list as a file. Confirmed dependencies are written as `needs:`; suggestions are not. */
-export function toMarkdown(items: DraftFeature[], heading = 'Features') {
+/**
+ * The list as a file. Confirmed dependencies are written as `needs:`; suggestions are not.
+ *
+ * With `keys`, each line also ends in a hidden `<!-- fp:KEY -->` naming its row,
+ * and `stamp` is written under the heading, so an edited file can be matched
+ * back to the list it came from.
+ */
+export function toMarkdown(items: DraftFeature[], heading = 'Features', options: { keys?: boolean; stamp?: string } = {}) {
   const titles = new Map(items.map((item) => [item.key, item.title.trim()]))
   const lines = [`# ${heading}`, '']
+  if (options.stamp) lines.push(options.stamp, '')
   for (const item of items) {
     const indentBy = '  '.repeat(depthOf(items, item.key))
     const needs = (item.needs ?? [])
       .filter((need) => !need.suggested && titles.get(need.key))
       .map((need) => titles.get(need.key))
-    lines.push(`${indentBy}- ${item.title.trim() || 'Untitled'}${needs.length > 0 ? ` > needs: ${needs.join(', ')}` : ''}`)
+    lines.push(
+      `${indentBy}- ${item.title.trim() || 'Untitled'}${needs.length > 0 ? ` > needs: ${needs.join(', ')}` : ''}` +
+        (options.keys ? ` <!-- fp:${item.key} -->` : ''),
+    )
   }
   lines.push('')
   return lines.join('\n')

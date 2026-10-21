@@ -137,6 +137,12 @@ type OpenedFeature struct {
 	Needs      []string `json:"needs"`
 	ReleaseKey string   `json:"release_key"`
 	FeatureID  uint     `json:"feature_id"`
+
+	// Set only in a saved version; see openProject.
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status,omitempty"`
+	Priority    string `json:"priority,omitempty"`
+	Category    string `json:"category,omitempty"`
 }
 
 // OpenedRelease is one of the project's releases, keyed "r" and its id.
@@ -168,15 +174,42 @@ func (h *PlaygroundHandler) OpenProject(c *gin.Context) {
 		return
 	}
 
-	var features []models.Feature
-	if err := h.db.Where("project_id = ?", projectID).Order("id").Find(&features).Error; err != nil {
+	opened, err := openProject(h.db, project, false)
+	if err != nil {
 		api.Fail(c, api.Internal(err))
 		return
 	}
+	api.OK(c, opened)
+}
+
+// OpenedProject is a project as a list: its features in tree order, the
+// dependencies between them, and its releases. It is what the playground opens,
+// what FEATURES.md is written from, and what a saved version stores.
+type OpenedProject struct {
+	Project  OpenedProjectName `json:"project"`
+	Features []OpenedFeature   `json:"features"`
+	Releases []OpenedRelease   `json:"releases"`
+}
+
+// OpenedProjectName names the project a list came from.
+type OpenedProjectName struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// openProject reads a project as a list. With details, each feature also
+// carries its description, status, priority and category, which the
+// playground has no use for but a saved version keeps.
+func openProject(db *gorm.DB, project *models.Project, details bool) (OpenedProject, error) {
+	projectID := project.ID
+
+	var features []models.Feature
+	if err := db.Where("project_id = ?", projectID).Order("id").Find(&features).Error; err != nil {
+		return OpenedProject{}, err
+	}
 	var releases []models.Release
-	if err := h.db.Where("project_id = ?", projectID).Order("id").Find(&releases).Error; err != nil {
-		api.Fail(c, api.Internal(err))
-		return
+	if err := db.Where("project_id = ?", projectID).Order("id").Find(&releases).Error; err != nil {
+		return OpenedProject{}, err
 	}
 
 	key := func(id uint) string { return "f" + strconv.FormatUint(uint64(id), 10) }
@@ -191,10 +224,9 @@ func (h *PlaygroundHandler) OpenProject(c *gin.Context) {
 	needs := map[uint][]string{}
 	if len(ids) > 0 {
 		var deps []models.Dependency
-		if err := h.db.Where("parent_type = ? AND child_type = ? AND child_id IN ?",
+		if err := db.Where("parent_type = ? AND child_type = ? AND child_id IN ?",
 			models.EntityTypeFeature, models.EntityTypeFeature, ids).Order("id").Find(&deps).Error; err != nil {
-			api.Fail(c, api.Internal(err))
-			return
+			return OpenedProject{}, err
 		}
 		for _, d := range deps {
 			if known[d.ParentID] {
@@ -210,6 +242,20 @@ func (h *PlaygroundHandler) OpenProject(c *gin.Context) {
 		opened = append(opened, OpenedRelease{
 			Key: releaseKey(r.ID), Name: r.Tag, Published: r.Status != models.ReleaseStatusDraft,
 		})
+	}
+
+	row := func(f models.Feature) OpenedFeature {
+		out := OpenedFeature{Key: key(f.ID), Title: f.Title, Needs: append([]string{}, needs[f.ID]...), FeatureID: f.ID}
+		if f.ReleaseID != nil && knownRelease[*f.ReleaseID] {
+			out.ReleaseKey = releaseKey(*f.ReleaseID)
+		}
+		if details {
+			out.Description = f.Description
+			out.Status = string(f.Status)
+			out.Priority = string(f.Priority)
+			out.Category = f.Category
+		}
+		return out
 	}
 
 	// Parents first, each followed by what is inside it, the order the
@@ -231,17 +277,11 @@ func (h *PlaygroundHandler) OpenProject(c *gin.Context) {
 				continue
 			}
 			seen[f.ID] = true
-			row := OpenedFeature{Key: key(f.ID), Title: f.Title, Needs: needs[f.ID], FeatureID: f.ID}
-			if row.Needs == nil {
-				row.Needs = []string{}
-			}
+			r := row(f)
 			if parent != 0 {
-				row.ParentKey = key(parent)
+				r.ParentKey = key(parent)
 			}
-			if f.ReleaseID != nil && knownRelease[*f.ReleaseID] {
-				row.ReleaseKey = releaseKey(*f.ReleaseID)
-			}
-			rows = append(rows, row)
+			rows = append(rows, r)
 			walk(f.ID)
 		}
 	}
@@ -251,15 +291,17 @@ func (h *PlaygroundHandler) OpenProject(c *gin.Context) {
 	for _, f := range features {
 		if !seen[f.ID] {
 			seen[f.ID] = true
-			rows = append(rows, OpenedFeature{Key: key(f.ID), Title: f.Title, Needs: append([]string{}, needs[f.ID]...), FeatureID: f.ID})
+			r := row(f)
+			r.ReleaseKey = ""
+			rows = append(rows, r)
 		}
 	}
 
-	api.OK(c, gin.H{
-		"project":  gin.H{"id": project.ID, "name": project.Name},
-		"features": rows,
-		"releases": opened,
-	})
+	return OpenedProject{
+		Project:  OpenedProjectName{ID: project.ID, Name: project.Name},
+		Features: rows,
+		Releases: opened,
+	}, nil
 }
 
 // maxImportFeatures bounds one import. A scanned repository gives tens of

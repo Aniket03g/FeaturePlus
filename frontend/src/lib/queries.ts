@@ -1156,3 +1156,269 @@ export function usePublishReleaseToGitHub(projectId: number, releaseId: number) 
     },
   })
 }
+
+/** A saved version of a project's feature list, without its contents. */
+export interface FeatureVersion {
+  id: number
+  project_id: number
+  number: number
+  tag: string
+  notes: string
+  feature_count: number
+  /** Saved by the server itself, around a merge, rather than by someone. */
+  auto: boolean
+  saved_by: { id: number; name: string }
+  created_at: string
+}
+
+/** A saved version with its contents: the list as it was, in the shape the playground opens. */
+export interface FeatureVersionDetail extends FeatureVersion {
+  snapshot: Omit<OpenedProject, 'features'> & {
+    format: number
+    features: (OpenedProject['features'][number] & {
+      description?: string
+      status?: string
+      priority?: string
+      category?: string
+    })[]
+  }
+}
+
+export const versionKeys = {
+  project: (projectId: number) => ['versions', projectId] as const,
+}
+
+export function useVersions(projectId: number, enabled = true) {
+  return useQuery({
+    queryKey: versionKeys.project(projectId),
+    queryFn: () => api.get<FeatureVersion[]>(`/projects/${projectId}/versions`),
+    enabled: enabled && projectId > 0,
+  })
+}
+
+export function useSaveVersion(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { tag: string; notes: string }) =>
+      api.post<FeatureVersion>(`/projects/${projectId}/versions`, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) }),
+  })
+}
+
+export function useVersion(projectId: number, versionId: number, enabled = true) {
+  return useQuery({
+    queryKey: ['version', projectId, versionId] as const,
+    queryFn: () => fetchVersion(projectId, versionId),
+    enabled: enabled && projectId > 0 && versionId > 0,
+    // A saved version never changes.
+    staleTime: Infinity,
+  })
+}
+
+/**
+ * One side of a comparison: a saved version's id, `c` and the id of one of
+ * your copies, or the list as it is now.
+ */
+export type VersionRef = number | `c${number}` | 'current'
+
+export interface VersionComparison {
+  from: { current: boolean; copy?: boolean; id?: number; number?: number; tag?: string }
+  to: { current: boolean; copy?: boolean; id?: number; number?: number; tag?: string }
+  added: number
+  removed: number
+  changed: number
+  changes: {
+    kind: 'added' | 'removed' | 'changed'
+    key: string
+    feature_id: number
+    title: string
+    fields?: { field: string; from: string | string[]; to: string | string[] }[]
+  }[]
+  /** Both lists in full; only with useCompareLists. */
+  from_list?: FeatureVersionDetail['snapshot']
+  to_list?: FeatureVersionDetail['snapshot']
+}
+
+/** A ref as it appears in a link: a version id, c and a copy id, or current. */
+export function parseVersionRef(text: string): VersionRef | null {
+  if (text === 'current') return 'current'
+  if (/^c[1-9][0-9]*$/.test(text)) return text as `c${number}`
+  if (/^[1-9][0-9]*$/.test(text)) return Number(text)
+  return null
+}
+
+/** A comparison with both lists, for drawing the changes inside the tree. */
+export function useCompareLists(projectId: number, from: VersionRef | null, to: VersionRef | null) {
+  return useQuery({
+    queryKey: ['version-compare', projectId, from, to, 'full'] as const,
+    queryFn: () =>
+      api.get<VersionComparison>(`/projects/${projectId}/versions/compare`, {
+        query: { from: String(from), to: String(to), full: 1 },
+      }),
+    enabled: projectId > 0 && from !== null && to !== null,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useVersionComparison(projectId: number, from: VersionRef | null, to: VersionRef | null) {
+  return useQuery({
+    queryKey: ['version-compare', projectId, from, to] as const,
+    queryFn: () =>
+      api.get<VersionComparison>(`/projects/${projectId}/versions/compare`, {
+        query: { from: String(from), to: String(to) },
+      }),
+    enabled: projectId > 0 && from !== null && to !== null,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function fetchVersion(projectId: number, versionId: number) {
+  return api.get<FeatureVersionDetail>(`/projects/${projectId}/versions/${versionId}`)
+}
+
+/** One of your own copies of a version, without its contents. */
+export interface FeatureCopy {
+  id: number
+  project_id: number
+  number: number
+  /** What its owner calls it; empty shows as "Copy" and the number. */
+  name: string
+  base: { id: number; number: number; tag: string }
+  owner: { id: number; name: string }
+  /** Goes up by one each time the copy is uploaded again. */
+  revision: number
+  feature_count: number
+  /** Whether you made it; only you can upload it again, publish or unpublish it. */
+  mine: boolean
+  /** Set while it is published: everyone on the project sees it, and it is frozen. */
+  published_at: string | null
+  /** Set once it has been merged into the list, with the version the list was saved as after. */
+  merged_at: string | null
+  merged_version: { id: number; number: number; tag: string } | null
+  created_at: string
+  updated_at: string
+}
+
+export interface FeatureCopyDetail extends FeatureCopy {
+  snapshot: FeatureVersionDetail['snapshot']
+}
+
+/** An edited file, read into rows; see readCopyFile. */
+export interface SaveCopyRequest {
+  base_version_id: number
+  name?: string
+  /** Check the file and say what it changes, without saving. */
+  dry_run?: boolean
+  copy_id?: number
+  revision?: number
+  features: { key: string; title: string; parent_key: string; needs: string[] }[]
+}
+
+export const copyKeys = {
+  project: (projectId: number) => ['copies', projectId] as const,
+}
+
+export function useCopies(projectId: number, enabled = true) {
+  return useQuery({
+    queryKey: copyKeys.project(projectId),
+    queryFn: () => api.get<FeatureCopy[]>(`/projects/${projectId}/copies`),
+    enabled: enabled && projectId > 0,
+  })
+}
+
+export function useSaveCopy(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: SaveCopyRequest) => api.post<FeatureCopy>(`/projects/${projectId}/copies`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: copyKeys.project(projectId) })
+      // A replaced copy compares differently now.
+      queryClient.invalidateQueries({ queryKey: ['version-compare', projectId] })
+    },
+  })
+}
+
+export function useSetCopyPublished(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ copyId, publish }: { copyId: number; publish: boolean }) =>
+      api.post<FeatureCopy>(`/projects/${projectId}/copies/${copyId}/${publish ? 'publish' : 'unpublish'}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: copyKeys.project(projectId) }),
+  })
+}
+
+/** What a checked upload would do: its version, the copy it replaces, and its changes. */
+export interface CopyCheck {
+  base: { id: number; number: number; tag: string }
+  replaces: FeatureCopy | null
+  comparison: VersionComparison
+}
+
+/** Checks an edited file against the server without saving it. */
+export function useCheckCopy(projectId: number) {
+  return useMutation({
+    mutationFn: (body: SaveCopyRequest) =>
+      api.post<CopyCheck>(`/projects/${projectId}/copies`, { ...body, dry_run: true }),
+  })
+}
+
+export function fetchCopy(projectId: number, copyId: number) {
+  return api.get<FeatureCopyDetail>(`/projects/${projectId}/copies/${copyId}`)
+}
+
+/** What merging a published copy would do to the project's list right now. */
+export interface MergePreview {
+  copy: FeatureCopy
+  /** How many features the project's list has now. */
+  list_features: number
+  changes: {
+    kind: 'added' | 'renamed' | 'moved' | 'removed' | 'needs_added' | 'needs_removed'
+    key: string
+    title: string
+    from?: string
+    to?: string
+    /** Where it sits once merged, as "Delivery › Driver app"; "" is the top level. */
+    path: string
+  }[]
+  /** Features both the copy and the list changed since the copy's version. */
+  clashes: {
+    kind: 'changed' | 'removed'
+    key: string
+    title: string
+    /** Where it sits in the list now. */
+    path: string
+    /** Needs are names joined with ", "; a place is a path, "" the top level. */
+    fields: { field: 'title' | 'parent' | 'needs'; base: string; list: string; copy: string }[]
+    choice: '' | 'list' | 'copy'
+  }[]
+  /** What the copy asked for that the merge leaves out, and why. */
+  notes: { title: string; message: string }[]
+  problems: string[]
+  ready: boolean
+}
+
+export type MergeChoices = Record<string, 'list' | 'copy'>
+
+export function useMergePreview(projectId: number, copyId: number, choices: MergeChoices, enabled = true) {
+  return useQuery({
+    queryKey: ['merge-preview', projectId, copyId, choices] as const,
+    queryFn: () =>
+      api.get<MergePreview>(`/projects/${projectId}/copies/${copyId}/merge`, {
+        query: Object.fromEntries(Object.entries(choices).map(([key, pick]) => [`choices[${key}]`, pick])),
+      }),
+    enabled: enabled && projectId > 0 && copyId > 0,
+    placeholderData: (previous) => previous,
+  })
+}
+
+export function useMergeCopy(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ copyId, choices }: { copyId: number; choices: MergeChoices }) =>
+      api.post<{ before: FeatureVersion; after: FeatureVersion }>(`/projects/${projectId}/copies/${copyId}/merge`, {
+        choices,
+      }),
+    // A merge changes the project's features, its versions and the copy.
+    onSuccess: () => queryClient.invalidateQueries(),
+  })
+}

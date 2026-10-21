@@ -7,6 +7,7 @@ import {
   ChevronsUpDown,
   Download,
   FileCode,
+  History,
   LayoutTemplate,
   ListChecks,
   Loader2,
@@ -287,6 +288,10 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             Dependencies
           </Button>
           <DownloadFileButton projectId={projectId} />
+          <Button variant="secondary" size="sm" onClick={() => navigate({ name: 'versions', projectId })}>
+            <History className="h-3.5 w-3.5" />
+            Versions
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => setSharing(true)}>
             <Users className="h-3.5 w-3.5" />
             Share

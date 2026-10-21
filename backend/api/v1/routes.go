@@ -71,6 +71,7 @@ func Register(router *gin.Engine, db *gorm.DB, deps Deps) {
 	NewDependenciesHandler(db).Register(authed)
 	NewPlaygroundHandler(db).Register(authed)
 	NewReleasesHandler(db).Register(authed)
+	NewVersionsHandler(db).Register(authed)
 	NewGitHubHandler(db).Register(authed)
 	NewPullRequestsHandler(db).Register(authed)
 
