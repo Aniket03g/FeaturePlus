@@ -4,6 +4,7 @@ import (
 	"github.com/FeaturePlus/backend/models"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type FeatureRepository struct {
@@ -52,8 +53,11 @@ func (r *FeatureRepository) GetRootFeaturesByProject(projectID int) ([]models.Fe
 	return features, nil
 }
 
+// UpdateFeature saves the feature's own columns. Its loaded associations are
+// left out: saving the preloaded parent along with it would put the old
+// parent back and undo a move.
 func (r *FeatureRepository) UpdateFeature(feature *models.Feature) error {
-	return r.db.Save(feature).Error
+	return r.db.Omit(clause.Associations).Save(feature).Error
 }
 
 func (r *FeatureRepository) DeleteFeature(id int) error {

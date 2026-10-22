@@ -181,6 +181,9 @@ type FeatureDTO struct {
 	Status          string `json:"status"`
 	Priority        string `json:"priority"`
 	AssigneeID      uint   `json:"assignee_id"`
+	// Position orders the feature among its siblings, 1 first; 0 is an older
+	// feature that sorts by id.
+	Position int `json:"position"`
 
 	Tags  []string           `json:"tags"`
 	Tasks *FeatureTaskCounts `json:"tasks,omitempty"`
@@ -206,6 +209,7 @@ func NewFeatureDTO(f models.Feature, tags []string, tasks *FeatureTaskCounts) Fe
 		Status:          string(f.Status),
 		Priority:        string(f.Priority),
 		AssigneeID:      f.AssigneeID,
+		Position:        f.Position,
 		Tags:            emptyIfNil(tags),
 		Tasks:           tasks,
 		CreatedAt:       f.CreatedAt,

@@ -1,12 +1,14 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   AlertCircle,
   ArrowLeft,
+  Check,
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
   Download,
   FileCode,
+  GripVertical,
   History,
   LayoutTemplate,
   ListChecks,
@@ -16,7 +18,8 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { useCreateFeature, useFeatures, useProject, useProjectTags } from '@/lib/queries'
+import { useCreateFeature, useFeatures, useMoveFeature, useProject, useProjectTags } from '@/lib/queries'
+import { gapTarget, intoTarget, MAX_DEPTH, type DropRow, type DropTarget } from '@/lib/tree-drop'
 import { downloadFeatureFile, FEATURE_FILE_NAME } from '@/lib/feature-file'
 import { useRouter } from '@/lib/router'
 import { ApiError } from '@/lib/api'
@@ -58,6 +61,9 @@ interface TreeNode {
  * With `matches` set, only the matches and the parents above them are kept.
  */
 function buildTree(all: Feature[], matches: Feature[] | null): TreeNode[] {
+  // Siblings in the order people arranged them; older features without a
+  // saved place keep the order they were added in.
+  all = [...all].sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.id - b.id)
   const byId = new Map(all.map((f) => [f.id, f]))
   const kids = new Map<number, Feature[]>()
   const roots: Feature[] = []
@@ -118,6 +124,24 @@ function walk(nodes: TreeNode[], visit: (node: TreeNode) => void) {
     visit(node)
     walk(node.children, visit)
   }
+}
+
+/** How many levels a node's branch goes below it: 0 for a feature with nothing inside. */
+function heightOf(node: TreeNode): number {
+  return node.children.length === 0 ? 0 : 1 + Math.max(...node.children.map(heightOf))
+}
+
+/** What a drag is doing: which feature, where it started, and where it would land. */
+interface DragState {
+  node: TreeNode
+  /** The feature and everything inside it: not places it can go. */
+  excluded: Set<number>
+  startX: number
+  x: number
+  y: number
+  target: DropTarget | null
+  /** Where to draw the drop line or the "inside" box, relative to the list. */
+  mark: { top: number; height: number } | null
 }
 
 /** The rows to draw: every node whose parents are all open. */
@@ -183,6 +207,15 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   // Which parents are open, by feature id. Unset means the default: L0 open,
   // deeper levels closed, so a big project opens on its outline.
   const [open, setOpen] = useState<Record<number, boolean>>({})
+
+  // Arrange mode: every row gets a handle and can be dragged, with a mouse or
+  // a finger. Off, the list behaves as usual, so nothing moves by accident.
+  const [arranging, setArranging] = useState(false)
+  const [drag, setDrag] = useState<DragState | null>(null)
+  const dragRef = useRef<DragState | null>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const moveFeature = useMoveFeature(projectId)
+  const [moveError, setMoveError] = useState('')
   const tree = useMemo(
     () => buildTree(allFeatures.data?.items ?? items, hasFilters ? items : null),
     [allFeatures.data, items, hasFilters],
@@ -191,6 +224,128 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
     hasFilters || (open[node.feature.id] ?? node.depth === 0)
   const rows = visibleRows(tree, isOpen)
   const hasNesting = tree.some((node) => node.children.length > 0)
+
+  /**
+   * Where a drag at (x, y) would land. Rows are read from the page, so the
+   * answer matches what is on screen: above the top quarter of a row is the
+   * gap before it, the middle half is inside it, and sliding right or left
+   * from where the drag started picks a deeper or shallower level.
+   */
+  function locate(state: DragState, x: number, y: number): Pick<DragState, 'target' | 'mark'> {
+    const list = listRef.current
+    if (!list) return { target: null, mark: null }
+    const top = list.getBoundingClientRect().top
+    const rows: DropRow[] = []
+    const rects: DOMRect[] = []
+    for (const el of Array.from(list.querySelectorAll<HTMLElement>('[data-row-id]'))) {
+      const id = Number(el.dataset.rowId)
+      if (state.excluded.has(id)) continue
+      rows.push({ id, depth: Number(el.dataset.depth), parentId: el.dataset.parent ? Number(el.dataset.parent) : null })
+      rects.push(el.getBoundingClientRect())
+    }
+    const wanted = state.node.depth + Math.round((x - state.startX) / INDENT)
+    const height = heightOf(state.node)
+    const atGap = (gap: number) => {
+      const target = gapTarget(rows, gap, wanted, height)
+      const lineTop = gap < rects.length ? rects[gap].top : (rects[rects.length - 1]?.bottom ?? top)
+      return { target, mark: target ? { top: lineTop - top, height: 0 } : null }
+    }
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i]
+      const quarter = r.height / 4
+      if (y < r.top + quarter) return atGap(i)
+      if (y <= r.bottom - quarter) {
+        const target = intoTarget(rows, i, height)
+        if (target) return { target, mark: { top: r.top - top, height: r.height } }
+        return atGap(y < r.top + r.height / 2 ? i : i + 1)
+      }
+    }
+    return atGap(rows.length)
+  }
+
+  function startDrag(node: TreeNode, event: ReactPointerEvent) {
+    event.preventDefault()
+    setMoveError('')
+    const excluded = new Set<number>()
+    walk([node], (n) => excluded.add(n.feature.id))
+    const state: DragState = {
+      node,
+      excluded,
+      startX: event.clientX,
+      x: event.clientX,
+      y: event.clientY,
+      target: null,
+      mark: null,
+    }
+    Object.assign(state, locate(state, event.clientX, event.clientY))
+    dragRef.current = state
+    setDrag(state)
+  }
+
+  // While dragging: follow the pointer anywhere on the page, scroll near the
+  // top and bottom edges, and drop on release.
+  const dragging = drag !== null
+  useEffect(() => {
+    if (!dragging) return
+    const scroller = listRef.current?.closest('main')
+    const move = (e: PointerEvent) => {
+      const current = dragRef.current
+      if (!current) return
+      const next = { ...current, x: e.clientX, y: e.clientY, ...locate(current, e.clientX, e.clientY) }
+      dragRef.current = next
+      setDrag(next)
+    }
+    const tick = window.setInterval(() => {
+      const current = dragRef.current
+      if (!current || !scroller) return
+      const box = scroller.getBoundingClientRect()
+      if (current.y < box.top + 60) scroller.scrollBy(0, -14)
+      else if (current.y > box.bottom - 60) scroller.scrollBy(0, 14)
+    }, 30)
+    const finish = (drop: boolean) => {
+      const current = dragRef.current
+      dragRef.current = null
+      setDrag(null)
+      if (!drop || !current?.target) return
+      const { node, target } = current
+      const parentId = node.depth === 0 ? null : node.feature.parent_feature_id
+      // Dropped back where it was: nothing to do.
+      const siblings = parentId === null ? tree : (findNode(tree, parentId)?.children ?? [])
+      const here = siblings.findIndex((n) => n.feature.id === node.feature.id)
+      if (target.parentId === parentId && target.index === here) return
+      moveFeature.mutate(
+        { id: node.feature.id, parentId: target.parentId, index: target.index },
+        {
+          onSuccess: () => {
+            if (target.parentId !== null) setOpen((now) => ({ ...now, [target.parentId!]: true }))
+          },
+          onError: (err) => setMoveError(err instanceof ApiError ? err.message : 'Could not move the feature'),
+        },
+      )
+    }
+    const up = () => finish(true)
+    const cancel = () => finish(false)
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cancel()
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    window.addEventListener('keydown', key)
+    const previousSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('keydown', key)
+      window.clearInterval(tick)
+      document.body.style.userSelect = previousSelect
+    }
+    // locate and the tree are read through the latest render; the listeners only
+    // need setting up once per drag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragging])
 
   function setAllOpen(value: boolean) {
     const next: Record<number, boolean> = {}
@@ -370,6 +525,31 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             </Button>
           )}
 
+          {canEdit && items.length > 0 && (
+            <Button
+              variant={arranging ? 'primary' : 'secondary'}
+              size="sm"
+              className="h-7"
+              disabled={hasFilters && !arranging}
+              onClick={() => {
+                setArranging((v) => !v)
+                setAddingTo(null)
+                setMoveError('')
+              }}
+              aria-pressed={arranging}
+              title={
+                hasFilters && !arranging
+                  ? 'Clear the filters to arrange the whole list'
+                  : arranging
+                    ? 'Stop arranging'
+                    : 'Drag features to reorder them or move them between levels'
+              }
+            >
+              {arranging ? <Check className="h-3 w-3" /> : <GripVertical className="h-3 w-3" />}
+              {arranging ? 'Done arranging' : 'Arrange'}
+            </Button>
+          )}
+
           {hasNesting && !hasFilters && (
             <div className="flex gap-1">
               <Button
@@ -446,15 +626,29 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             </div>
           ) : (
             <div
+              ref={listRef}
               className={cn(
-                'divide-y divide-border transition-opacity',
-                features.isFetching && 'opacity-60',
+                'relative divide-y divide-border transition-opacity',
+                (features.isFetching || moveFeature.isPending) && 'opacity-60',
               )}
             >
+              {arranging && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-accent-soft/40 px-4 py-2 text-xs text-muted">
+                  <GripVertical className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    Drag a feature by its handle. Drop it between rows to place it there (slide right or left for a deeper or
+                    higher level), or onto a row to put it inside. Features go down to L{MAX_DEPTH}.
+                  </span>
+                  {moveError && <span className="text-danger">{moveError}</span>}
+                </div>
+              )}
               {rows.map((node) => (
                 <div key={node.feature.id} className="divide-y divide-border">
                   <FeatureRow
                     node={node}
+                    arranging={arranging}
+                    onGrab={(e) => startDrag(node, e)}
+                    moving={drag?.excluded.has(node.feature.id) ?? false}
                     open={isOpen(node)}
                     canToggle={!hasFilters}
                     onToggle={() =>
@@ -465,7 +659,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                     }
                     adding={addingTo === node.feature.id}
                     onAddInside={
-                      canEdit && !hasFilters
+                      canEdit && !hasFilters && !arranging && node.depth < MAX_DEPTH
                         ? () => setAddingTo(addingTo === node.feature.id ? null : node.feature.id)
                         : undefined
                     }
@@ -481,8 +675,24 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                 </div>
               ))}
 
+              {drag?.mark && drag.target && (
+                <div
+                  aria-hidden
+                  className={cn(
+                    'pointer-events-none absolute right-2 z-20',
+                    drag.mark.height > 0 ? 'rounded-md border-2 border-accent bg-accent-soft/30' : 'h-0.5 rounded-full bg-accent',
+                  )}
+                  style={{
+                    top: drag.mark.height > 0 ? drag.mark.top : drag.mark.top - 1,
+                    height: drag.mark.height > 0 ? drag.mark.height : undefined,
+                    left: drag.mark.height > 0 ? 8 : ARRANGE_GUTTER + 16 + drag.target.depth * INDENT,
+                  }}
+                />
+              )}
+
               {canEdit &&
                 !hasFilters &&
+                !arranging &&
                 (addingTo === 'top' ? (
                   <QuickAddRow
                     depth={0}
@@ -503,6 +713,24 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
           )}
         </CardBody>
       </Card>
+
+      {drag && (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed z-50 flex max-w-xs items-center gap-2 rounded-md border border-accent bg-surface px-2.5 py-1.5 text-xs text-ink shadow-pop"
+          style={{ left: drag.x + 14, top: drag.y + 14 }}
+        >
+          <GripVertical className="h-3.5 w-3.5 shrink-0 text-accent" />
+          <span className="truncate font-medium">{drag.node.feature.title}</span>
+          <span className={cn('shrink-0 font-mono text-2xs', drag.target ? 'text-accent' : 'text-danger')}>
+            {drag.target
+              ? drag.target.into !== undefined
+                ? `inside, L${drag.target.depth}`
+                : `L${drag.target.depth}`
+              : `can't go here (L${MAX_DEPTH} max)`}
+          </span>
+        </div>
+      )}
 
       {items.length > 0 && (
         <p className="text-xs text-faint">
@@ -586,8 +814,24 @@ function FilterChip({
 /** Indent per level, in pixels. */
 const INDENT = 20
 
+/** Room for the drag handle at the start of each row while arranging. */
+const ARRANGE_GUTTER = 28
+
+/** The node with this feature id, anywhere in the tree. */
+function findNode(nodes: TreeNode[], id: number): TreeNode | undefined {
+  for (const node of nodes) {
+    if (node.feature.id === id) return node
+    const inside = findNode(node.children, id)
+    if (inside) return inside
+  }
+  return undefined
+}
+
 function FeatureRow({
   node,
+  arranging,
+  onGrab,
+  moving,
   open,
   canToggle,
   onToggle,
@@ -596,6 +840,11 @@ function FeatureRow({
   onAddInside,
 }: {
   node: TreeNode
+  /** Arrange mode: a handle to drag by, and the row no longer opens the feature. */
+  arranging: boolean
+  onGrab: (event: ReactPointerEvent) => void
+  /** This row is being dragged, or is inside the one that is. */
+  moving: boolean
   open: boolean
   canToggle: boolean
   onToggle: () => void
@@ -607,27 +856,44 @@ function FeatureRow({
 }) {
   const { feature, depth, children, context, parts } = node
   const tasks = feature.tasks
+  const gutter = arranging ? ARRANGE_GUTTER : 0
 
   return (
     <div
+      data-row-id={feature.id}
+      data-depth={depth}
+      data-parent={depth > 0 && feature.parent_feature_id != null ? feature.parent_feature_id : ''}
       className={cn(
         'group/row relative flex items-center transition-colors hover:bg-raised',
         context && 'opacity-50',
+        moving && 'opacity-30',
       )}
     >
+      {arranging && (
+        <button
+          type="button"
+          onPointerDown={onGrab}
+          aria-label={`Drag ${feature.title}`}
+          title="Drag to move"
+          className="absolute inset-y-0 left-1 z-10 grid w-7 cursor-grab touch-none place-items-center text-faint hover:text-accent active:cursor-grabbing"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+      )}
+
       {/* One guide line per level above this one. */}
       {Array.from({ length: depth }).map((_, i) => (
         <span
           key={i}
           aria-hidden
           className="absolute inset-y-0 w-px bg-border"
-          style={{ left: 16 + 9 + i * INDENT }}
+          style={{ left: gutter + 16 + 9 + i * INDENT }}
         />
       ))}
 
       <div
         className="flex shrink-0 items-center self-stretch"
-        style={{ paddingLeft: 16 + depth * INDENT }}
+        style={{ paddingLeft: gutter + 16 + depth * INDENT }}
       >
         {children.length > 0 ? (
           // The click area spans the full row height and 8px either side of the
@@ -652,8 +918,8 @@ function FeatureRow({
           "+" after the title can be a button of its own; the title is the
           button that keyboard users reach, and its click bubbles up here. */}
       <div
-        onClick={onOpen}
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 py-3 pl-2 pr-4 text-left"
+        onClick={arranging ? undefined : onOpen}
+        className={cn('flex min-w-0 flex-1 items-center gap-4 py-3 pl-2 pr-4 text-left', !arranging && 'cursor-pointer')}
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

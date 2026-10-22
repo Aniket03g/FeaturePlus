@@ -692,6 +692,7 @@ func applyMerge(tx *gorm.DB, projectID int, live OpenedProject, plan mergePlan, 
 		}
 		if up.parentSet {
 			updates["parent_feature_id"] = parentID(up.parentKey)
+			updates["position"] = models.NextFeaturePosition(tx, projectID, parentID(up.parentKey))
 		}
 		if err := tx.Model(&models.Feature{}).Where("id = ?", ids[up.key]).Updates(updates).Error; err != nil {
 			return err

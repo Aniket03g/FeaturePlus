@@ -510,7 +510,7 @@ func parseGitHubRepo(input string) (owner, repo string, ok bool) {
 // an unchanged plan changes nothing.
 func (p *githubPublisher) planMarkdown(project *models.Project) (string, error) {
 	var features []models.Feature
-	if err := p.db.Where("project_id = ?", project.ID).Order("id").Find(&features).Error; err != nil {
+	if err := p.db.Where("project_id = ?", project.ID).Order("position, id").Find(&features).Error; err != nil {
 		return "", err
 	}
 	var releases []models.Release

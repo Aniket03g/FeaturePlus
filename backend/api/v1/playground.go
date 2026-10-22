@@ -204,7 +204,9 @@ func openProject(db *gorm.DB, project *models.Project, details bool) (OpenedProj
 	projectID := project.ID
 
 	var features []models.Feature
-	if err := db.Where("project_id = ?", projectID).Order("id").Find(&features).Error; err != nil {
+	// Siblings in the order people arranged them; older features without a
+	// position keep the order they were added in.
+	if err := db.Where("project_id = ?", projectID).Order("position, id").Find(&features).Error; err != nil {
 		return OpenedProject{}, err
 	}
 	var releases []models.Release

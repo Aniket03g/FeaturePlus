@@ -80,6 +80,8 @@ export interface Feature {
   status: FeatureStatus
   priority: FeaturePriority
   assignee_id: number
+  /** Order among the features with the same parent, 1 first; 0 is an older feature, ordered by id. */
+  position: number
   tags: string[]
   tasks?: FeatureTaskCounts
   sub_features?: Feature[]

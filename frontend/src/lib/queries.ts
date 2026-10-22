@@ -210,6 +210,25 @@ export function useCreateFeature(projectId: number) {
   })
 }
 
+/**
+ * Moves a feature: inside another feature (null for the top level), at a place
+ * among its children counted from 0. Everything that shows the list refreshes.
+ */
+export function useMoveFeature(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, parentId, index }: { id: number; parentId: number | null; index: number }) =>
+      api.post<Feature>(`/features/${id}/move`, { parent_feature_id: parentId, index }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['features', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['feature'] })
+      queryClient.invalidateQueries({ queryKey: graphKeys.graph(projectId) })
+      // The Versions page compares the list now with the newest version.
+      queryClient.invalidateQueries({ queryKey: ['version-compare', projectId] })
+    },
+  })
+}
+
 export function useUpdateFeature(projectId: number) {
   const queryClient = useQueryClient()
   return useMutation({

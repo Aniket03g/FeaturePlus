@@ -32,9 +32,12 @@ type Feature struct {
 	Status          FeatureStatus   `gorm:"type:varchar(50);not null;default:'todo'" json:"status"`
 	Priority        FeaturePriority `gorm:"type:varchar(50);not null;default:'medium'" json:"priority"`
 	AssigneeID      uint            `gorm:"default:0" json:"assignee_id"`
-	CreatedAt       time.Time       `json:"created_at"`
-	UpdatedAt       time.Time       `json:"updated_at"`
-	DeletedAt       gorm.DeletedAt  `gorm:"index" json:"-"`
+	// Position orders a feature among the others with the same parent, 1 first.
+	// Features saved before it existed share 0 and fall back to their id.
+	Position  int            `gorm:"not null;default:0;index" json:"position"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Associations
 	Project       Project      `gorm:"foreignKey:ProjectID" json:"-"`
@@ -42,4 +45,34 @@ type Feature struct {
 	Release       *Release     `gorm:"foreignKey:ReleaseID" json:"release,omitempty"`
 	Assignee      User         `gorm:"foreignKey:AssigneeID" json:"assignee"`
 	Tags          []FeatureTag `json:"tags"`
+}
+
+// MaxFeatureDepth is the deepest level a feature can sit at: L0 to L3.
+const MaxFeatureDepth = 3
+
+// BeforeCreate puts a new feature at the bottom of its parent's list, unless
+// it was given a place. Every way of adding features goes through here, so
+// they all keep the order the same way.
+func (f *Feature) BeforeCreate(tx *gorm.DB) error {
+	if f.Position != 0 {
+		return nil
+	}
+	f.Position = NextFeaturePosition(tx, f.ProjectID, f.ParentFeatureID)
+	return nil
+}
+
+// NextFeaturePosition is the position after the last feature with this
+// parent, nil being the top level.
+func NextFeaturePosition(tx *gorm.DB, projectID int, parentID *uint) int {
+	q := tx.Session(&gorm.Session{NewDB: true}).Model(&Feature{}).Where("project_id = ?", projectID)
+	if parentID == nil {
+		q = q.Where("parent_feature_id IS NULL")
+	} else {
+		q = q.Where("parent_feature_id = ?", *parentID)
+	}
+	var last int
+	if err := q.Select("COALESCE(MAX(position), 0)").Scan(&last).Error; err != nil {
+		return 0
+	}
+	return last + 1
 }

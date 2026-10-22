@@ -40,6 +40,7 @@ func (h *FeaturesHandler) Register(g *gin.RouterGroup) {
 	{
 		features.GET("/:featureId", h.Get)
 		features.PATCH("/:featureId", h.Update)
+		features.POST("/:featureId/move", h.Move)
 		features.DELETE("/:featureId", h.Delete)
 		features.PUT("/:featureId/tags", h.ReplaceTags)
 	}
@@ -166,6 +167,11 @@ func (h *FeaturesHandler) Create(c *gin.Context) {
 			api.Fail(c, err)
 			return
 		}
+		if h.depthOf(*req.ParentFeatureID)+1 > models.MaxFeatureDepth {
+			api.Fail(c, api.Validation("Features go down to L3 at most, so nothing can be added inside an L3 feature").
+				WithField("parent_feature_id", "Choose a feature at L2 or above"))
+			return
+		}
 		feature.ParentFeatureID = req.ParentFeatureID
 	}
 	if req.AssigneeID != nil {
@@ -213,7 +219,13 @@ func (h *FeaturesHandler) Update(c *gin.Context) {
 		}
 	}
 
+	before := feature.ParentFeatureID
 	req.Apply(feature)
+	// A feature given a new parent here goes to the bottom of that parent's
+	// list; the move action is the way to put it anywhere else.
+	if !sameParent(before, feature.ParentFeatureID) {
+		feature.Position = models.NextFeaturePosition(h.db, feature.ProjectID, feature.ParentFeatureID)
+	}
 
 	if dbErr := h.repo.UpdateFeature(feature); dbErr != nil {
 		api.Fail(c, api.FromDB(dbErr, "Feature"))
@@ -353,6 +365,20 @@ func (h *FeaturesHandler) loadForWrite(c *gin.Context) (*models.Feature, error) 
 	}
 
 	return feature, nil
+}
+
+// depthOf is how deep a feature sits: 0 for a top-level one.
+func (h *FeaturesHandler) depthOf(id uint) int {
+	depth := 0
+	for current, steps := id, 0; steps <= models.MaxFeatureDepth+1; steps++ {
+		var f models.Feature
+		if err := h.db.Select("id", "parent_feature_id").First(&f, current).Error; err != nil || f.ParentFeatureID == nil {
+			return depth
+		}
+		current = *f.ParentFeatureID
+		depth++
+	}
+	return depth
 }
 
 // checkParent refuses a parent from another project. Without it a feature
