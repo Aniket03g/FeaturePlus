@@ -72,7 +72,7 @@ The list:
 - parent_key nests a feature inside another one ("" means top level). Nesting means "is part of". Two to three levels is usually enough.
 - needs lists the keys of features that must be finished before this one can start. Only add a need when the order genuinely matters, such as a payment step that cannot work without a cart. Never make a feature need its own parent or anything nested inside it; nesting already says they belong together. Avoid loops.
 - Keep the key of every feature you keep, even if you rename or move it. Give each new feature a new key that is not already used, such as "n1", "n2".
-- Titles are short plain names a product team would use, two to five words, unique across the list, without numbering or trailing punctuation.
+- Titles are short plain names a product team would use, two to five words, never the same as a sibling's (the same name under different parents is fine), without numbering or trailing punctuation.
 
 What to do:
 - If the person describes a product, draft its features: usually 8 to 30, grouped under a handful of top-level areas, including the basics the product cannot work without.

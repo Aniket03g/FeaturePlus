@@ -200,6 +200,67 @@ func TestPlaygroundImportIsAllOrNothing(t *testing.T) {
 	}
 }
 
+// A name may repeat under different parents, both in the list and against the
+// features the project already has; only siblings must differ.
+func TestPlaygroundSameNameUnderDifferentParents(t *testing.T) {
+	db := newTestDB(t)
+	owner, _, project := seed(t, db)
+	users := models.Feature{ProjectID: project.ID, Title: "Users", Status: models.StatusTodo, Priority: models.PriorityMedium, Category: "general"}
+	db.Create(&users)
+	suspend := models.Feature{ProjectID: project.ID, Title: "Suspend", ParentFeatureID: &users.ID, Status: models.StatusDone, Priority: models.PriorityMedium, Category: "general"}
+	db.Create(&suspend)
+	other := models.Feature{ProjectID: project.ID, Title: "Audit", Status: models.StatusTodo, Priority: models.PriorityMedium, Category: "general"}
+	db.Create(&other)
+	r := playgroundRouter(t, db, owner.ID, "developer")
+
+	// Suspend under Users is the one the project has; Suspend under the new
+	// Admins and Overview twice are new features of their own.
+	body := `{"project_id":` + strconv.Itoa(project.ID) + `,"features":[
+		{"key":"u","title":"Users"},
+		{"key":"s1","title":"Suspend","parent_key":"u"},
+		{"key":"a","title":"Admins"},
+		{"key":"s2","title":"Suspend","parent_key":"a"},
+		{"key":"o1","title":"Overview","parent_key":"u"},
+		{"key":"o2","title":"Overview","parent_key":"a"}
+	]}`
+	w := do(r, http.MethodPost, "/api/v1/playground/import", body)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status %d, want 201: %s", w.Code, w.Body.String())
+	}
+	result := decodeImport(t, w)
+	if result.Created != 4 || result.Existing != 2 {
+		t.Errorf("created %d, existing %d; want 4 and 2", result.Created, result.Existing)
+	}
+	var suspends []models.Feature
+	db.Where("project_id = ? AND title = ?", project.ID, "Suspend").Find(&suspends)
+	if len(suspends) != 2 {
+		t.Errorf("project has %d features called Suspend, want 2", len(suspends))
+	}
+
+	// Two of a name under one parent is still refused.
+	w = do(r, http.MethodPost, "/api/v1/playground/import", `{"project_id":`+strconv.Itoa(project.ID)+`,"features":[
+		{"key":"a","title":"Admins"},
+		{"key":"x","title":"Add","parent_key":"a"},
+		{"key":"y","title":" add","parent_key":"a"}]}`)
+	if w.Code != http.StatusUnprocessableEntity && w.Code != http.StatusBadRequest {
+		t.Errorf("siblings with one name: status %d, want a validation failure", w.Code)
+	}
+
+	// Renaming Audit to a name used under another parent is fine; renaming it
+	// to the name of a top-level sibling is not.
+	ido := strconv.Itoa(int(other.ID))
+	w = do(r, http.MethodPost, "/api/v1/playground/import", `{"project_id":`+strconv.Itoa(project.ID)+
+		`,"features":[{"key":"x","title":"Suspend","feature_id":`+ido+`}]}`)
+	if w.Code != http.StatusCreated {
+		t.Errorf("rename onto a cousin's name: status %d %s", w.Code, w.Body.String())
+	}
+	w = do(r, http.MethodPost, "/api/v1/playground/import", `{"project_id":`+strconv.Itoa(project.ID)+
+		`,"features":[{"key":"x","title":"Users","feature_id":`+ido+`}]}`)
+	if w.Code != http.StatusUnprocessableEntity && w.Code != http.StatusBadRequest {
+		t.Errorf("rename onto a sibling's name: status %d, want a validation failure", w.Code)
+	}
+}
+
 func TestPlaygroundImportNeedsEditAccess(t *testing.T) {
 	db := newTestDB(t)
 	_, other, project := seed(t, db)

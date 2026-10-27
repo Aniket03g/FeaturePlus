@@ -48,7 +48,7 @@ import {
   childrenOf,
   replannedFromProject,
   depthOf,
-  duplicateNames,
+  duplicateRows,
   fromProject,
   fromText,
   importReleases,
@@ -403,7 +403,7 @@ function PlaygroundEditor({ initial, takeOver, offline }: { initial: Saved; take
   const changedSinceOpened = useMemo(() => changedFromProject(items), [items])
   const suggestions = useMemo(() => suggestionCount(items), [items])
   const loops = useMemo(() => loopNeeds(items), [items])
-  const duplicates = useMemo(() => duplicateNames(items.filter((item) => item.include)), [items])
+  const duplicates = useMemo(() => duplicateRows(items), [items])
   const releaseNames = useMemo(() => {
     const names = new Map(releases.map((release) => [release.key, release.name]))
     const labels = new Map<string, string>()
@@ -705,7 +705,7 @@ function FeatureList({
           const depth = depthOf(items, item.key)
           const children = childrenOf(items, item.key).length
           const dropping = drag?.over === item.key
-          const duplicate = item.include && duplicates.has(item.title.trim().toLowerCase())
+          const duplicate = duplicates.has(item.key)
           const needs = item.needs ?? []
           const suggested = needs.filter((need) => need.suggested).length
           const looped = needs.some((need) => loops.has(`${item.key}>${need.key}`))
@@ -1754,7 +1754,8 @@ function ImportPanel({
         <p className="text-xs text-muted">
           {duplicates.size > 0 ? (
             <span className="text-danger">
-              Some names are in the list twice. Rename or untick one of each before importing.
+              Some features have the same name as another feature under the same parent. Rename or untick
+              one of each before importing.
             </span>
           ) : releaseClash ? (
             <span className="text-danger">Two releases have the same name. Rename one before importing.</span>

@@ -95,15 +95,24 @@ export function isWithin(items: DraftFeature[], key: string, ancestor: string) {
   return items.slice(start, start + length).some((item) => item.key === key)
 }
 
-/** Names used more than once, lower-cased. An import refuses them. */
-export function duplicateNames(items: DraftFeature[]) {
-  const seen = new Set<string>()
+/**
+ * Rows that share their name with a sibling, by key. An import refuses them.
+ * The same name under two different parents is fine. Siblings are counted
+ * where the import puts them: a row inside an unticked one goes up to the
+ * nearest ticked parent, so that is where it is compared.
+ */
+export function duplicateRows(items: DraftFeature[]) {
+  const first = new Map<string, string>()
   const repeated = new Set<string>()
-  for (const item of items) {
-    const name = item.title.trim().toLowerCase()
-    if (!name) continue
-    if (seen.has(name)) repeated.add(name)
-    seen.add(name)
+  for (const row of importRows(items)) {
+    const name = `${row.parent_key}\n${row.title.toLowerCase()}`
+    const earlier = first.get(name)
+    if (earlier === undefined) {
+      first.set(name, row.key)
+      continue
+    }
+    repeated.add(earlier)
+    repeated.add(row.key)
   }
   return repeated
 }

@@ -449,9 +449,10 @@ func (h *PlaygroundHandler) Import(c *gin.Context) {
 			result.ProjectID = project.ID
 		}
 
-		// Existing names, matched ignoring case and surrounding spaces. A
-		// project that already holds the same name twice matches the older.
-		existing := map[string]uint{}
+		// Existing names, matched ignoring case and surrounding spaces, under
+		// the same parent: the same name elsewhere is a different feature. A
+		// parent that already holds the same name twice matches the older.
+		existing := map[siblingName]uint{}
 		inProject := map[uint]models.Feature{}
 		if project.ID > 0 {
 			var features []models.Feature
@@ -470,7 +471,10 @@ func (h *PlaygroundHandler) Import(c *gin.Context) {
 				}
 			}
 			for _, f := range features {
-				name := matchName(f.Title)
+				name := siblingName{name: matchName(f.Title)}
+				if f.ParentFeatureID != nil {
+					name.parent = *f.ParentFeatureID
+				}
 				if _, seen := existing[name]; !seen && !linked[f.ID] {
 					existing[name] = f.ID
 				}
@@ -496,7 +500,14 @@ func (h *PlaygroundHandler) Import(c *gin.Context) {
 				continue
 			}
 
-			if id, found := existing[matchName(row.Title)]; found {
+			// A row inside one this import creates has nothing to match: its
+			// parent is new, so nothing can be under it yet.
+			parentID, parentKnown := uint(0), true
+			if row.ParentKey != "" {
+				parentID = ids[row.ParentKey]
+				parentKnown = parentID != 0
+			}
+			if id, found := existing[siblingName{parentID, matchName(row.Title)}]; found && parentKnown {
 				ids[row.Key] = id
 				result.Existing++
 				result.Items = append(result.Items, PlaygroundOutcome{
@@ -569,6 +580,13 @@ func matchName(title string) string {
 	return strings.ToLower(strings.TrimSpace(title))
 }
 
+// siblingName is a name as the project tells features apart: a name only has
+// to be unique among the features under one parent. Parent 0 is the top level.
+type siblingName struct {
+	parent uint
+	name   string
+}
+
 // orderPlaygroundFeatures checks the list hangs together and returns it with
 // every parent ahead of its children, so a child always has an id to point at.
 // Rows keep their list order otherwise.
@@ -580,6 +598,7 @@ func orderPlaygroundFeatures(rows []PlaygroundFeature) ([]PlaygroundFeature, err
 		return nil, api.Validation("That is more features than one import takes; split the list")
 	}
 
+	// A name may repeat in the list, but not under the same parent.
 	byKey := map[string]PlaygroundFeature{}
 	names := map[string]string{}
 	for _, row := range rows {
@@ -589,11 +608,12 @@ func orderPlaygroundFeatures(rows []PlaygroundFeature) ([]PlaygroundFeature, err
 		if _, dup := byKey[row.Key]; dup {
 			return nil, api.Validation("Two rows share the key \"" + row.Key + "\"")
 		}
-		if first, dup := names[matchName(row.Title)]; dup {
-			return nil, api.Validation("\"" + first + "\" is in the list twice; names have to be unique")
+		sibling := row.ParentKey + "\n" + matchName(row.Title)
+		if first, dup := names[sibling]; dup {
+			return nil, api.Validation("\"" + first + "\" is twice under the same parent; rename one of them")
 		}
 		byKey[row.Key] = row
-		names[matchName(row.Title)] = row.Title
+		names[sibling] = row.Title
 	}
 
 	for _, row := range rows {
@@ -650,26 +670,24 @@ func orderPlaygroundFeatures(rows []PlaygroundFeature) ([]PlaygroundFeature, err
 // Nothing else about the feature changes. It answers "updated" when either
 // changed and "existing" when neither did, and on a dry run only says which.
 //
-// A rename onto a name another feature of the project already has is refused,
-// since the project would then hold the same name twice. A move that would put
-// a feature inside its own part is refused for the same reason the canvas
-// refuses it.
+// A rename or move that would give a feature the name of another feature under
+// the same parent is refused, since that parent would then hold the same name
+// twice. A move that would put a feature inside its own part is refused for
+// the same reason the canvas refuses it.
 func updateLinkedFeature(
 	tx *gorm.DB,
 	dryRun bool,
 	feature models.Feature,
 	row PlaygroundFeature,
 	ids map[string]uint,
-	existing map[string]uint,
+	existing map[siblingName]uint,
 	inProject map[uint]models.Feature,
 ) (string, error) {
 	updates := map[string]any{}
 
 	title := strings.TrimSpace(row.Title)
-	if title != feature.Title {
-		if other, taken := existing[matchName(title)]; taken && other != feature.ID {
-			return "", api.Validation("\"" + title + "\" is already the name of another feature in the project")
-		}
+	renamed := title != feature.Title
+	if renamed {
 		updates["title"] = title
 	}
 
@@ -710,6 +728,17 @@ func updateLinkedFeature(
 			// Later rows check their moves against this one's new place.
 			feature.ParentFeatureID = parent
 			inProject[feature.ID] = feature
+		}
+	}
+
+	// Under a parent this import creates there is nothing to clash with yet.
+	if (renamed || row.Moved) && !movesUnderNew {
+		place := siblingName{name: matchName(title)}
+		if feature.ParentFeatureID != nil {
+			place.parent = *feature.ParentFeatureID
+		}
+		if other, taken := existing[place]; taken && other != feature.ID {
+			return "", api.Validation("\"" + title + "\" is already the name of another feature under the same parent")
 		}
 	}
 
