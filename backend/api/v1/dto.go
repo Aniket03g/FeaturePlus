@@ -177,6 +177,7 @@ type FeatureDTO struct {
 	ReleaseID       *uint  `json:"release_id"`
 	Title           string `json:"title"`
 	Description     string `json:"description"`
+	Notes           string `json:"notes"`
 	Category        string `json:"category"`
 	Status          string `json:"status"`
 	Priority        string `json:"priority"`
@@ -205,6 +206,7 @@ func NewFeatureDTO(f models.Feature, tags []string, tasks *FeatureTaskCounts) Fe
 		ReleaseID:       f.ReleaseID,
 		Title:           f.Title,
 		Description:     f.Description,
+		Notes:           f.Notes,
 		Category:        f.Category,
 		Status:          string(f.Status),
 		Priority:        string(f.Priority),
@@ -235,6 +237,7 @@ func NewFeatureDTOs(
 type CreateFeatureRequest struct {
 	Title           string   `json:"title" binding:"required,min=1,max=255"`
 	Description     string   `json:"description" binding:"max=20000"`
+	Notes           string   `json:"notes" binding:"max=20000"`
 	Category        string   `json:"category" binding:"max=50"`
 	Status          string   `json:"status" binding:"omitempty,oneof=todo in_progress done"`
 	Priority        string   `json:"priority" binding:"omitempty,oneof=low medium high"`
@@ -249,6 +252,7 @@ type CreateFeatureRequest struct {
 type UpdateFeatureRequest struct {
 	Title           *string `json:"title" binding:"omitempty,min=1,max=255"`
 	Description     *string `json:"description" binding:"omitempty,max=20000"`
+	Notes           *string `json:"notes" binding:"omitempty,max=20000"`
 	Category        *string `json:"category" binding:"omitempty,max=50"`
 	Status          *string `json:"status" binding:"omitempty,oneof=todo in_progress done"`
 	Priority        *string `json:"priority" binding:"omitempty,oneof=low medium high"`
@@ -263,6 +267,9 @@ func (r UpdateFeatureRequest) Apply(f *models.Feature) {
 	}
 	if r.Description != nil {
 		f.Description = *r.Description
+	}
+	if r.Notes != nil {
+		f.Notes = *r.Notes
 	}
 	if r.Category != nil {
 		f.Category = *r.Category
@@ -432,6 +439,25 @@ func NewAttachmentDTO(a models.TaskAttachment) AttachmentDTO {
 		FileSize:  a.FileSize,
 		MimeType:  a.MimeType,
 		CreatedAt: a.CreatedAt,
+	}
+}
+
+// FeatureAttachmentDTO is a file attached to a feature. Name is what a
+// description links to, as "attachment:" and the name.
+type FeatureAttachmentDTO struct {
+	ID        uint      `json:"id"`
+	FeatureID uint      `json:"feature_id"`
+	Name      string    `json:"name"`
+	FileSize  int64     `json:"file_size"`
+	MimeType  string    `json:"mime_type"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// NewFeatureAttachmentDTO converts a feature attachment for output.
+func NewFeatureAttachmentDTO(a models.FeatureAttachment) FeatureAttachmentDTO {
+	return FeatureAttachmentDTO{
+		ID: a.ID, FeatureID: a.FeatureID, Name: a.Name, FileSize: a.FileSize,
+		MimeType: a.MimeType, CreatedAt: a.CreatedAt,
 	}
 }
 

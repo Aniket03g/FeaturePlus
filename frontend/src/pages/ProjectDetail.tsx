@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   AlertCircle,
+  Archive,
   ArrowLeft,
   Check,
   ChevronRight,
@@ -21,6 +22,7 @@ import {
 import { useCreateFeature, useFeatures, useMoveFeature, useProject, useProjectTags } from '@/lib/queries'
 import { gapTarget, intoTarget, MAX_DEPTH, type DropRow, type DropTarget } from '@/lib/tree-drop'
 import { downloadFeatureFile, FEATURE_FILE_NAME } from '@/lib/feature-file'
+import { downloadBackup } from '@/lib/backup'
 import { useRouter } from '@/lib/router'
 import { ApiError } from '@/lib/api'
 import { Card, CardBody } from '@/components/ui/card'
@@ -443,6 +445,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             Dependencies
           </Button>
           <DownloadFileButton projectId={projectId} />
+          {role === 'owner' && <BackupButton projectId={projectId} />}
           <Button variant="secondary" size="sm" onClick={() => navigate({ name: 'versions', projectId })}>
             <History className="h-3.5 w-3.5" />
             Versions
@@ -1094,6 +1097,44 @@ function QuickAddRow({
         {error ? <span className="text-danger">{error}</span> : <span className="text-faint">Enter adds · Esc closes</span>}
       </span>
     </div>
+  )
+}
+
+/**
+ * Downloads everything in the project as one .zip, to keep safe or to restore
+ * on another FeaturePlus. Only the owner sees it, as only they may take one.
+ */
+function BackupButton({ projectId }: { projectId: number }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
+  const [message, setMessage] = useState('')
+
+  async function download() {
+    setState('busy')
+    try {
+      await downloadBackup(projectId)
+      setState('idle')
+    } catch (err) {
+      setMessage(err instanceof ApiError ? err.message : 'Download failed')
+      setState('failed')
+    }
+  }
+
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={download}
+      disabled={state === 'busy'}
+      title={
+        state === 'failed'
+          ? `${message}. Click to try again.`
+          : 'Download everything in this project as one file, to keep safe or restore elsewhere'
+      }
+      className={cn(state === 'failed' && 'text-danger')}
+    >
+      {state === 'busy' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+      {state === 'failed' ? 'Backup failed' : state === 'busy' ? 'Packing…' : 'Backup'}
+    </Button>
   )
 }
 

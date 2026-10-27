@@ -173,6 +173,7 @@ func compareLists(from, to OpenedProject) VersionComparison {
 		}
 		same("title", before.Title, row.Title)
 		same("description", before.Description, row.Description)
+		same("notes", before.Notes, row.Notes)
 		same("status", before.Status, row.Status)
 		same("priority", before.Priority, row.Priority)
 		same("category", before.Category, row.Category)

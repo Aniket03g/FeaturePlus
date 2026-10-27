@@ -4,6 +4,7 @@ import {
   useCreateFeature,
   useDeleteFeature,
   useFeature,
+  useFeatureAttachments,
   useFeatures,
   useProject,
   useReplaceTags,
@@ -20,6 +21,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
 import { TaskList } from '@/components/TaskList'
 import { FeatureAccess } from '@/components/FeatureAccess'
+import { Markdown } from '@/components/Markdown'
+import { FeatureFiles, MarkdownEditor, paragraphBreak } from '@/components/MarkdownEditor'
 import { TaskPanel } from './TaskPanel'
 import { cn } from '@/lib/utils'
 import {
@@ -112,10 +115,13 @@ export function FeatureDetail({
   const update = useUpdateFeature(projectId)
   const replaceTags = useReplaceTags(projectId)
   const remove = useDeleteFeature(projectId)
+  const attachmentList = useFeatureAttachments(featureId)
+  const attachments = attachmentList.data?.items ?? []
 
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [notes, setNotes] = useState('')
   const [tagText, setTagText] = useState('')
   const [error, setError] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -128,6 +134,7 @@ export function FeatureDetail({
     if (feature.data) {
       setTitle(feature.data.title)
       setDescription(feature.data.description)
+      setNotes(feature.data.notes ?? '')
       setTagText(feature.data.tags.join(', '))
     }
   }, [feature.data])
@@ -177,7 +184,7 @@ export function FeatureDetail({
     const tags = tagText.split(',').map((t) => t.trim()).filter(Boolean)
 
     try {
-      await update.mutateAsync({ id: featureId, title, description })
+      await update.mutateAsync({ id: featureId, title, description, notes })
       await replaceTags.mutateAsync({ id: featureId, tags })
       setEditing(false)
     } catch (err) {
@@ -247,18 +254,33 @@ export function FeatureDetail({
                 onChange={(e) => setTitle(e.target.value)}
                 autoFocus
               />
-              <div className="space-y-1.5">
-                <label htmlFor="edit-description" className="block text-xs font-medium text-muted">
-                  Description
-                </label>
-                <textarea
-                  id="edit-description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={5}
-                  className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/50"
-                />
-              </div>
+              <MarkdownEditor
+                id="edit-description"
+                label="Description"
+                value={description}
+                onChange={setDescription}
+                featureId={featureId}
+                attachments={attachments}
+                height="75vh"
+              />
+              <MarkdownEditor
+                id="edit-notes"
+                label="Notes"
+                value={notes}
+                onChange={setNotes}
+                featureId={featureId}
+                attachments={attachments}
+                height="35vh"
+                placeholder="Working notes: open questions, decisions, links…"
+              />
+              <FeatureFiles
+                featureId={featureId}
+                attachments={attachments}
+                canEdit={canEdit}
+                onInsert={(md) =>
+                  setDescription((d) => d + paragraphBreak(d) + md + '\n')
+                }
+              />
               <Input
                 label="Tags"
                 value={tagText}
@@ -317,9 +339,20 @@ export function FeatureDetail({
                 </div>
               </div>
 
-              <p className="whitespace-pre-wrap text-sm text-muted">
-                {data.description || 'No description.'}
-              </p>
+              {data.description.trim() ? (
+                <Markdown text={data.description} attachments={attachments} />
+              ) : (
+                <p className="text-sm text-faint">No description.</p>
+              )}
+
+              {data.notes?.trim() && (
+                <section className="border-t border-border pt-3">
+                  <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-faint">Notes</h3>
+                  <Markdown text={data.notes} attachments={attachments} />
+                </section>
+              )}
+
+              <FeatureFiles featureId={featureId} attachments={attachments} canEdit={canEdit} />
 
               {data.tags.length > 0 && <TagList tags={data.tags} max={12} />}
             </>

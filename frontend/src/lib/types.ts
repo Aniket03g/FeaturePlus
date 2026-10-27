@@ -76,6 +76,8 @@ export interface Feature {
   release_id: number | null
   title: string
   description: string
+  /** Working notes beside the description, in markdown like it. */
+  notes: string
   category: string
   status: FeatureStatus
   priority: FeaturePriority
@@ -283,6 +285,16 @@ export interface Attachment {
   id: number
   task_id: number
   file_name: string
+  file_size: number
+  mime_type: string
+  created_at: string
+}
+
+/** A file attached to a feature. A description links to it as `attachment:` and its name. */
+export interface FeatureAttachment {
+  id: number
+  feature_id: number
+  name: string
   file_size: number
   mime_type: string
   created_at: string

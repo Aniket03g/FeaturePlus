@@ -497,6 +497,7 @@ func buildCopyRows(rows []CopyRow, previous, base []OpenedFeature) ([]OpenedFeat
 			feature.FeatureID = was.FeatureID
 			feature.ReleaseKey = was.ReleaseKey
 			feature.Description = was.Description
+			feature.Notes = was.Notes
 			feature.Status = was.Status
 			feature.Priority = was.Priority
 			feature.Category = was.Category

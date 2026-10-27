@@ -140,6 +140,7 @@ type OpenedFeature struct {
 
 	// Set only in a saved version; see openProject.
 	Description string `json:"description,omitempty"`
+	Notes       string `json:"notes,omitempty"`
 	Status      string `json:"status,omitempty"`
 	Priority    string `json:"priority,omitempty"`
 	Category    string `json:"category,omitempty"`
@@ -253,6 +254,7 @@ func openProject(db *gorm.DB, project *models.Project, details bool) (OpenedProj
 		}
 		if details {
 			out.Description = f.Description
+			out.Notes = f.Notes
 			out.Status = string(f.Status)
 			out.Priority = string(f.Priority)
 			out.Category = f.Category

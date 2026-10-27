@@ -28,7 +28,9 @@ type Feature struct {
 	ReleaseID       *uint           `gorm:"index" json:"release_id"` // Optional: feature can be planned for a release
 	Title           string          `gorm:"type:varchar(255);not null" json:"title"`
 	Description     string          `gorm:"type:text" json:"description"`
-	Category        string          `gorm:"type:varchar(50);not null;default:'general'" json:"category"`
+	// Notes is a second markdown box, for working notes beside the description.
+	Notes    string          `gorm:"type:text;not null;default:''" json:"notes"`
+	Category       string          `gorm:"type:varchar(50);not null;default:'general'" json:"category"`
 	Status          FeatureStatus   `gorm:"type:varchar(50);not null;default:'todo'" json:"status"`
 	Priority        FeaturePriority `gorm:"type:varchar(50);not null;default:'medium'" json:"priority"`
 	AssigneeID      uint            `gorm:"default:0" json:"assignee_id"`

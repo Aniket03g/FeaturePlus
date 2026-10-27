@@ -158,6 +158,7 @@ func (h *FeaturesHandler) Create(c *gin.Context) {
 		ProjectID:   projectID,
 		Title:       req.Title,
 		Description: req.Description,
+		Notes:       req.Notes,
 		Category:    orDefault(req.Category, "general"),
 		Status:      models.FeatureStatus(orDefault(req.Status, string(models.StatusTodo))),
 		Priority:    models.FeaturePriority(orDefault(req.Priority, string(models.PriorityMedium))),
@@ -277,6 +278,14 @@ func (h *FeaturesHandler) Delete(c *gin.Context) {
 			Where("(parent_type = ? AND parent_id = ?) OR (child_type = ? AND child_id = ?)",
 				models.EntityTypeFeature, feature.ID, models.EntityTypeFeature, feature.ID).
 			Delete(&models.Dependency{}).Error; err != nil {
+			return err
+		}
+		// Its attached files go too; nothing else can link to them.
+		var attached []models.FeatureAttachment
+		if err := tx.Where("feature_id = ?", feature.ID).Find(&attached).Error; err != nil {
+			return err
+		}
+		if err := deleteFeatureAttachmentsTx(tx, attached); err != nil {
 			return err
 		}
 		return tx.Unscoped().Delete(&models.Feature{}, feature.ID).Error
@@ -503,7 +512,8 @@ func filterFeatures(features []models.Feature, tags map[uint][]string, f feature
 		}
 		if f.query != "" &&
 			!strings.Contains(strings.ToLower(feature.Title), f.query) &&
-			!strings.Contains(strings.ToLower(feature.Description), f.query) {
+			!strings.Contains(strings.ToLower(feature.Description), f.query) &&
+			!strings.Contains(strings.ToLower(feature.Notes), f.query) {
 			continue
 		}
 		out = append(out, feature)

@@ -80,6 +80,8 @@ func Register(router *gin.Engine, db *gorm.DB, deps Deps) {
 	NewScopesHandler(db).Register(authed)
 	NewContractsHandler(db, deps.Contracts).Register(authed)
 	NewAttachmentsHandler(db, deps.Files).Register(authed)
+	NewFeatureAttachmentsHandler(db, deps.Files).Register(authed)
+	NewBackupsHandler(db, deps.Files).Register(authed)
 
 	templates := NewTemplatesHandler(db, loadTemplates(deps.TemplateDir))
 	templates.Register(authed)

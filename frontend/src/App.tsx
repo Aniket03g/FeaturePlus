@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { ArchiveRestore, Plus } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { projectOf, useRouter, type Route } from '@/lib/router'
 import { useProject } from '@/lib/queries'
@@ -11,6 +11,7 @@ import { Projects } from '@/pages/Projects'
 import { ProjectDetail } from '@/pages/ProjectDetail'
 import { FeatureDetail } from '@/pages/FeatureDetail'
 import { NewProjectDialog } from '@/pages/NewProjectDialog'
+import { RestoreBackupDialog } from '@/pages/RestoreBackupDialog'
 import { DependencyCanvas } from '@/pages/DependencyCanvas'
 import { Releases } from '@/pages/Releases'
 import { ReleaseDetail } from '@/pages/ReleaseDetail'
@@ -77,6 +78,7 @@ export function App() {
   const { route, navigate } = useRouter()
   const [search, setSearch] = useState('')
   const [creatingProject, setCreatingProject] = useState(false)
+  const [restoringBackup, setRestoringBackup] = useState(false)
 
   if (isLoading) return <AuthLoading />
   if (!user) return <Login />
@@ -107,6 +109,10 @@ export function App() {
         route.name === 'projects' ? (
           <>
             <SearchInput value={search} onChange={setSearch} placeholder="Search projects…" />
+            <Button size="sm" variant="secondary" onClick={() => setRestoringBackup(true)}>
+              <ArchiveRestore className="h-3.5 w-3.5" />
+              Restore backup
+            </Button>
             <Button size="sm" onClick={() => setCreatingProject(true)}>
               <Plus className="h-3.5 w-3.5" />
               New project
@@ -157,6 +163,15 @@ export function App() {
           onClose={() => setCreatingProject(false)}
           onCreated={(projectId) => {
             setCreatingProject(false)
+            navigate({ name: 'project', projectId })
+          }}
+        />
+      )}
+      {restoringBackup && (
+        <RestoreBackupDialog
+          onClose={() => setRestoringBackup(false)}
+          onOpenProject={(projectId) => {
+            setRestoringBackup(false)
             navigate({ name: 'project', projectId })
           }}
         />

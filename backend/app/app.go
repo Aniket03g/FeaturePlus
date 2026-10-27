@@ -99,6 +99,7 @@ func openDatabase(cfg Config) (*database.Database, error) {
 	if err := db.Migrate(
 		&models.User{}, &models.Project{}, &models.Feature{}, &models.SubFeature{},
 		&models.Task{}, &models.FeatureTag{}, &models.TaskAttachment{}, &models.Comment{},
+		&models.FeatureAttachment{},
 		&models.PullRequest{}, &models.Dependency{},
 		&models.Release{}, // also creates release_prs, which the release migration above reads
 		&models.ApprovedPR{},

@@ -118,6 +118,7 @@ export function buildDiffTree(from: List, to: List): DiffTree {
     detail('Category', was.category ?? '', row.category ?? '')
     detail('Release', releaseBefore.get(was.release_key) ?? '', releaseAfter.get(row.release_key) ?? '')
     detail('Description', was.description ?? '', row.description ?? '')
+    detail('Notes', was.notes ?? '', row.notes ?? '')
     if (node.details.length) node.kinds.push('details')
 
     if (node.kinds.length) node.state = 'changed'

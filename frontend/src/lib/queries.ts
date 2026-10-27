@@ -11,6 +11,7 @@ import type {
   Dependency,
   DependencyGraph,
   Feature,
+  FeatureAttachment,
   FeatureCommit,
   FeatureFile,
   FileContent,
@@ -922,6 +923,34 @@ export function useDeleteAttachment(taskId: number) {
   })
 }
 
+export const featureAttachmentKeys = {
+  list: (featureId: number) => ['feature-attachments', featureId] as const,
+}
+
+export function useFeatureAttachments(featureId: number) {
+  return useQuery({
+    queryKey: featureAttachmentKeys.list(featureId),
+    queryFn: () => api.list<FeatureAttachment>(`/features/${featureId}/attachments`),
+    enabled: featureId > 0,
+  })
+}
+
+export function useUploadFeatureAttachment(featureId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => api.upload<FeatureAttachment>(`/features/${featureId}/attachments`, file),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: featureAttachmentKeys.list(featureId) }),
+  })
+}
+
+export function useDeleteFeatureAttachment(featureId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.del(`/feature-attachments/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: featureAttachmentKeys.list(featureId) }),
+  })
+}
+
 export const templateKeys = {
   templates: (params?: unknown) => ['templates', params ?? {}] as const,
   template: (id: string) => ['template', id] as const,
@@ -1196,6 +1225,7 @@ export interface FeatureVersionDetail extends FeatureVersion {
     format: number
     features: (OpenedProject['features'][number] & {
       description?: string
+      notes?: string
       status?: string
       priority?: string
       category?: string
