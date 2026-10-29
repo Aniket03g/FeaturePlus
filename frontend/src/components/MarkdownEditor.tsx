@@ -1,4 +1,4 @@
-import { useRef, useState, type ClipboardEvent, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
 import { Download, FileText, Image as ImageIcon, Paperclip, Plus, Trash2 } from 'lucide-react'
 import { useDeleteFeatureAttachment, useUploadFeatureAttachment } from '@/lib/queries'
 import { ApiError, fileUrl } from '@/lib/api'
@@ -30,6 +30,9 @@ export function MarkdownEditor({
   attachments,
   height,
   placeholder,
+  actions,
+  canUpload = true,
+  focusOnOpen = true,
 }: {
   id: string
   label: string
@@ -37,9 +40,18 @@ export function MarkdownEditor({
   onChange: (value: string) => void
   featureId: number
   attachments: FeatureAttachment[]
-  /** Any CSS height; the box and the preview both take it. */
+  /** Any CSS height; the box and the preview both take it, and the box can't be dragged taller. */
   height: string
   placeholder?: string
+  /** Buttons for the end of the top row, such as Cancel and Save. */
+  actions?: ReactNode
+  /**
+   * Off for text that has no feature to keep files on yet, such as a copy in
+   * My Space: pictures already linked still show, new ones can't be added.
+   */
+  canUpload?: boolean
+  /** Off where the editor is always open, so it doesn't pull the page to itself. */
+  focusOnOpen?: boolean
 }) {
   const upload = useUploadFeatureAttachment(featureId)
   const area = useRef<HTMLTextAreaElement>(null)
@@ -48,6 +60,16 @@ export function MarkdownEditor({
   const [uploading, setUploading] = useState('')
   const [error, setError] = useState('')
   const [dragging, setDragging] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+
+  // Opened lower down the page, the editor is scrolled to so its buttons show.
+  useEffect(() => {
+    if (!focusOnOpen) return
+    box.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    area.current?.focus({ preventScroll: true })
+    // Only on opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /**
    * Puts text in at the cursor as a paragraph of its own, and leaves the
@@ -97,7 +119,7 @@ export function MarkdownEditor({
 
   function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
     const files = Array.from(e.clipboardData.files)
-    if (files.length === 0) return
+    if (files.length === 0 || !canUpload) return
     e.preventDefault()
     void send(files)
   }
@@ -105,7 +127,7 @@ export function MarkdownEditor({
   function onDrop(e: DragEvent<HTMLTextAreaElement>) {
     setDragging(false)
     const files = Array.from(e.dataTransfer.files)
-    if (files.length === 0) return
+    if (files.length === 0 || !canUpload) return
     e.preventDefault()
     void send(files)
   }
@@ -117,7 +139,7 @@ export function MarkdownEditor({
     )
 
   return (
-    <div className="space-y-1.5">
+    <div ref={box} className="space-y-1.5">
       <div className="flex items-center gap-2">
         <label htmlFor={id} className="text-xs font-medium text-muted">
           {label}
@@ -130,24 +152,29 @@ export function MarkdownEditor({
             Preview
           </button>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7"
-          onClick={() => picker.current?.click()}
-          loading={upload.isPending}
-          title="Attach a file, or paste or drop one into the box"
-        >
-          <Paperclip className="h-3.5 w-3.5" />
-          Attach file
-        </Button>
-        <input
-          ref={picker}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(e) => void send(Array.from(e.target.files ?? []))}
-        />
+        {canUpload && (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7"
+              onClick={() => picker.current?.click()}
+              loading={upload.isPending}
+              title="Attach a file, or paste or drop one into the box"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+              Attach file
+            </Button>
+            <input
+              ref={picker}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => void send(Array.from(e.target.files ?? []))}
+            />
+          </>
+        )}
+        {actions}
       </div>
 
       {tab === 'write' ? (
@@ -158,7 +185,7 @@ export function MarkdownEditor({
           onChange={(e) => onChange(e.target.value)}
           onPaste={onPaste}
           onDragOver={(e) => {
-            if (e.dataTransfer.types.includes('Files')) {
+            if (canUpload && e.dataTransfer.types.includes('Files')) {
               e.preventDefault()
               setDragging(true)
             }
@@ -166,7 +193,7 @@ export function MarkdownEditor({
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           placeholder={placeholder}
-          style={{ height }}
+          style={{ height, maxHeight: height }}
           className={cn(
             'w-full resize-y rounded-md border bg-surface px-3 py-2 font-mono text-[13px] leading-relaxed text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/50',
             dragging ? 'border-accent ring-2 ring-accent/50' : 'border-border',
@@ -189,7 +216,8 @@ export function MarkdownEditor({
           <span role="alert" className="text-danger">{error}</span>
         ) : (
           <span>
-            Markdown: **bold**, # heading, - list, [link](https://…). Paste or drop a picture to add it.
+            Markdown: **bold**, # heading, - list, [link](https://…).{' '}
+            {canUpload ? 'Paste or drop a picture to add it.' : 'Adding new pictures here comes later.'}
           </span>
         )}
       </div>

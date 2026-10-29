@@ -81,6 +81,8 @@ export interface Feature {
   category: string
   status: FeatureStatus
   priority: FeaturePriority
+  /** A palette name the team marked it with in the working list, or empty. */
+  color: string
   assignee_id: number
   /** Order among the features with the same parent, 1 first; 0 is an older feature, ordered by id. */
   position: number

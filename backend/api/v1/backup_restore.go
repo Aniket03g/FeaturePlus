@@ -597,7 +597,7 @@ func restoreBackup(tx *gorm.DB, opened *openedBackup, people *restorePeople, wit
 	for _, f := range b.Features {
 		row := models.Feature{
 			ProjectID: project.ID, Title: f.Title, Description: f.Description, Notes: f.Notes, Category: f.Category,
-			Status: models.FeatureStatus(f.Status), Priority: models.FeaturePriority(f.Priority),
+			Status: models.FeatureStatus(f.Status), Priority: models.FeaturePriority(f.Priority), Color: f.Color,
 			AssigneeID: uint(people.found(f.Assignee)), Position: f.Position, CreatedAt: f.CreatedAt, UpdatedAt: f.UpdatedAt,
 		}
 		if row.Category == "" {
@@ -776,7 +776,8 @@ func restoreBackup(tx *gorm.DB, opened *openedBackup, people *restorePeople, wit
 			return nil, fmt.Errorf("version %d: %w", v.Number, err)
 		}
 		row := models.FeatureVersion{ProjectID: project.ID, Number: v.Number, Tag: v.Tag, Notes: v.Notes,
-			SavedByID: people.author(v.SavedBy), Auto: v.Auto, FeatureCount: v.FeatureCount, Snapshot: snap, CreatedAt: v.CreatedAt}
+			SavedByID: people.author(v.SavedBy), Auto: v.Auto, PublishNumber: v.PublishNumber, PublishedAt: v.PublishedAt,
+			FeatureCount: v.FeatureCount, Snapshot: snap, CreatedAt: v.CreatedAt}
 		if err := omit().Create(&row).Error; err != nil {
 			return nil, err
 		}
@@ -788,7 +789,7 @@ func restoreBackup(tx *gorm.DB, opened *openedBackup, people *restorePeople, wit
 			return nil, fmt.Errorf("copy %d: %w", c.Number, err)
 		}
 		row := models.FeatureCopy{ProjectID: project.ID, Number: c.Number, BaseVersionID: versions[c.BaseVersionID],
-			OwnerID: people.author(c.Owner), Revision: c.Revision, Name: c.Name, FeatureCount: c.FeatureCount, Snapshot: snap,
+			OwnerID: people.author(c.Owner), Revision: c.Revision, Name: c.Name, Source: c.Source, FeatureCount: c.FeatureCount, Snapshot: snap,
 			PublishedAt: c.PublishedAt, MergedAt: c.MergedAt, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
 		if c.MergedVersionID != nil {
 			id := versions[*c.MergedVersionID]

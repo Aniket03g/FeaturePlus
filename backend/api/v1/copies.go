@@ -42,6 +42,13 @@ type CopyRow struct {
 	Title     string   `json:"title" binding:"required,max=255"`
 	ParentKey string   `json:"parent_key" binding:"max=64"`
 	Needs     []string `json:"needs" binding:"max=100,dive,max=64"`
+
+	// Set when the copy is edited online in My Space, which carries the text
+	// and progress too; a file upload leaves them nil and they are kept.
+	Description *string `json:"description,omitempty" binding:"omitempty,max=200000"`
+	Notes       *string `json:"notes,omitempty" binding:"omitempty,max=200000"`
+	Status      *string `json:"status,omitempty" binding:"omitempty,oneof=todo in_progress done"`
+	Priority    *string `json:"priority,omitempty" binding:"omitempty,oneof=low medium high"`
 }
 
 // SaveCopyRequest is an uploaded list and what its stamp said.
@@ -73,14 +80,19 @@ type CopyBase struct {
 	ID     uint   `json:"id"`
 	Number int    `json:"number"`
 	Tag    string `json:"tag"`
+	// PublishNumber is set when the version was a publish.
+	PublishNumber int `json:"publish_number"`
 }
 
 // CopyDTO describes a copy without its contents.
 type CopyDTO struct {
-	ID           uint         `json:"id"`
-	ProjectID    int          `json:"project_id"`
-	Number       int          `json:"number"`
-	Name         string       `json:"name"`
+	ID        uint   `json:"id"`
+	ProjectID int    `json:"project_id"`
+	Number    int    `json:"number"`
+	Name      string `json:"name"`
+	// Source is "published" or "working" for a copy started in My Space,
+	// empty for one made by uploading a file.
+	Source       string       `json:"source"`
 	Base         CopyBase     `json:"base"`
 	Owner        VersionSaver `json:"owner"`
 	Revision     int          `json:"revision"`
@@ -478,7 +490,7 @@ func buildCopyRows(rows []CopyRow, previous, base []OpenedFeature) ([]OpenedFeat
 			return nil, invalid("Two features in the list have the same key")
 		}
 		key := row.Key
-		if _, ok := known[key]; !ok {
+		if _, ok := known[key]; !ok && !isCopyKey(key) {
 			key = freshCopyKey()
 		}
 		keys[row.Key] = key
@@ -501,6 +513,18 @@ func buildCopyRows(rows []CopyRow, previous, base []OpenedFeature) ([]OpenedFeat
 			feature.Status = was.Status
 			feature.Priority = was.Priority
 			feature.Category = was.Category
+		}
+		if row.Description != nil {
+			feature.Description = *row.Description
+		}
+		if row.Notes != nil {
+			feature.Notes = *row.Notes
+		}
+		if row.Status != nil {
+			feature.Status = *row.Status
+		}
+		if row.Priority != nil {
+			feature.Priority = *row.Priority
 		}
 		out = append(out, feature)
 	}
@@ -541,6 +565,17 @@ func freshCopyKey() string {
 	return "n" + hex.EncodeToString(b[:])
 }
 
+// isCopyKey is whether key is one freshCopyKey could have made. The online
+// editor makes its own for the features added in it, so they keep their key
+// from one save to the next; it can never be taken for a real feature's.
+func isCopyKey(key string) bool {
+	if len(key) != 13 || key[0] != 'n' {
+		return false
+	}
+	_, err := hex.DecodeString(key[1:])
+	return err == nil
+}
+
 func readSnapshot(raw string) (versionSnapshot, error) {
 	var snap versionSnapshot
 	err := json.Unmarshal([]byte(raw), &snap)
@@ -578,11 +613,11 @@ func (h *VersionsHandler) copyDTOs(copies []models.FeatureCopy, userID int) ([]C
 	bases := map[uint]CopyBase{}
 	if len(baseIDs) > 0 {
 		var versions []models.FeatureVersion
-		if err := h.db.Select("id", "number", "tag").Where("id IN ?", baseIDs).Find(&versions).Error; err != nil {
+		if err := h.db.Select("id", "number", "tag", "publish_number").Where("id IN ?", baseIDs).Find(&versions).Error; err != nil {
 			return nil, err
 		}
 		for _, v := range versions {
-			bases[v.ID] = CopyBase{ID: v.ID, Number: v.Number, Tag: v.Tag}
+			bases[v.ID] = CopyBase{ID: v.ID, Number: v.Number, Tag: v.Tag, PublishNumber: v.PublishNumber}
 		}
 	}
 
@@ -597,6 +632,7 @@ func (h *VersionsHandler) copyDTOs(copies []models.FeatureCopy, userID int) ([]C
 			ProjectID:    fc.ProjectID,
 			Number:       fc.Number,
 			Name:         fc.Name,
+			Source:       fc.Source,
 			Base:         base,
 			Owner:        VersionSaver{ID: fc.OwnerID, Name: names[fc.OwnerID]},
 			Revision:     fc.Revision,

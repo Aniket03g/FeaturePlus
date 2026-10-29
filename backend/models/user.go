@@ -24,6 +24,9 @@ type User struct {
 	// Add project association
 	Projects []Project `gorm:"foreignKey:OwnerID" json:"projects,omitempty"`
 	Name     string    `json:"name"`
+	// SpaceSeenAt is when they last looked at their My Space dashboard, so it
+	// can show what was published since. Nil until the first look.
+	SpaceSeenAt *time.Time `json:"-"`
 }
 
 // BeforeUpdate cleans password field before update operations if it's empty

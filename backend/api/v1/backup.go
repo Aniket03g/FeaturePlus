@@ -42,7 +42,9 @@ import (
 // backup instead of reading it wrong.
 //
 // 2 added feature notes and files attached to features.
-const backupFormat = 2
+// 3 added the publish number and date on saved versions, where a copy was
+// started from, and feature colours.
+const backupFormat = 3
 
 // BackupInfo is backup-info.json.
 type BackupInfo struct {
@@ -72,28 +74,28 @@ type BackupCounts struct {
 // ProjectBackup is project.json. People are email addresses; an empty one is
 // nobody, or an account that no longer exists.
 type ProjectBackup struct {
-	Project           BackupProject            `json:"project"`
-	Features          []BackupFeature          `json:"features"`
-	SubFeatures       []BackupSubFeature       `json:"sub_features"`
-	Tasks             []BackupTask             `json:"tasks"`
-	Tags              []BackupTag              `json:"tags"`
-	Dependencies      []BackupDependency       `json:"dependencies"`
-	Comments          []BackupComment          `json:"comments"`
-	Attachments       []BackupAttachment       `json:"attachments"`
+	Project      BackupProject      `json:"project"`
+	Features     []BackupFeature    `json:"features"`
+	SubFeatures  []BackupSubFeature `json:"sub_features"`
+	Tasks        []BackupTask       `json:"tasks"`
+	Tags         []BackupTag        `json:"tags"`
+	Dependencies []BackupDependency `json:"dependencies"`
+	Comments     []BackupComment    `json:"comments"`
+	Attachments  []BackupAttachment `json:"attachments"`
 	// FeatureAttachments are files attached to a feature rather than a task;
 	// their FeatureID is set and their TaskID is not.
-	FeatureAttachments []BackupAttachment `json:"feature_attachments"`
-	Releases          []BackupRelease          `json:"releases"`
-	PullRequests      []BackupPullRequest      `json:"pull_requests"`
-	Approvals         []BackupApproval         `json:"approvals"`
-	IntegrationChecks []BackupIntegrationCheck `json:"integration_checks"`
-	FeatureFiles      []BackupFeatureFile      `json:"feature_files"`
-	FeatureCommits    []BackupFeatureCommit    `json:"feature_commits"`
-	Contracts         []BackupContract         `json:"contracts"`
-	Versions          []BackupVersion          `json:"versions"`
-	Copies            []BackupCopy             `json:"copies"`
-	Members           []BackupMember           `json:"members"`
-	FeatureAccess     []BackupFeatureAccess    `json:"feature_access"`
+	FeatureAttachments []BackupAttachment       `json:"feature_attachments"`
+	Releases           []BackupRelease          `json:"releases"`
+	PullRequests       []BackupPullRequest      `json:"pull_requests"`
+	Approvals          []BackupApproval         `json:"approvals"`
+	IntegrationChecks  []BackupIntegrationCheck `json:"integration_checks"`
+	FeatureFiles       []BackupFeatureFile      `json:"feature_files"`
+	FeatureCommits     []BackupFeatureCommit    `json:"feature_commits"`
+	Contracts          []BackupContract         `json:"contracts"`
+	Versions           []BackupVersion          `json:"versions"`
+	Copies             []BackupCopy             `json:"copies"`
+	Members            []BackupMember           `json:"members"`
+	FeatureAccess      []BackupFeatureAccess    `json:"feature_access"`
 }
 
 type BackupProject struct {
@@ -118,6 +120,7 @@ type BackupFeature struct {
 	Status      string    `json:"status"`
 	Priority    string    `json:"priority"`
 	Assignee    string    `json:"assignee"`
+	Color       string    `json:"color,omitempty"`
 	Position    int       `json:"position"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -257,15 +260,18 @@ type BackupContract struct {
 // feature keys "f" and an id, release keys "r" and an id, from this backup's
 // ids. A feature removed since keeps the key it had, which matches nothing.
 type BackupVersion struct {
-	ID           uint            `json:"id"`
-	Number       int             `json:"number"`
-	Tag          string          `json:"tag"`
-	Notes        string          `json:"notes"`
-	SavedBy      string          `json:"saved_by"`
-	Auto         bool            `json:"auto"`
-	FeatureCount int             `json:"feature_count"`
-	Snapshot     json.RawMessage `json:"snapshot"`
-	CreatedAt    time.Time       `json:"created_at"`
+	ID      uint   `json:"id"`
+	Number  int    `json:"number"`
+	Tag     string `json:"tag"`
+	Notes   string `json:"notes"`
+	SavedBy string `json:"saved_by"`
+	Auto    bool   `json:"auto"`
+	// Set on a version published from the in-progress list; see FeatureVersion.
+	PublishNumber int             `json:"publish_number,omitempty"`
+	PublishedAt   *time.Time      `json:"published_at,omitempty"`
+	FeatureCount  int             `json:"feature_count"`
+	Snapshot      json.RawMessage `json:"snapshot"`
+	CreatedAt     time.Time       `json:"created_at"`
 }
 
 type BackupCopy struct {
@@ -275,6 +281,7 @@ type BackupCopy struct {
 	Owner           string          `json:"owner"`
 	Revision        int             `json:"revision"`
 	Name            string          `json:"name"`
+	Source          string          `json:"source,omitempty"`
 	FeatureCount    int             `json:"feature_count"`
 	Snapshot        json.RawMessage `json:"snapshot"`
 	PublishedAt     *time.Time      `json:"published_at"`
@@ -338,7 +345,7 @@ func collectBackup(db *gorm.DB, files *sqlitefs.SQLiteFS, project *models.Projec
 	for _, f := range features {
 		row := BackupFeature{
 			ID: f.ID, Title: f.Title, Description: f.Description, Notes: f.Notes, Category: f.Category,
-			Status: string(f.Status), Priority: string(f.Priority), Assignee: people.ref(int(f.AssigneeID)),
+			Status: string(f.Status), Priority: string(f.Priority), Assignee: people.ref(int(f.AssigneeID)), Color: f.Color,
 			Position: f.Position, CreatedAt: f.CreatedAt, UpdatedAt: f.UpdatedAt,
 		}
 		// A parent or release outside the project is treated as none, as the
@@ -598,7 +605,8 @@ func collectBackup(db *gorm.DB, files *sqlitefs.SQLiteFS, project *models.Projec
 		}
 		out.Versions = append(out.Versions, BackupVersion{
 			ID: v.ID, Number: v.Number, Tag: v.Tag, Notes: v.Notes, SavedBy: people.ref(v.SavedByID),
-			Auto: v.Auto, FeatureCount: v.FeatureCount, Snapshot: snap, CreatedAt: v.CreatedAt,
+			Auto: v.Auto, PublishNumber: v.PublishNumber, PublishedAt: v.PublishedAt,
+			FeatureCount: v.FeatureCount, Snapshot: snap, CreatedAt: v.CreatedAt,
 		})
 	}
 
@@ -613,7 +621,7 @@ func collectBackup(db *gorm.DB, files *sqlitefs.SQLiteFS, project *models.Projec
 		}
 		row := BackupCopy{
 			ID: cp.ID, Number: cp.Number, BaseVersionID: cp.BaseVersionID, Owner: people.ref(cp.OwnerID),
-			Revision: cp.Revision, Name: cp.Name, FeatureCount: cp.FeatureCount, Snapshot: snap,
+			Revision: cp.Revision, Name: cp.Name, Source: cp.Source, FeatureCount: cp.FeatureCount, Snapshot: snap,
 			PublishedAt: cp.PublishedAt, MergedAt: cp.MergedAt, MergedVersionID: cp.MergedVersionID,
 			CreatedAt: cp.CreatedAt, UpdatedAt: cp.UpdatedAt,
 		}

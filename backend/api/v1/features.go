@@ -35,6 +35,7 @@ func (h *FeaturesHandler) Register(g *gin.RouterGroup) {
 	g.GET("/projects/:id/features", h.ListForProject)
 	g.POST("/projects/:id/features", h.Create)
 	g.GET("/projects/:id/tags", h.ProjectTags)
+	g.POST("/projects/:id/features/clear-colors", h.ClearColors)
 
 	features := g.Group("/features")
 	{
@@ -606,4 +607,29 @@ func plural(n int, noun string) string {
 		return "1 " + noun
 	}
 	return strconv.Itoa(n) + " " + noun + "s"
+}
+
+// ClearColors removes the colour from every feature in a project at once.
+// Colours are shared by the team, so this needs the right to edit; the page
+// asks before sending it.
+//
+// POST /api/v1/projects/:id/features/clear-colors
+func (h *FeaturesHandler) ClearColors(c *gin.Context) {
+	projectID, err := api.IDParam(c, "id")
+	if err != nil {
+		api.Fail(c, err)
+		return
+	}
+	if _, err := requireProject(c, h.db, projectID, canEdit); err != nil {
+		api.Fail(c, err)
+		return
+	}
+	// UpdateColumn leaves updated_at alone: clearing colours is not a change
+	// to any feature worth listing as recent.
+	result := h.db.Model(&models.Feature{}).Where("project_id = ? AND color <> ''", projectID).UpdateColumn("color", "")
+	if result.Error != nil {
+		api.Fail(c, api.Internal(result.Error))
+		return
+	}
+	api.OK(c, gin.H{"cleared": result.RowsAffected})
 }

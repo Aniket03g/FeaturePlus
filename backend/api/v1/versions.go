@@ -37,9 +37,18 @@ func (h *VersionsHandler) Register(g *gin.RouterGroup) {
 	// Registered before /:versionId reads it; gin matches the static segment first.
 	g.GET("/projects/:id/versions/compare", h.Compare)
 	g.GET("/projects/:id/versions/:versionId", h.Get)
+	g.POST("/projects/:id/publish", h.Publish)
+	g.GET("/projects/:id/published", h.Published)
 
 	g.GET("/projects/:id/copies", h.ListCopies)
 	g.POST("/projects/:id/copies", h.SaveCopy)
+	// Registered before /:copyId reads it; gin matches the static segment first.
+	g.POST("/projects/:id/copies/start", h.StartCopy)
+	g.PUT("/projects/:id/copies/:copyId/list", h.SaveCopyList)
+	g.DELETE("/projects/:id/copies/:copyId", h.DeleteCopy)
+	g.GET("/me/copies", h.ListMyCopies)
+	g.GET("/me/space", h.Space)
+	g.POST("/me/space/seen", h.SpaceSeen)
 	g.GET("/projects/:id/copies/:copyId", h.GetCopy)
 	g.POST("/projects/:id/copies/:copyId/publish", h.PublishCopy)
 	g.POST("/projects/:id/copies/:copyId/unpublish", h.UnpublishCopy)
@@ -73,15 +82,18 @@ type VersionSaver struct {
 
 // VersionDTO describes a version without its contents.
 type VersionDTO struct {
-	ID           uint         `json:"id"`
-	ProjectID    int          `json:"project_id"`
-	Number       int          `json:"number"`
-	Tag          string       `json:"tag"`
-	Notes        string       `json:"notes"`
-	FeatureCount int          `json:"feature_count"`
-	Auto         bool         `json:"auto"`
-	SavedBy      VersionSaver `json:"saved_by"`
-	CreatedAt    time.Time    `json:"created_at"`
+	ID           uint   `json:"id"`
+	ProjectID    int    `json:"project_id"`
+	Number       int    `json:"number"`
+	Tag          string `json:"tag"`
+	Notes        string `json:"notes"`
+	FeatureCount int    `json:"feature_count"`
+	Auto         bool   `json:"auto"`
+	// PublishNumber is 0 for a version that was only saved.
+	PublishNumber int          `json:"publish_number"`
+	PublishedAt   *time.Time   `json:"published_at"`
+	SavedBy       VersionSaver `json:"saved_by"`
+	CreatedAt     time.Time    `json:"created_at"`
 }
 
 // VersionDetailDTO is a version with its contents.
@@ -310,14 +322,16 @@ func (h *VersionsHandler) saverNames(versions []models.FeatureVersion) (map[int]
 
 func newVersionDTO(v models.FeatureVersion, names map[int]string) VersionDTO {
 	return VersionDTO{
-		ID:           v.ID,
-		ProjectID:    v.ProjectID,
-		Number:       v.Number,
-		Tag:          v.Tag,
-		Notes:        v.Notes,
-		FeatureCount: v.FeatureCount,
-		Auto:         v.Auto,
-		SavedBy:      VersionSaver{ID: v.SavedByID, Name: names[v.SavedByID]},
-		CreatedAt:    v.CreatedAt,
+		ID:            v.ID,
+		ProjectID:     v.ProjectID,
+		Number:        v.Number,
+		Tag:           v.Tag,
+		Notes:         v.Notes,
+		FeatureCount:  v.FeatureCount,
+		Auto:          v.Auto,
+		PublishNumber: v.PublishNumber,
+		PublishedAt:   v.PublishedAt,
+		SavedBy:       VersionSaver{ID: v.SavedByID, Name: names[v.SavedByID]},
+		CreatedAt:     v.CreatedAt,
 	}
 }

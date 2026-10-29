@@ -15,11 +15,21 @@ import {
   ListChecks,
   Loader2,
   Network,
+  Palette,
+  Send,
   Plus,
   Users,
   X,
 } from 'lucide-react'
-import { useCreateFeature, useFeatures, useMoveFeature, useProject, useProjectTags } from '@/lib/queries'
+import {
+  useClearColors,
+  useCreateFeature,
+  useFeatures,
+  useMoveFeature,
+  useProject,
+  useProjectTags,
+  useUpdateFeature,
+} from '@/lib/queries'
 import { gapTarget, intoTarget, MAX_DEPTH, type DropRow, type DropTarget } from '@/lib/tree-drop'
 import { downloadFeatureFile, FEATURE_FILE_NAME } from '@/lib/feature-file'
 import { downloadBackup } from '@/lib/backup'
@@ -32,8 +42,10 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
 import { NewFeatureDialog } from './NewFeatureDialog'
+import { ColorDot } from '@/components/FeatureColor'
 import { ApplyTemplateDialog } from './ApplyTemplateDialog'
 import { ShareDialog } from './ShareDialog'
+import { PublishDialog } from './PublishDialog'
 import { cn, percent, plural } from '@/lib/utils'
 import { ROLE_LABEL, STATUS_LABEL, canManage, type Feature, type FeatureStatus } from '@/lib/types'
 
@@ -160,7 +172,9 @@ function visibleRows(nodes: TreeNode[], isOpen: (node: TreeNode) => boolean): Tr
 }
 
 /**
- * A project's features, with filters.
+ * The Working feature list: a project's features as they are being
+ * worked on, with filters. This is where the list is edited, and where it is
+ * published from; the published list is its own screen (PublishedList).
  *
  * Filter state is deliberately local rather than in the URL: these are a
  * working view rather than something to link to, and keeping them out of the
@@ -176,6 +190,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   const [creating, setCreating] = useState(false)
   const [applying, setApplying] = useState(false)
   const [sharing, setSharing] = useState(false)
+  const [publishing, setPublishing] = useState(false)
 
   const filters = useMemo(
     () => ({ status: statuses, tag, q: search }),
@@ -217,6 +232,9 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   const dragRef = useRef<DragState | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const moveFeature = useMoveFeature(projectId)
+  const updateFeature = useUpdateFeature(projectId)
+  const clearColors = useClearColors(projectId)
+  const [clearingColors, setClearingColors] = useState(false)
   const [moveError, setMoveError] = useState('')
   const tree = useMemo(
     () => buildTree(allFeatures.data?.items ?? items, hasFilters ? items : null),
@@ -389,7 +407,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         <Button
           variant="ghost"
           size="sm"
@@ -400,13 +418,14 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
           <ArrowLeft className="h-4 w-4" />
         </Button>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[16rem] flex-1">
           {project.isLoading ? (
             <Skeleton className="h-6 w-48" />
           ) : (
             <>
               <div className="flex items-center gap-2">
                 <h2 className="truncate text-base font-semibold text-ink">{project.data?.name}</h2>
+                <Badge tone="accent" className="shrink-0 whitespace-nowrap">Working</Badge>
                 {role && role !== 'owner' && (
                   <Badge
                     tone={role === 'admin' ? 'warning' : 'neutral'}
@@ -460,9 +479,13 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                 <LayoutTemplate className="h-3.5 w-3.5" />
                 Template
               </Button>
-              <Button size="sm" onClick={() => setCreating(true)}>
+              <Button size="sm" variant="secondary" onClick={() => setCreating(true)}>
                 <Plus className="h-3.5 w-3.5" />
                 New feature
+              </Button>
+              <Button size="sm" onClick={() => setPublishing(true)} title="Make this list the published one">
+                <Send className="h-3.5 w-3.5" />
+                Publish
               </Button>
             </>
           )}
@@ -527,6 +550,41 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
               Clear
             </Button>
           )}
+
+          {canEdit &&
+            (allFeatures.data?.items ?? []).some((f) => f.color) &&
+            (clearingColors ? (
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-danger">Remove every colour, for everyone?</span>
+                <Button variant="secondary" size="sm" className="h-7" onClick={() => setClearingColors(false)}>
+                  Keep
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 bg-danger hover:bg-danger/90"
+                  loading={clearColors.isPending}
+                  onClick={() =>
+                    clearColors.mutate(undefined, {
+                      onSettled: () => setClearingColors(false),
+                      onError: (err) => setMoveError(err instanceof ApiError ? err.message : 'Could not remove the colours'),
+                    })
+                  }
+                >
+                  Remove
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-7"
+                onClick={() => setClearingColors(true)}
+                title="Take the colour off every feature in this project"
+              >
+                <Palette className="h-3 w-3" />
+                Remove colours
+              </Button>
+            ))}
 
           {canEdit && items.length > 0 && (
             <Button
@@ -621,10 +679,12 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                   Clear filters
                 </Button>
               ) : (
-                <Button size="sm" className="mt-3" onClick={() => setCreating(true)}>
-                  <Plus className="h-3.5 w-3.5" />
-                  Add the first feature
-                </Button>
+                canEdit && (
+                  <Button size="sm" className="mt-3" onClick={() => setCreating(true)}>
+                    <Plus className="h-3.5 w-3.5" />
+                    Add the first feature
+                  </Button>
+                )
               )}
             </div>
           ) : (
@@ -658,9 +718,18 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                       setOpen((current) => ({ ...current, [node.feature.id]: !isOpen(node) }))
                     }
                     onOpen={() =>
-                      navigate({ name: 'feature', projectId, featureId: node.feature.id })
+                      navigate({ name: 'feature', projectId, featureId: node.feature.id, editable: true })
                     }
                     adding={addingTo === node.feature.id}
+                    onColor={
+                      canEdit
+                        ? (color) =>
+                            updateFeature.mutate(
+                              { id: node.feature.id, color },
+                              { onError: (err) => setMoveError(err instanceof ApiError ? err.message : 'Could not change the colour') },
+                            )
+                        : undefined
+                    }
                     onAddInside={
                       canEdit && !hasFilters && !arranging && node.depth < MAX_DEPTH
                         ? () => setAddingTo(addingTo === node.feature.id ? null : node.feature.id)
@@ -688,7 +757,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                   style={{
                     top: drag.mark.height > 0 ? drag.mark.top : drag.mark.top - 1,
                     height: drag.mark.height > 0 ? drag.mark.height : undefined,
-                    left: drag.mark.height > 0 ? 8 : ARRANGE_GUTTER + 16 + drag.target.depth * INDENT,
+                    left: drag.mark.height > 0 ? 8 : ARRANGE_GUTTER + LEAD + drag.target.depth * INDENT,
                   }}
                 />
               )}
@@ -759,6 +828,13 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
           onLeft={() => navigate({ name: 'projects' })}
         />
       )}
+      {publishing && (
+        <PublishDialog
+          projectId={projectId}
+          onClose={() => setPublishing(false)}
+          onPublished={() => navigate({ name: 'project', projectId })}
+        />
+      )}
     </div>
   )
 }
@@ -817,6 +893,12 @@ function FilterChip({
 /** Indent per level, in pixels. */
 const INDENT = 20
 
+/**
+ * Room at the left of every row before the tree starts: the colour circles sit
+ * here, in one column whatever a feature's level.
+ */
+const LEAD = 40
+
 /** Room for the drag handle at the start of each row while arranging. */
 const ARRANGE_GUTTER = 28
 
@@ -841,6 +923,7 @@ function FeatureRow({
   onOpen,
   adding,
   onAddInside,
+  onColor,
 }: {
   node: TreeNode
   /** Arrange mode: a handle to drag by, and the row no longer opens the feature. */
@@ -856,6 +939,8 @@ function FeatureRow({
   adding: boolean
   /** Missing when the person cannot edit, or while filters are on. */
   onAddInside?: () => void
+  /** Missing when the person cannot edit: the colour then only shows. */
+  onColor?: (color: string) => void
 }) {
   const { feature, depth, children, context, parts } = node
   const tasks = feature.tasks
@@ -884,19 +969,23 @@ function FeatureRow({
         </button>
       )}
 
+      <div className="absolute top-1/2 z-10 -translate-y-1/2" style={{ left: gutter + 8 }}>
+        <ColorDot color={feature.color} title={feature.title} onChange={onColor} quiet />
+      </div>
+
       {/* One guide line per level above this one. */}
       {Array.from({ length: depth }).map((_, i) => (
         <span
           key={i}
           aria-hidden
           className="absolute inset-y-0 w-px bg-border"
-          style={{ left: gutter + 16 + 9 + i * INDENT }}
+          style={{ left: gutter + LEAD + 9 + i * INDENT }}
         />
       ))}
 
       <div
         className="flex shrink-0 items-center self-stretch"
-        style={{ paddingLeft: gutter + 16 + depth * INDENT }}
+        style={{ paddingLeft: gutter + LEAD + depth * INDENT }}
       >
         {children.length > 0 ? (
           // The click area spans the full row height and 8px either side of the
@@ -1069,7 +1158,7 @@ function QuickAddRow({
       ))}
       <div
         className="flex min-w-0 flex-1 items-center gap-2"
-        style={{ paddingLeft: 16 + depth * INDENT + 18 + 8 }}
+        style={{ paddingLeft: LEAD + depth * INDENT + 18 + 8 }}
       >
         <span className="shrink-0 rounded border border-accent/50 px-1 font-mono text-2xs text-accent">
           L{depth}

@@ -20,6 +20,12 @@ type FeatureVersion struct {
 	// than one someone chose to save.
 	Auto bool `gorm:"not null;default:false"`
 
+	// PublishNumber is 1, 2, 3… for the versions published from the
+	// in-progress list, in the order they were published, and 0 for one only
+	// saved. The latest published version is what the published list shows.
+	PublishNumber int `gorm:"not null;default:0;index"`
+	PublishedAt   *time.Time
+
 	// FeatureCount is how many features the snapshot holds, kept beside it so
 	// a list of versions does not have to open every snapshot.
 	FeatureCount int    `gorm:"not null"`

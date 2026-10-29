@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArchiveRestore, Plus } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { projectOf, useRouter, type Route } from '@/lib/router'
@@ -9,6 +9,8 @@ import { Login, AuthLoading } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
 import { Projects } from '@/pages/Projects'
 import { ProjectDetail } from '@/pages/ProjectDetail'
+import { PublishedList } from '@/pages/PublishedList'
+import { ProjectDashboard } from '@/pages/ProjectDashboard'
 import { FeatureDetail } from '@/pages/FeatureDetail'
 import { NewProjectDialog } from '@/pages/NewProjectDialog'
 import { RestoreBackupDialog } from '@/pages/RestoreBackupDialog'
@@ -24,38 +26,50 @@ import { Team } from '@/pages/Team'
 import { Templates } from '@/pages/Templates'
 import { Imports } from '@/pages/Imports'
 import { Playground } from '@/pages/Playground'
+import { CopyEditor, MyVersionsPage, MyWorkingLatest } from '@/pages/MyWorking'
+import { MySpaceDashboard } from '@/pages/MySpaceDashboard'
 import { MergePage } from '@/pages/MergePage'
 import { ComparePage } from '@/pages/ComparePage'
 
 /**
- * Which sidebar section a route belongs to. A feature page still shows
- * Projects as current rather than nothing at all, and a release detail keeps
- * Releases lit while you are inside one.
+ * Which sidebar item a route belongs to. A feature page still shows the list
+ * it was opened from as current rather than nothing at all, and a release
+ * detail keeps Releases lit while you are inside one.
  */
 const SECTION: Record<Route['name'], string> = {
   dashboard: 'dashboard',
   projects: 'projects',
-  project: 'projects',
-  feature: 'projects',
+  project: 'featureList',
+  inProgress: 'inProgress',
+  feature: 'featureList',
   dependencies: 'dependencies',
+  projectDashboard: 'projectDashboard',
   releases: 'releases',
   release: 'releases',
   pullRequests: 'prs',
   code: 'code',
   contracts: 'contracts',
   briefing: 'briefing',
-  versions: 'projects',
-  merge: 'projects',
-  compare: 'projects',
+  versions: 'versions',
+  merge: 'versions',
+  compare: 'versions',
   team: 'team',
   templates: 'templates',
   imports: 'imports',
   playground: 'playground',
+  myWorking: 'myInProgress',
+  myCopy: 'myInProgress',
+  myVersions: 'myVersions',
+  mySpace: 'myDashboard',
 }
 
 /** The sidebar items that lead into whichever project is currently open. */
 const PROJECT_SECTIONS: Record<string, Route['name']> = {
+  projectDashboard: 'projectDashboard',
+  featureList: 'project',
+  inProgress: 'inProgress',
   dependencies: 'dependencies',
+  versions: 'versions',
   releases: 'releases',
   prs: 'pullRequests',
   code: 'code',
@@ -71,6 +85,30 @@ const TOP_LEVEL_SECTIONS: Record<string, Route> = {
   templates: { name: 'templates' },
   imports: { name: 'imports' },
   playground: { name: 'playground' },
+  myInProgress: { name: 'myWorking' },
+  myVersions: { name: 'myVersions' },
+  myDashboard: { name: 'mySpace' },
+}
+
+/** Where the last project someone opened is remembered, per person, in this browser. */
+const lastProjectKey = (userId: number) => `featureplus:last-project:${userId}`
+
+function readLastProject(userId: number | undefined): number {
+  if (!userId) return 0
+  try {
+    return Number(localStorage.getItem(lastProjectKey(userId))) || 0
+  } catch {
+    return 0
+  }
+}
+
+function writeLastProject(userId: number, projectId: number) {
+  try {
+    if (projectId > 0) localStorage.setItem(lastProjectKey(userId), String(projectId))
+    else localStorage.removeItem(lastProjectKey(userId))
+  } catch {
+    // Storage blocked: the sidebar just forgets, as before.
+  }
 }
 
 export function App() {
@@ -79,11 +117,34 @@ export function App() {
   const [search, setSearch] = useState('')
   const [creatingProject, setCreatingProject] = useState(false)
   const [restoringBackup, setRestoringBackup] = useState(false)
+  const currentProject = projectOf(route)
+
+  // The sidebar's Project group leads into the project that is open or, on a
+  // page outside any project (My Space, the dashboard), the last one opened.
+  const [lastProject, setLastProject] = useState(0)
+  useEffect(() => setLastProject(readLastProject(user?.id)), [user?.id])
+  useEffect(() => {
+    if (user && currentProject > 0 && currentProject !== lastProject) {
+      writeLastProject(user.id, currentProject)
+      setLastProject(currentProject)
+    }
+  }, [user, currentProject, lastProject])
+  const sidebarProject = currentProject > 0 ? currentProject : lastProject
+  const project = useProject(sidebarProject)
+
+  // A remembered project that has since gone, or been unshared, is forgotten.
+  useEffect(() => {
+    if (user && currentProject === 0 && lastProject > 0 && project.isError) {
+      writeLastProject(user.id, 0)
+      setLastProject(0)
+    }
+  }, [user, currentProject, lastProject, project.isError])
 
   if (isLoading) return <AuthLoading />
   if (!user) return <Login />
 
-  const currentProject = projectOf(route)
+  // Until the project loads, the group still counts as open, just unnamed.
+  const projectName = sidebarProject > 0 && !project.isError ? (project.data?.name ?? '') : null
 
   function goTo(id: string) {
     setSearch('')
@@ -91,19 +152,20 @@ export function App() {
     const topLevel = TOP_LEVEL_SECTIONS[id]
     if (topLevel) return navigate(topLevel)
 
-    // The rest belong to a project, so they only lead somewhere once one is
-    // open; otherwise they fall back to the project list.
+    // The rest belong to a project: the open one, or the last one opened.
+    // With neither, they fall back to the project list.
     const section = PROJECT_SECTIONS[id]
-    if (section && currentProject > 0) {
-      return navigate({ name: section, projectId: currentProject } as Route)
+    if (section && projectName !== null) {
+      return navigate({ name: section, projectId: sidebarProject } as Route)
     }
     navigate({ name: 'projects' })
   }
 
   return (
     <AppShell
-      active={SECTION[route.name]}
+      active={route.name === 'feature' && route.editable ? 'inProgress' : SECTION[route.name]}
       onNavigate={goTo}
+      projectName={projectName}
       title={<Title />}
       actions={
         route.name === 'projects' ? (
@@ -130,9 +192,15 @@ export function App() {
           onOpenProject={(projectId) => navigate({ name: 'project', projectId })}
         />
       )}
-      {route.name === 'project' && <ProjectDetail projectId={route.projectId} />}
+      {route.name === 'projectDashboard' && <ProjectDashboard projectId={route.projectId} />}
+      {route.name === 'project' && <PublishedList projectId={route.projectId} />}
+      {route.name === 'inProgress' && <ProjectDetail projectId={route.projectId} />}
       {route.name === 'feature' && (
-        <FeatureDetail projectId={route.projectId} featureId={route.featureId} />
+        <FeatureDetail
+          projectId={route.projectId}
+          featureId={route.featureId}
+          editable={route.editable ?? false}
+        />
       )}
       {/* Keyed so switching projects starts fresh, with that project's own sketch. */}
       {route.name === 'dependencies' && (
@@ -157,6 +225,12 @@ export function App() {
       {route.name === 'templates' && <Templates />}
       {route.name === 'imports' && <Imports />}
       {route.name === 'playground' && <Playground />}
+      {route.name === 'myWorking' && <MyWorkingLatest />}
+      {route.name === 'myVersions' && <MyVersionsPage />}
+      {route.name === 'mySpace' && <MySpaceDashboard />}
+      {route.name === 'myCopy' && (
+        <CopyEditor key={route.copyId} projectId={route.copyProjectId} copyId={route.copyId} />
+      )}
 
       {creatingProject && (
         <NewProjectDialog
@@ -186,6 +260,7 @@ export function App() {
  * rather than a string computed in App.
  */
 const SCOPED_TITLE: Partial<Record<Route['name'], string>> = {
+  projectDashboard: 'Dashboard',
   dependencies: 'Dependencies',
   releases: 'Releases',
   release: 'Releases',
@@ -194,6 +269,7 @@ const SCOPED_TITLE: Partial<Record<Route['name'], string>> = {
   contracts: 'Contracts',
   briefing: 'Briefing',
   versions: 'Versions',
+  inProgress: 'Working list',
   merge: 'Merge a copy',
   compare: 'Compare',
 }
@@ -221,6 +297,28 @@ function Title() {
       return <span>Import a project</span>
     case 'playground':
       return <span>Playground</span>
+    case 'myWorking':
+    case 'myCopy':
+      return (
+        <span>
+          My Space
+          <span className="ml-2 font-normal text-muted">Working</span>
+        </span>
+      )
+    case 'mySpace':
+      return (
+        <span>
+          My Space
+          <span className="ml-2 font-normal text-muted">Dashboard</span>
+        </span>
+      )
+    case 'myVersions':
+      return (
+        <span>
+          My Space
+          <span className="ml-2 font-normal text-muted">My Versions</span>
+        </span>
+      )
     case 'project':
     case 'feature':
       return <span>{name}</span>

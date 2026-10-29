@@ -182,6 +182,8 @@ type FeatureDTO struct {
 	Status          string `json:"status"`
 	Priority        string `json:"priority"`
 	AssigneeID      uint   `json:"assignee_id"`
+	// Color is a palette name, or empty for none.
+	Color string `json:"color"`
 	// Position orders the feature among its siblings, 1 first; 0 is an older
 	// feature that sorts by id.
 	Position int `json:"position"`
@@ -211,6 +213,7 @@ func NewFeatureDTO(f models.Feature, tags []string, tasks *FeatureTaskCounts) Fe
 		Status:          string(f.Status),
 		Priority:        string(f.Priority),
 		AssigneeID:      f.AssigneeID,
+		Color:           f.Color,
 		Position:        f.Position,
 		Tags:            emptyIfNil(tags),
 		Tasks:           tasks,
@@ -258,6 +261,8 @@ type UpdateFeatureRequest struct {
 	Priority        *string `json:"priority" binding:"omitempty,oneof=low medium high"`
 	ParentFeatureID *uint   `json:"parent_feature_id"`
 	AssigneeID      *uint   `json:"assignee_id"`
+	// Color is a palette name; "" removes the colour.
+	Color *string `json:"color" binding:"omitempty,oneof='' red orange yellow green teal blue purple pink"`
 }
 
 // Apply copies the fields that were present onto a feature model.
@@ -285,6 +290,9 @@ func (r UpdateFeatureRequest) Apply(f *models.Feature) {
 	}
 	if r.AssigneeID != nil {
 		f.AssigneeID = *r.AssigneeID
+	}
+	if r.Color != nil {
+		f.Color = *r.Color
 	}
 }
 

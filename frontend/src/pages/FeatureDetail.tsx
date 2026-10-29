@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertCircle, ArrowLeft, Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import {
   useCreateFeature,
@@ -22,6 +22,7 @@ import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
 import { TaskList } from '@/components/TaskList'
 import { FeatureAccess } from '@/components/FeatureAccess'
 import { Markdown } from '@/components/Markdown'
+import { ColorDot } from '@/components/FeatureColor'
 import { FeatureFiles, MarkdownEditor, paragraphBreak } from '@/components/MarkdownEditor'
 import { TaskPanel } from './TaskPanel'
 import { cn } from '@/lib/utils'
@@ -32,6 +33,34 @@ import {
   type Feature,
   type FeatureStatus,
 } from '@/lib/types'
+
+/** The parts of a feature that are edited one at a time. */
+type EditPart = 'title' | 'description' | 'notes' | 'tags'
+
+/** Cancel and Save for whichever part is being edited. */
+function EditButtons({ onCancel, onSave, saving }: { onCancel: () => void; onSave: () => void; saving: boolean }) {
+  return (
+    <div className="flex shrink-0 gap-2">
+      <Button variant="secondary" size="sm" onClick={onCancel}>
+        Cancel
+      </Button>
+      <Button size="sm" onClick={onSave} loading={saving}>
+        <Check className="h-3.5 w-3.5" />
+        Save
+      </Button>
+    </div>
+  )
+}
+
+/** A small heading over the description or notes, with its Edit button. */
+function PartHeading({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div className="mb-1.5 flex h-6 items-center justify-between">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-faint">{title}</h3>
+      {children}
+    </div>
+  )
+}
 
 /** No filters: the same key the project's feature list uses, so both share one request. */
 const ALL_FEATURES = { status: [], tag: '', q: '' }
@@ -98,14 +127,20 @@ function descendants(all: Feature[], rootId: number): { rows: SubRow[]; rootLeve
  *
  * Status and priority are changed in place from the header, because that is
  * the edit made most often and routing it through a form would be three clicks
- * for a one-field change. Title, description and tags open an editing state.
+ * for a one-field change. Title, description, notes and tags each have their
+ * own Edit and Save, so changing one never means scrolling past the others.
+ *
+ * Opened from the published list it is read-only; from the Working list,
+ * editable.
  */
 export function FeatureDetail({
   projectId,
   featureId,
+  editable,
 }: {
   projectId: number
   featureId: number
+  editable: boolean
 }) {
   const { navigate } = useRouter()
   const feature = useFeature(featureId)
@@ -118,7 +153,8 @@ export function FeatureDetail({
   const attachmentList = useFeatureAttachments(featureId)
   const attachments = attachmentList.data?.items ?? []
 
-  const [editing, setEditing] = useState(false)
+  // Which part is open for editing; one at a time.
+  const [editing, setEditing] = useState<EditPart | null>(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [notes, setNotes] = useState('')
@@ -128,16 +164,6 @@ export function FeatureDetail({
   const [openTaskId, setOpenTaskId] = useState(0)
   // The feature the add box is open under: this one, one in the tree, or none.
   const [addingUnder, setAddingUnder] = useState<number | null>(null)
-
-  // Seed the editing fields whenever the loaded feature changes.
-  useEffect(() => {
-    if (feature.data) {
-      setTitle(feature.data.title)
-      setDescription(feature.data.description)
-      setNotes(feature.data.notes ?? '')
-      setTagText(feature.data.tags.join(', '))
-    }
-  }, [feature.data])
 
   if (feature.isError) {
     return (
@@ -177,20 +203,51 @@ export function FeatureDetail({
   // Unknown until the project's list arrives; the add box then shows no level.
   const ownLevel = tree?.rootLevel ?? null
   // Until the role is known, show the add box rather than flicker it in.
-  const canEdit = project.data?.my_role !== 'viewer'
+  const canEdit = editable && project.data?.my_role !== 'viewer'
 
-  async function saveEdits() {
+  /** Opens one part for editing, starting from what is saved. */
+  function startEditing(part: EditPart) {
     setError('')
-    const tags = tagText.split(',').map((t) => t.trim()).filter(Boolean)
+    setTitle(data.title)
+    setDescription(data.description)
+    setNotes(data.notes ?? '')
+    setTagText(data.tags.join(', '))
+    setEditing(part)
+  }
 
+  function cancelEditing() {
+    setEditing(null)
+    setError('')
+  }
+
+  async function saveEdit() {
+    setError('')
     try {
-      await update.mutateAsync({ id: featureId, title, description, notes })
-      await replaceTags.mutateAsync({ id: featureId, tags })
-      setEditing(false)
+      if (editing === 'tags') {
+        const tags = tagText.split(',').map((t) => t.trim()).filter(Boolean)
+        await replaceTags.mutateAsync({ id: featureId, tags })
+      } else if (editing === 'title') {
+        await update.mutateAsync({ id: featureId, title })
+      } else if (editing === 'description') {
+        await update.mutateAsync({ id: featureId, description })
+      } else if (editing === 'notes') {
+        await update.mutateAsync({ id: featureId, notes })
+      }
+      setEditing(null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save changes')
     }
   }
+
+  const saving = update.isPending || replaceTags.isPending
+  const editButtons = <EditButtons onCancel={cancelEditing} onSave={saveEdit} saving={saving} />
+  const editLink = (part: EditPart, label: string) =>
+    canEdit && editing === null ? (
+      <Button variant="ghost" size="sm" className="h-6 px-2" onClick={() => startEditing(part)} aria-label={label}>
+        <Pencil className="h-3 w-3" />
+        Edit
+      </Button>
+    ) : null
 
   async function setStatus(status: FeatureStatus) {
     setError('')
@@ -228,7 +285,7 @@ export function FeatureDetail({
           variant="ghost"
           size="sm"
           className="h-7 px-2"
-          onClick={() => navigate({ name: 'project', projectId })}
+          onClick={() => navigate(editable ? { name: 'inProgress', projectId } : { name: 'project', projectId })}
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           {project.data?.name ?? 'Project'}
@@ -246,87 +303,54 @@ export function FeatureDetail({
 
       <Card>
         <CardBody className="space-y-4">
-          {editing ? (
-            <div className="space-y-3">
-              <Input
-                label="Title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                autoFocus
-              />
-              <MarkdownEditor
-                id="edit-description"
-                label="Description"
-                value={description}
-                onChange={setDescription}
-                featureId={featureId}
-                attachments={attachments}
-                height="75vh"
-              />
-              <MarkdownEditor
-                id="edit-notes"
-                label="Notes"
-                value={notes}
-                onChange={setNotes}
-                featureId={featureId}
-                attachments={attachments}
-                height="35vh"
-                placeholder="Working notes: open questions, decisions, links…"
-              />
-              <FeatureFiles
-                featureId={featureId}
-                attachments={attachments}
-                canEdit={canEdit}
-                onInsert={(md) =>
-                  setDescription((d) => d + paragraphBreak(d) + md + '\n')
-                }
-              />
-              <Input
-                label="Tags"
-                value={tagText}
-                onChange={(e) => setTagText(e.target.value)}
-                hint="Separate with commas"
-              />
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setEditing(false)
-                    setError('')
+          {editing === 'title' ? (
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Input
+                  label="Title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void saveEdit()
+                    if (e.key === 'Escape') cancelEditing()
                   }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={saveEdits}
-                  loading={update.isPending || replaceTags.isPending}
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  Save
-                </Button>
+                  autoFocus
+                />
               </div>
+              {editButtons}
             </div>
           ) : (
-            <>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <ColorDot
+                    color={data.color}
+                    title={data.title}
+                    className="-ml-1"
+                    onChange={
+                      canEdit
+                        ? (color) =>
+                            update.mutate(
+                              { id: featureId, color },
+                              { onError: (err) => setError(err instanceof ApiError ? err.message : 'Could not change the colour') },
+                            )
+                        : undefined
+                    }
+                  />
                   <h2 className="text-lg font-semibold tracking-tight text-ink">{data.title}</h2>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-3">
-                    <StatusPill status={data.status} />
-                    <PriorityPill priority={data.priority} />
-                    {data.category && data.category !== 'general' && (
-                      <Badge>{data.category}</Badge>
-                    )}
-                  </div>
                 </div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                  <StatusPill status={data.status} />
+                  <PriorityPill priority={data.priority} />
+                  {data.category && data.category !== 'general' && (
+                    <Badge>{data.category}</Badge>
+                  )}
+                </div>
+              </div>
 
-                <div className="flex shrink-0 gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-                    <Pencil className="h-3.5 w-3.5" />
-                    Edit
-                  </Button>
+              <div className="flex shrink-0 gap-1">
+                {editLink('title', 'Edit title')}
+                {canEdit && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -336,26 +360,101 @@ export function FeatureDetail({
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
-                </div>
+                )}
               </div>
+            </div>
+          )}
 
+          {editing === 'description' ? (
+            <MarkdownEditor
+              id="edit-description"
+              label="Description"
+              value={description}
+              onChange={setDescription}
+              featureId={featureId}
+              attachments={attachments}
+              height="50vh"
+              actions={editButtons}
+            />
+          ) : (
+            <section>
+              <PartHeading title="Description">{editLink('description', 'Edit description')}</PartHeading>
               {data.description.trim() ? (
                 <Markdown text={data.description} attachments={attachments} />
               ) : (
                 <p className="text-sm text-faint">No description.</p>
               )}
+            </section>
+          )}
 
-              {data.notes?.trim() && (
-                <section className="border-t border-border pt-3">
-                  <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-faint">Notes</h3>
+          {editing === 'notes' ? (
+            <div className="border-t border-border pt-3">
+              <MarkdownEditor
+                id="edit-notes"
+                label="Notes"
+                value={notes}
+                onChange={setNotes}
+                featureId={featureId}
+                attachments={attachments}
+                height="50vh"
+                placeholder="Working notes: open questions, decisions, links…"
+                actions={editButtons}
+              />
+            </div>
+          ) : (
+            (data.notes?.trim() || canEdit) && (
+              <section className="border-t border-border pt-3">
+                <PartHeading title="Notes">{editLink('notes', 'Edit notes')}</PartHeading>
+                {data.notes?.trim() ? (
                   <Markdown text={data.notes} attachments={attachments} />
-                </section>
-              )}
+                ) : (
+                  <p className="text-sm text-faint">No notes.</p>
+                )}
+              </section>
+            )
+          )}
 
-              <FeatureFiles featureId={featureId} attachments={attachments} canEdit={canEdit} />
+          <FeatureFiles
+            featureId={featureId}
+            attachments={attachments}
+            canEdit={canEdit}
+            onInsert={
+              editing === 'description'
+                ? (md) => setDescription((d) => d + paragraphBreak(d) + md + '\n')
+                : editing === 'notes'
+                  ? (md) => setNotes((n) => n + paragraphBreak(n) + md + '\n')
+                  : undefined
+            }
+          />
 
-              {data.tags.length > 0 && <TagList tags={data.tags} max={12} />}
-            </>
+          {editing === 'tags' ? (
+            <div className="flex items-start gap-2">
+              <div className="flex-1">
+                <Input
+                  label="Tags"
+                  value={tagText}
+                  onChange={(e) => setTagText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void saveEdit()
+                    if (e.key === 'Escape') cancelEditing()
+                  }}
+                  hint="Separate with commas"
+                  autoFocus
+                />
+              </div>
+              <div className="pt-6">{editButtons}</div>
+            </div>
+          ) : (
+            (data.tags.length > 0 || canEdit) && (
+              <div className="flex items-center gap-2">
+                {data.tags.length > 0 ? (
+                  <TagList tags={data.tags} max={12} />
+                ) : (
+                  <span className="text-xs text-faint">No tags.</span>
+                )}
+                {editLink('tags', 'Edit tags')}
+              </div>
+            )
           )}
         </CardBody>
       </Card>
@@ -395,7 +494,7 @@ export function FeatureDetail({
                         own; the title is the button keyboard users reach. */}
                     <div
                       onClick={() =>
-                        navigate({ name: 'feature', projectId, featureId: child.id })
+                        navigate({ name: 'feature', projectId, featureId: child.id, editable })
                       }
                       className="group/row relative flex w-full cursor-pointer items-center gap-2 py-2.5 pr-4 text-left transition-colors hover:bg-raised"
                       style={{ paddingLeft: 16 + depth * SUB_INDENT }}
@@ -516,6 +615,7 @@ export function FeatureDetail({
                 <QuickSet
                   key={status}
                   active={data.status === status}
+                  disabled={!canEdit}
                   onClick={() => setStatus(status)}
                 >
                   {STATUS_LABEL[status]}
@@ -533,6 +633,7 @@ export function FeatureDetail({
                 <QuickSet
                   key={priority}
                   active={data.priority === priority}
+                  disabled={!canEdit}
                   onClick={() => setPriority(priority)}
                 >
                   {PRIORITY_LABEL[priority]}
@@ -591,22 +692,27 @@ export function FeatureDetail({
 
 function QuickSet({
   active,
+  disabled,
   onClick,
   children,
 }: {
   active: boolean
+  disabled?: boolean
   onClick: () => void
   children: React.ReactNode
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={active}
       className={cn(
         'flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs transition-colors',
         active
           ? 'bg-accent-soft font-medium text-accent'
           : 'text-muted hover:bg-raised hover:text-ink',
+        disabled && !active && 'cursor-default opacity-50 hover:bg-transparent hover:text-muted',
+        disabled && 'cursor-default',
       )}
     >
       {children}

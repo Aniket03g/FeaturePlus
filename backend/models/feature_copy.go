@@ -28,6 +28,9 @@ type FeatureCopy struct {
 	// Name is what its owner calls it, e.g. "Checkout rework". Empty shows as
 	// "Copy" and its number.
 	Name string `gorm:"type:varchar(80)"`
+	// Source is where the copy was started from in My Space: "published" or
+	// "working". Empty for one made by uploading a downloaded file.
+	Source string `gorm:"type:varchar(20)"`
 
 	FeatureCount int    `gorm:"not null"`
 	Snapshot     string `gorm:"type:text;not null"`

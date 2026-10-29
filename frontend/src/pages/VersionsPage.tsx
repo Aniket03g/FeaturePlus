@@ -1,9 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { ArrowLeft, ChevronDown, ChevronRight, Copy, Download, GitCompare, History, Loader2, Plus, Upload } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronRight, Copy, Download, GitCompare, History, Loader2, Plus, Send, Upload } from 'lucide-react'
 import {
   useCopies,
   useProject,
-  useSetCopyPublished,
   useSaveVersion,
   useVersion,
   useVersionComparison,
@@ -14,6 +13,7 @@ import {
 import { downloadCopyFile, downloadVersionFile } from '@/lib/feature-file'
 import { Dialog } from '@/components/Dialog'
 import { StartCopyDialog } from '@/pages/StartCopyDialog'
+import { PublishDialog } from '@/pages/PublishDialog'
 import { useRouter } from '@/lib/router'
 import { ApiError } from '@/lib/api'
 import { Card } from '@/components/ui/card'
@@ -27,18 +27,22 @@ import { cn, plural } from '@/lib/utils'
 type Tab = 'versions' | 'copies'
 
 /**
- * Saved versions of a project's feature list, and the copies people make of
- * them, on two tabs.
+ * The published versions of a project's feature list, and the copies people
+ * make of them, on two tabs.
  *
- * Versions: save the list as it is now under a tag, read any version as a
- * tree, compare it with the list now or another version, and download it.
+ * Published: every publish from the Working list, newest first, as
+ * Published #1, #2… Each can be read as a tree, compared with the one before
+ * it or with the Working list, and downloaded. The Working list sits
+ * on top, with what it would change and a Publish button. Versions only saved,
+ * not published, and the ones saved around merges, are folded away below.
  * A saved version never changes. Anyone who can see the project can read them;
- * saving one needs the right to edit it.
+ * saving or publishing needs the right to edit it.
  *
  * Copies: anyone who can see the project can download a version, edit the file
- * anywhere, and upload it back as their own copy. A copy is private until its
- * owner publishes it; published copies are listed for everyone, frozen, and an
- * owner or editor can merge one into the list.
+ * anywhere, and upload it back as their own copy. Copies stay private: their
+ * Publish button is held back until it is decided how copies are shared, since
+ * "publish" now means publishing the Working list. Copies published before
+ * that still show for everyone, and an owner or editor can merge one.
  */
 export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId: number; initialTab?: Tab }) {
   const { navigate } = useRouter()
@@ -49,11 +53,13 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
 
   const [tab, setTab] = useState<Tab>(initialTab)
   const [saving, setSaving] = useState(false)
+  const [publishing, setPublishing] = useState(false)
   const [starting, setStarting] = useState(false)
   const [justSaved, setJustSaved] = useState(0)
   const [justUploaded, setJustUploaded] = useState<{ id: number; message: string } | null>(null)
 
   const versionCount = versions.data?.length ?? 0
+  const publishCount = (versions.data ?? []).filter((v) => v.publish_number > 0).length
   const copyCount = copies.data?.length ?? 0
 
   return (
@@ -64,7 +70,7 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
           size="sm"
           className="mt-0.5 h-7 w-7 p-0"
           onClick={() => navigate({ name: 'project', projectId })}
-          aria-label="Back to the project"
+          aria-label="Back to the published list"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -75,7 +81,7 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
           </h2>
           <p className="mt-0.5 text-sm text-muted">
             {project.data?.name ? `${project.data.name} · ` : ''}
-            {plural(versionCount, 'version')} · {plural(copyCount, 'copy', 'copies')}
+            {publishCount} published · {plural(copyCount, 'copy', 'copies')}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -86,9 +92,15 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
             </Button>
           )}
           {canSave && (
-            <Button size="sm" className="gap-1.5" onClick={() => setSaving(true)}>
+            <Button size="sm" variant="secondary" className="gap-1.5" onClick={() => setSaving(true)} title="Save the Working list without publishing it">
               <Plus className="h-3.5 w-3.5" />
-              Save version
+              Save checkpoint
+            </Button>
+          )}
+          {canSave && (
+            <Button size="sm" className="gap-1.5" onClick={() => setPublishing(true)}>
+              <Send className="h-3.5 w-3.5" />
+              Publish
             </Button>
           )}
         </div>
@@ -97,7 +109,7 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
       <div role="tablist" aria-label="Versions or copies" className="inline-flex rounded-md border border-border bg-raised p-0.5">
         {(
           [
-            ['versions', 'Versions', versionCount, <History key="v" className="h-3.5 w-3.5" />],
+            ['versions', 'Published', publishCount, <History key="v" className="h-3.5 w-3.5" />],
             ['copies', 'Copies', copyCount, <Copy key="c" className="h-3.5 w-3.5" />],
           ] as [Tab, string, number, ReactNode][]
         ).map(([id, label, count, icon]) => (
@@ -123,7 +135,7 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
           projectId={projectId}
           versions={versions}
           justSaved={justSaved}
-          onSave={canSave ? () => setSaving(true) : undefined}
+          onPublish={canSave ? () => setPublishing(true) : undefined}
         />
       ) : (
         <CopiesTab
@@ -150,11 +162,15 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
               id: copy.id,
               message:
                 copy.revision === 1
-                  ? `Saved as your draft${copy.name ? ` “${copy.name}”` : ` copy ${copy.number}`}, based on v${copy.base.number}. Publish it when it’s ready for review.`
+                  ? `Saved as your draft${copy.name ? ` “${copy.name}”` : ` copy ${copy.number}`}, based on v${copy.base.number}.`
                   : `${copy.name || `Copy ${copy.number}`} replaced with your new file.`,
             })
           }}
         />
+      )}
+
+      {publishing && (
+        <PublishDialog projectId={projectId} onClose={() => setPublishing(false)} onPublished={() => setPublishing(false)} />
       )}
 
       {saving && (
@@ -259,14 +275,19 @@ function VersionsTab({
   projectId,
   versions,
   justSaved,
-  onSave,
+  onPublish,
 }: {
   projectId: number
   versions: ReturnType<typeof useVersions>
   justSaved: number
-  onSave?: () => void
+  onPublish?: () => void
 }) {
   const list = versions.data ?? []
+  const published = list.filter((v) => v.publish_number > 0)
+  const others = list.filter((v) => v.publish_number === 0)
+  // Open by default when one was just saved, so it can be seen.
+  const [showOthers, setShowOthers] = useState(false)
+  const othersOpen = showOthers || others.some((v) => v.id === justSaved)
 
   if (versions.isLoading) {
     return (
@@ -286,37 +307,240 @@ function VersionsTab({
       </Card>
     )
   }
-  if (list.length === 0) {
-    return (
-      <EmptyScreen
-        picture={<StackPicture />}
-        title="No versions yet"
-        text="A version is a saved snapshot of your feature list. Save one before a client meeting or a big change, and you can always compare back to it."
-      >
-        {onSave ? (
-          <Button onClick={onSave}>Save the first version</Button>
-        ) : (
-          <p className="text-sm text-faint">Ask an editor or owner to save the first version.</p>
-        )}
-      </EmptyScreen>
-    )
-  }
 
   return (
     <div className="space-y-3">
-      <LiveListCard projectId={projectId} newest={list[0]} onSave={onSave} />
-      <Card>
-        <ul className="divide-y divide-border">
-          {groupAutoPairs(list).map((item) =>
-            'pair' in item ? (
-              <AutoPairRow key={item.pair[0].id} projectId={projectId} after={item.pair[0]} before={item.pair[1]} />
-            ) : (
-              <VersionRow key={item.version.id} projectId={projectId} version={item.version} isNew={item.version.id === justSaved} />
-            ),
+      {published.length === 0 ? (
+        <EmptyScreen
+          picture={<StackPicture />}
+          title="Nothing published yet"
+          text="Publishing makes the Working list the published one that everyone reads. Each publish is kept here as Published #1, #2… so you can always look back and compare."
+        >
+          {onPublish ? (
+            <Button onClick={onPublish}>
+              <Send className="h-3.5 w-3.5" />
+              Publish the Working list
+            </Button>
+          ) : (
+            <p className="text-sm text-faint">An owner or editor of this project can publish.</p>
           )}
-        </ul>
-      </Card>
+        </EmptyScreen>
+      ) : (
+        <>
+          <InProgressCard projectId={projectId} latest={published[0]} onPublish={onPublish} />
+          <Card>
+            <ul className="divide-y divide-border">
+              {published.map((version, i) => (
+                <PublishRow
+                  key={version.id}
+                  projectId={projectId}
+                  version={version}
+                  previous={published[i + 1]}
+                  current={i === 0}
+                />
+              ))}
+            </ul>
+          </Card>
+        </>
+      )}
+
+      {others.length > 0 && (
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setShowOthers((v) => !v)}
+            aria-expanded={othersOpen}
+            className="flex items-center gap-1.5 text-xs font-medium text-muted hover:text-ink"
+          >
+            {othersOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            {othersOpen ? 'Hide' : 'Show'} saved checkpoints and automatic saves ({others.length})
+          </button>
+          {othersOpen && (
+            <Card>
+              <ul className="divide-y divide-border">
+                {groupAutoPairs(others).map((item) =>
+                  'pair' in item ? (
+                    <AutoPairRow key={item.pair[0].id} projectId={projectId} after={item.pair[0]} before={item.pair[1]} />
+                  ) : (
+                    <VersionRow key={item.version.id} projectId={projectId} version={item.version} isNew={item.version.id === justSaved} />
+                  ),
+                )}
+              </ul>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+/**
+ * The Working list against the latest publish: what the next publish
+ * would change, a way to see it in full, and, for owners and editors, the
+ * Publish button.
+ */
+function InProgressCard({ projectId, latest, onPublish }: { projectId: number; latest: FeatureVersion; onPublish?: () => void }) {
+  const { navigate } = useRouter()
+  const since = useVersionComparison(projectId, latest.id, 'current')
+  const data = since.data
+  const changed = data ? data.added + data.removed + data.changed : 0
+
+  return (
+    <Card className={cn('px-4 py-3', changed > 0 ? 'border-accent/50 bg-accent-soft/20' : '')}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1 basis-60">
+          <p className="flex items-center gap-2 text-sm">
+            <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden>
+              <span className="absolute inset-0 rounded-full bg-accent/30" />
+              <span className="m-auto h-1.5 w-1.5 rounded-full bg-accent" />
+            </span>
+            <button
+              type="button"
+              className="font-medium text-ink hover:underline"
+              onClick={() => navigate({ name: 'inProgress', projectId })}
+            >
+              Working list
+            </button>
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+            {since.isLoading ? (
+              <Skeleton className="h-5 w-56" />
+            ) : since.isError ? (
+              <span>Could not check for changes since Published #{latest.publish_number}.</span>
+            ) : changed === 0 ? (
+              <span>No changes since Published #{latest.publish_number}.</span>
+            ) : (
+              <>
+                <span>Not yet published, since #{latest.publish_number}:</span>
+                {data!.added > 0 && <Badge tone="success">+{data!.added} added</Badge>}
+                {data!.removed > 0 && <Badge tone="danger">−{data!.removed} removed</Badge>}
+                {data!.changed > 0 && <Badge tone="warning">{data!.changed} changed</Badge>}
+              </>
+            )}
+          </div>
+        </div>
+        {changed > 0 && (
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => navigate({ name: 'compare', projectId, from: String(latest.id), to: 'current' })}
+            >
+              See what changed
+            </Button>
+            {onPublish && (
+              <Button size="sm" onClick={onPublish}>
+                <Send className="h-3.5 w-3.5" />
+                Publish as #{latest.publish_number + 1}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+/** One publish: its number, note and who published it, with ways to read and compare it. */
+function PublishRow({
+  projectId,
+  version,
+  previous,
+  current,
+}: {
+  projectId: number
+  version: FeatureVersion
+  /** The publish before this one, if any. */
+  previous?: FeatureVersion
+  /** The latest publish: what the published list shows. */
+  current: boolean
+}) {
+  const { navigate } = useRouter()
+  const [open, setOpen] = useState(false)
+  const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
+
+  async function download() {
+    setState('busy')
+    try {
+      await downloadVersionFile(projectId, version.id)
+      setState('idle')
+    } catch {
+      setState('failed')
+    }
+  }
+
+  const when = new Date(version.published_at ?? version.created_at).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+
+  return (
+    <li>
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 py-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 shrink-0 p-0"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={open ? `Hide Published #${version.publish_number}` : `Show Published #${version.publish_number}`}
+        >
+          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </Button>
+        <Badge tone={current ? 'accent' : 'neutral'} className="mt-0.5 shrink-0 font-mono">
+          #{version.publish_number}
+        </Badge>
+        <div className="min-w-0 flex-1 basis-48">
+          <div className="flex min-w-0 items-center gap-2">
+            <button type="button" className="truncate text-left text-sm font-medium text-ink hover:underline" onClick={() => setOpen((v) => !v)}>
+              {version.notes || version.tag}
+            </button>
+            {current && <Badge tone="success">Current</Badge>}
+          </div>
+          <p className="text-xs text-muted">
+            {version.saved_by.name || 'A removed account'} · {when} · {plural(version.feature_count, 'feature')}
+            <span className="text-faint"> · v{version.number}</span>
+          </p>
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {previous && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => navigate({ name: 'compare', projectId, from: String(previous.id), to: String(version.id) })}
+              title={`What changed from Published #${previous.publish_number} to #${version.publish_number}`}
+            >
+              <GitCompare className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Changes since #{previous.publish_number}</span>
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => navigate({ name: 'compare', projectId, from: String(version.id), to: 'current' })}
+            title="Compare with the Working list, or another version"
+          >
+            <span className="hidden sm:inline">Compare</span>
+            <GitCompare className="h-3.5 w-3.5 sm:hidden" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn('h-7 gap-1 px-2 text-xs', state === 'failed' && 'text-danger')}
+            onClick={download}
+            disabled={state === 'busy'}
+            title="Download as .md"
+            aria-label={`Download Published #${version.publish_number}`}
+          >
+            {state === 'busy' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {state === 'failed' ? 'Failed' : '.md'}
+          </Button>
+        </div>
+      </div>
+      {open && <VersionTree projectId={projectId} versionId={version.id} />}
+    </li>
   )
 }
 
@@ -403,70 +627,6 @@ function AutoPairRow({ projectId, after, before }: { projectId: number; after: F
         </ul>
       )}
     </li>
-  )
-}
-
-/**
- * The list as it is now, against the newest version: has it moved on since
- * that was saved, and by how much? From here it can be compared in full or,
- * for owners and editors, saved as the next version.
- */
-function LiveListCard({ projectId, newest, onSave }: { projectId: number; newest: FeatureVersion; onSave?: () => void }) {
-  const { navigate } = useRouter()
-  const since = useVersionComparison(projectId, newest.id, 'current')
-  const data = since.data
-  const changed = data ? data.added + data.removed + data.changed : 0
-  const featuresNow = data ? newest.feature_count + data.added - data.removed : newest.feature_count
-
-  return (
-    <Card className={cn('px-4 py-3', changed > 0 ? 'border-accent/50 bg-accent-soft/20' : '')}>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1 basis-60">
-          <p className="flex items-center gap-2 text-sm">
-            <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden>
-              <span className="absolute inset-0 rounded-full bg-accent/30" />
-              <span className="m-auto h-1.5 w-1.5 rounded-full bg-accent" />
-            </span>
-            <span className="font-medium text-ink">The list as it is now</span>
-            <span className="text-xs text-muted">Live · {plural(featuresNow, 'feature')}</span>
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
-            {since.isLoading ? (
-              <Skeleton className="h-5 w-56" />
-            ) : since.isError ? (
-              <span>Could not check for changes since v{newest.number}.</span>
-            ) : changed === 0 ? (
-              <span>
-                No changes since v{newest.number} {newest.tag}.
-              </span>
-            ) : (
-              <>
-                <span>Since v{newest.number}:</span>
-                {data!.added > 0 && <Badge tone="success">+{data!.added} added</Badge>}
-                {data!.removed > 0 && <Badge tone="danger">−{data!.removed} removed</Badge>}
-                {data!.changed > 0 && <Badge tone="warning">{data!.changed} changed</Badge>}
-              </>
-            )}
-          </div>
-        </div>
-        {changed > 0 && (
-          <div className="flex shrink-0 flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => navigate({ name: 'compare', projectId, from: String(newest.id), to: 'current' })}
-            >
-              See what changed
-            </Button>
-            {onSave && (
-              <Button size="sm" onClick={onSave}>
-                Save as v{newest.number + 1}
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
-    </Card>
   )
 }
 
@@ -623,8 +783,7 @@ function CopiesTab({
           </Button>
         </div>
         <p className="mt-2 text-xs text-faint">
-          Your copy is private until you publish it. {canMerge ? 'You' : 'An owner or editor'} can merge a published copy into
-          the list.
+          Your copies are private to you.
         </p>
       </Card>
 
@@ -724,7 +883,7 @@ function CopiesEmpty({
     <EmptyScreen
       picture={<LoopPicture />}
       title="No copies yet"
-      text="Want to suggest changes without touching the real list? Download a version, edit it in any text editor, and upload it here. It stays private until you publish it."
+      text="Want to suggest changes without touching the real list? Download a version, edit it in any text editor, and upload it here. It stays private to you."
     >
       <div className="flex flex-wrap justify-center gap-2">
         <Button onClick={download} loading={downloading} className="gap-1.5">
@@ -814,18 +973,6 @@ function CopyRow({
 }) {
   const { navigate } = useRouter()
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
-  const publishing = useSetCopyPublished(projectId)
-  const [publishError, setPublishError] = useState('')
-
-  async function togglePublished() {
-    setPublishError('')
-    try {
-      await publishing.mutateAsync({ copyId: copy.id, publish: !copy.published_at })
-    } catch (err) {
-      setPublishError(err instanceof ApiError ? err.message : 'Could not reach the server')
-    }
-  }
-
   async function download() {
     setState('busy')
     try {
@@ -867,11 +1014,6 @@ function CopyRow({
             {copy.base.tag ? ` ${copy.base.tag}` : ''} · {when} · {plural(copy.feature_count, 'feature')}
             {copy.revision > 1 && ` · uploaded ${copy.revision} times`}
           </p>
-          {publishError && (
-            <p role="alert" className="mt-0.5 text-xs text-danger">
-              {publishError}
-            </p>
-          )}
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <Button
@@ -892,22 +1034,6 @@ function CopyRow({
               title="See what merging this copy would change in the project's list"
             >
               Review &amp; merge
-            </Button>
-          )}
-          {copy.mine && !copy.merged_at && (
-            <Button
-              variant={copy.published_at ? 'ghost' : 'secondary'}
-              size="sm"
-              className="h-7 px-2.5 text-xs"
-              loading={publishing.isPending}
-              onClick={togglePublished}
-              title={
-                copy.published_at
-                  ? 'Make it private again, so you can upload changes to it'
-                  : 'Share it with everyone on the project. It cannot change while published'
-              }
-            >
-              {copy.published_at ? 'Unpublish' : 'Publish'}
             </Button>
           )}
           <Button

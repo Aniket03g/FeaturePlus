@@ -11,8 +11,11 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
  * Route shapes:
  *   /app/                       dashboard
  *   /app/projects               project list
- *   /app/projects/:id           project detail, feature list
- *   /app/projects/:id/features/:featureId    feature detail
+ *   /app/projects/:id           the published feature list: the latest publish, read-only
+ *   /app/projects/:id/features/:featureId    feature detail, read-only
+ *   /app/projects/:id/working            the working list: the same features, editable
+ *   /app/projects/:id/working/features/:featureId    feature detail, editable
+ *   /app/projects/:id/dashboard              where the project stands, what has changed
  *   /app/projects/:id/dependencies           dependency canvas
  *   /app/projects/:id/releases               release list
  *   /app/projects/:id/releases/:releaseId    release detail
@@ -28,6 +31,10 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
  *   /app/templates                           the template catalogue
  *   /app/imports                             saved analyses and GitHub import
  *   /app/playground                          draft a feature list, then import it
+ *   /app/my/working                          My Space: the copy you edited last, open for editing
+ *   /app/my/working/:projectId/:copyId       one particular copy, open for editing
+ *   /app/my/versions                         My Space: all your copies
+ *   /app/my                                  My Space: dashboard
  */
 
 const BASE = '/app'
@@ -36,8 +43,11 @@ export type Route =
   | { name: 'dashboard' }
   | { name: 'projects' }
   | { name: 'project'; projectId: number }
-  | { name: 'feature'; projectId: number; featureId: number }
+  | { name: 'inProgress'; projectId: number }
+  /** `editable` when opened from the Working list; otherwise read-only. */
+  | { name: 'feature'; projectId: number; featureId: number; editable?: boolean }
   | { name: 'dependencies'; projectId: number }
+  | { name: 'projectDashboard'; projectId: number }
   | { name: 'releases'; projectId: number }
   | { name: 'release'; projectId: number; releaseId: number }
   | { name: 'pullRequests'; projectId: number }
@@ -51,6 +61,12 @@ export type Route =
   | { name: 'templates' }
   | { name: 'imports' }
   | { name: 'playground' }
+  | { name: 'myWorking' }
+  | { name: 'myVersions' }
+  | { name: 'mySpace' }
+  // Not `projectId`: a copy is yours, not the project's, so the sidebar's
+  // Project group should not light up for it.
+  | { name: 'myCopy'; copyProjectId: number; copyId: number }
 
 /** The routes that are not scoped to a project, keyed by their first segment. */
 const TOP_LEVEL: Record<string, Route> = {
@@ -62,6 +78,7 @@ const TOP_LEVEL: Record<string, Route> = {
 
 /** The project sub-pages that take no further segments. */
 const PROJECT_SECTIONS: Record<string, Route['name']> = {
+  dashboard: 'projectDashboard',
   dependencies: 'dependencies',
   'pull-requests': 'pullRequests',
   code: 'code',
@@ -79,6 +96,15 @@ export function parseRoute(pathname: string): Route {
 
   const topLevel = TOP_LEVEL[parts[0]]
   if (topLevel) return topLevel
+
+  if (parts[0] === 'my' && parts[1] === 'versions') return { name: 'myVersions' }
+  if (parts[0] === 'my' && !parts[1]) return { name: 'mySpace' }
+  if (parts[0] === 'my' && parts[1] === 'working') {
+    const copyProjectId = Number(parts[2])
+    const copyId = Number(parts[3])
+    if (copyProjectId > 0 && copyId > 0) return { name: 'myCopy', copyProjectId, copyId }
+    return { name: 'myWorking' }
+  }
 
   if (parts[0] !== 'projects') return { name: 'dashboard' }
   if (parts.length === 1) return { name: 'projects' }
@@ -117,6 +143,14 @@ export function parseRoute(pathname: string): Route {
     }
   }
 
+  if (parts[2] === 'working') {
+    const featureId = Number(parts[4])
+    if (parts[3] === 'features' && Number.isFinite(featureId) && featureId > 0) {
+      return { name: 'feature', projectId, featureId, editable: true }
+    }
+    return { name: 'inProgress', projectId }
+  }
+
   return { name: 'project', projectId }
 }
 
@@ -129,10 +163,24 @@ export function routeToPath(route: Route): string {
       return `${BASE}/projects`
     case 'project':
       return `${BASE}/projects/${route.projectId}`
+    case 'inProgress':
+      return `${BASE}/projects/${route.projectId}/working`
+    case 'myWorking':
+      return `${BASE}/my/working`
+    case 'myVersions':
+      return `${BASE}/my/versions`
+    case 'mySpace':
+      return `${BASE}/my`
+    case 'myCopy':
+      return `${BASE}/my/working/${route.copyProjectId}/${route.copyId}`
     case 'feature':
-      return `${BASE}/projects/${route.projectId}/features/${route.featureId}`
+      return route.editable
+        ? `${BASE}/projects/${route.projectId}/working/features/${route.featureId}`
+        : `${BASE}/projects/${route.projectId}/features/${route.featureId}`
     case 'dependencies':
       return `${BASE}/projects/${route.projectId}/dependencies`
+    case 'projectDashboard':
+      return `${BASE}/projects/${route.projectId}/dashboard`
     case 'releases':
       return `${BASE}/projects/${route.projectId}/releases`
     case 'release':

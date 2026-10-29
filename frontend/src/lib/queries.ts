@@ -77,11 +77,20 @@ export function useProjects(params: { page?: number; q?: string; per_page?: numb
   })
 }
 
+/**
+ * For the screens two people may have open at once: check the server every
+ * 10 seconds while the tab is showing, and straight away when someone comes
+ * back to it, so one person's changes reach the other without a refresh.
+ * Nothing is fetched while the tab is in the background.
+ */
+const SHARED_LIVE = { refetchInterval: 10_000, refetchOnWindowFocus: 'always' } as const
+
 export function useProject(id: number) {
   return useQuery({
     queryKey: keys.project(id),
     queryFn: () => api.get<Project>(`/projects/${id}`),
     enabled: id > 0,
+    ...SHARED_LIVE,
   })
 }
 
@@ -90,6 +99,7 @@ export function useFeatures(projectId: number, filters: FeatureFilters) {
     queryKey: keys.features(projectId, filters),
     queryFn: () => api.list<Feature>(`/projects/${projectId}/features`, { query: featureQuery(filters) }),
     enabled: projectId > 0,
+    ...SHARED_LIVE,
     placeholderData: (previous) => previous,
   })
 }
@@ -99,6 +109,7 @@ export function useFeature(id: number) {
     queryKey: keys.feature(id),
     queryFn: () => api.get<Feature>(`/features/${id}`),
     enabled: id > 0,
+    ...SHARED_LIVE,
   })
 }
 
@@ -241,6 +252,18 @@ export function useUpdateFeature(projectId: number) {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: keys.project(projectId) })
       queryClient.invalidateQueries({ queryKey: graphKeys.graph(projectId) })
+    },
+  })
+}
+
+/** Take the colour off every feature in a project. */
+export function useClearColors(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post<{ cleared: number }>(`/projects/${projectId}/features/clear-colors`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['features', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['feature'] })
     },
   })
 }
@@ -393,6 +416,7 @@ export function useDependencyGraph(projectId: number) {
     queryKey: graphKeys.graph(projectId),
     queryFn: () => api.get<DependencyGraph>(`/projects/${projectId}/dependency-graph`),
     enabled: projectId > 0,
+    ...SHARED_LIVE,
   })
 }
 
@@ -1215,6 +1239,9 @@ export interface FeatureVersion {
   feature_count: number
   /** Saved by the server itself, around a merge, rather than by someone. */
   auto: boolean
+  /** 1, 2, 3… for a version published from the Working list; 0 when only saved. */
+  publish_number: number
+  published_at: string | null
   saved_by: { id: number; name: string }
   created_at: string
 }
@@ -1251,6 +1278,30 @@ export function useSaveVersion(projectId: number) {
     mutationFn: (body: { tag: string; notes: string }) =>
       api.post<FeatureVersion>(`/projects/${projectId}/versions`, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) }),
+  })
+}
+
+/** The latest published version with its contents, or null when nothing is published yet. */
+export function usePublished(projectId: number) {
+  return useQuery({
+    queryKey: ['published', projectId] as const,
+    queryFn: async () =>
+      (await api.get<FeatureVersionDetail | null>(`/projects/${projectId}/published`)) ?? null,
+    enabled: projectId > 0,
+    ...SHARED_LIVE,
+  })
+}
+
+/** Publish the Working list as it stands, as the next Published #. */
+export function usePublish(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { notes: string }) =>
+      api.post<FeatureVersion>(`/projects/${projectId}/publish`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['published', projectId] })
+      queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
+    },
   })
 }
 
@@ -1332,7 +1383,10 @@ export interface FeatureCopy {
   number: number
   /** What its owner calls it; empty shows as "Copy" and the number. */
   name: string
-  base: { id: number; number: number; tag: string }
+  /** Where it was started from in My Space; empty for one made by uploading a file. */
+  source: '' | 'published' | 'working'
+  /** The version it is based on; publish_number is set when that was a publish. */
+  base: { id: number; number: number; tag: string; publish_number: number }
   owner: { id: number; name: string }
   /** Goes up by one each time the copy is uploaded again. */
   revision: number
@@ -1365,6 +1419,132 @@ export interface SaveCopyRequest {
 
 export const copyKeys = {
   project: (projectId: number) => ['copies', projectId] as const,
+  one: (projectId: number, copyId: number) => ['copy', projectId, copyId] as const,
+  mine: ['copies', 'mine'] as const,
+}
+
+/** One of your copies, with the project it is of. */
+export interface MyCopy extends FeatureCopy {
+  project: { id: number; name: string }
+}
+
+/** A feature as it sits in a copy. */
+export type CopyFeature = FeatureCopyDetail['snapshot']['features'][number]
+
+/** Your own copies in every project, for My Space › Working. */
+export function useMyCopies() {
+  return useQuery({
+    queryKey: copyKeys.mine,
+    queryFn: () => api.get<MyCopy[]>('/me/copies'),
+  })
+}
+
+export function useCopy(projectId: number, copyId: number) {
+  return useQuery({
+    queryKey: copyKeys.one(projectId, copyId),
+    queryFn: () => fetchCopy(projectId, copyId),
+    enabled: projectId > 0 && copyId > 0,
+    // The editor holds its own working state; refetching under it would only confuse.
+    refetchOnWindowFocus: false,
+  })
+}
+
+/** Start a copy of a project's published list, or of its working list as it is now. */
+export function useStartCopy() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, ...body }: { projectId: number; from: 'published' | 'working'; name: string }) =>
+      api.post<FeatureCopyDetail>(`/projects/${projectId}/copies/start`, body),
+    onSuccess: (_copy, { projectId }) => {
+      queryClient.invalidateQueries({ queryKey: copyKeys.mine })
+      queryClient.invalidateQueries({ queryKey: copyKeys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
+    },
+  })
+}
+
+/** A copy's features as sent from the online editor. */
+export interface CopyListRow {
+  key: string
+  title: string
+  parent_key: string
+  needs: string[]
+  description: string
+  notes: string
+  status: string
+  priority: string
+}
+
+/** Save a copy as edited online, at the revision the editor loaded. */
+export function useSaveCopyList(projectId: number, copyId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { revision: number; name?: string; features: CopyListRow[] }) =>
+      api.request_put<FeatureCopyDetail>(`/projects/${projectId}/copies/${copyId}/list`, body),
+    onSuccess: (copy) => {
+      queryClient.setQueryData(copyKeys.one(projectId, copyId), copy)
+      queryClient.invalidateQueries({ queryKey: copyKeys.mine })
+      queryClient.invalidateQueries({ queryKey: copyKeys.project(projectId) })
+    },
+  })
+}
+
+/** One publish on the My Space dashboard, named with its project. */
+export interface SpacePublish {
+  project_id: number
+  project_name: string
+  version_id: number
+  publish_number: number
+  notes: string
+  by: string
+  by_id: number
+  at: string
+}
+
+export interface SpaceProject {
+  id: number
+  name: string
+  role: ProjectRole
+  features: number
+  done: number
+  latest: SpacePublish | null
+  /** Features added, removed or changed in the working list since the latest publish. */
+  unpublished: number
+}
+
+export interface SpaceSummary {
+  /** When you last looked; null the first time. */
+  seen_at: string | null
+  projects: SpaceProject[]
+  /** Publishes by others since seen_at, newest first. */
+  new: SpacePublish[]
+}
+
+/** The My Space dashboard. Read once per visit: the visit itself is then marked seen. */
+export function useSpace() {
+  return useQuery({
+    queryKey: ['my-space'] as const,
+    queryFn: () => api.get<SpaceSummary>('/me/space'),
+    // Every visit asks afresh: what was new last time has been seen since.
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useMarkSpaceSeen() {
+  return useMutation({ mutationFn: () => api.post('/me/space/seen') })
+}
+
+export function useDeleteCopy() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, copyId }: { projectId: number; copyId: number }) =>
+      api.del(`/projects/${projectId}/copies/${copyId}`),
+    onSuccess: (_r, { projectId }) => {
+      queryClient.invalidateQueries({ queryKey: copyKeys.mine })
+      queryClient.invalidateQueries({ queryKey: copyKeys.project(projectId) })
+    },
+  })
 }
 
 export function useCopies(projectId: number, enabled = true) {

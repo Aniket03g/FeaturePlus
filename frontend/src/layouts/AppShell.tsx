@@ -18,9 +18,15 @@ import {
   BookOpen,
   Users,
   LayoutTemplate,
-  Boxes,
   Shapes,
   KeyRound,
+  ListTree,
+  History,
+  MessageSquare,
+  GitBranch,
+  ArrowLeftRight,
+  BadgeCheck,
+  Pencil,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
@@ -35,6 +41,10 @@ import { ChangePasswordDialog } from '@/pages/ChangePasswordDialog'
  * Navigation items that have no screen yet are marked `soon` and rendered
  * disabled rather than hidden, so the shape of the finished app is visible
  * from the first phase instead of appearing a section at a time.
+ *
+ * The Project group leads into whichever project is open or, outside any
+ * project, the last one opened (App remembers it), and is headed by its name.
+ * Only with neither are its items disabled.
  */
 
 interface NavItem {
@@ -42,39 +52,79 @@ interface NavItem {
   label: string
   icon: typeof LayoutDashboard
   soon?: boolean
+  /** Works with no project open, inside a group that otherwise needs one. */
+  anyTime?: boolean
+  /** A small icon button at the end of the row, leading somewhere related. */
+  extra?: { id: string; label: string; icon: typeof LayoutDashboard }
+  /** A heading row over the nested items after it, not a link itself. */
+  isLabel?: boolean
+  /** Indented under the label row before it. */
+  nested?: boolean
 }
 
-const NAV: { heading: string; items: NavItem[] }[] = [
+interface NavGroup {
+  /** Empty for the top group, which sits straight under the logo. */
+  heading: string
+  /** The items only lead somewhere once a project is open. */
+  inProject?: boolean
+  items: NavItem[]
+}
+
+const NAV: NavGroup[] = [
   {
-    heading: 'Overview',
+    heading: '',
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
       { id: 'projects', label: 'Projects', icon: FolderKanban },
     ],
   },
   {
-    heading: 'Work',
+    heading: 'Project',
+    inProject: true,
     items: [
-      { id: 'dependencies', label: 'Dependencies', icon: Network },
+      { id: 'projectDashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'featureListLabel', label: 'Feature List', icon: ListTree, isLabel: true },
+      {
+        id: 'featureList',
+        label: 'Published',
+        icon: BadgeCheck,
+        nested: true,
+        extra: { id: 'dependencies', label: 'Dependencies', icon: Network },
+      },
+      { id: 'inProgress', label: 'Working', icon: Pencil, nested: true },
+      { id: 'versions', label: 'Versions', icon: History },
+      { id: 'messages', label: 'Messages', icon: MessageSquare, soon: true },
+      // The team page is not per project yet, so it stays usable from anywhere.
+      { id: 'team', label: 'Team', icon: Users, anyTime: true },
+    ],
+  },
+  {
+    heading: 'My Space',
+    items: [
+      { id: 'myDashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { id: 'myFeatureListLabel', label: 'Feature List', icon: ListTree, isLabel: true },
+      { id: 'myInProgress', label: 'Working', icon: Pencil, nested: true },
+      { id: 'myVersions', label: 'My Versions', icon: GitBranch },
+      { id: 'playground', label: 'Playground', icon: Shapes },
+    ],
+  },
+  {
+    heading: 'Tools',
+    items: [
+      { id: 'templates', label: 'Templates', icon: LayoutTemplate },
+      { id: 'imports', label: 'Import / Export', icon: ArrowLeftRight },
+    ],
+  },
+  {
+    // Screens not in the new layout yet, kept reachable until each is decided.
+    heading: 'Other',
+    inProject: true,
+    items: [
       { id: 'code', label: 'Linked code', icon: FileCode },
       { id: 'contracts', label: 'Contracts', icon: ShieldCheck },
       { id: 'briefing', label: 'Briefing', icon: BookOpen },
-    ],
-  },
-  {
-    heading: 'Delivery',
-    items: [
       { id: 'releases', label: 'Releases', icon: Rocket },
       { id: 'prs', label: 'Pull requests', icon: GitPullRequest },
-    ],
-  },
-  {
-    heading: 'Workspace',
-    items: [
-      { id: 'team', label: 'Team', icon: Users },
-      { id: 'templates', label: 'Templates', icon: LayoutTemplate },
-      { id: 'imports', label: 'Import', icon: Boxes },
-      { id: 'playground', label: 'Playground', icon: Shapes },
     ],
   },
 ]
@@ -82,12 +132,14 @@ const NAV: { heading: string; items: NavItem[] }[] = [
 interface AppShellProps {
   active: string
   onNavigate: (id: string) => void
+  /** The name of the project the Project group leads into, or null when there is none. */
+  projectName: string | null
   title: ReactNode
   actions?: ReactNode
   children: ReactNode
 }
 
-export function AppShell({ active, onNavigate, title, actions, children }: AppShellProps) {
+export function AppShell({ active, onNavigate, projectName, title, actions, children }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const { user, signOut } = useAuth()
 
@@ -96,7 +148,7 @@ export function AppShell({ active, onNavigate, title, actions, children }: AppSh
       <aside
         className={cn(
           'flex flex-col border-r border-border bg-surface transition-[width] duration-200',
-          collapsed ? 'w-[60px]' : 'w-[228px]',
+          collapsed ? 'w-[60px]' : 'w-[256px]',
         )}
       >
         <div className="flex h-14 items-center gap-2.5 px-3 border-b border-border">
@@ -109,26 +161,35 @@ export function AppShell({ active, onNavigate, title, actions, children }: AppSh
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-5">
-          {NAV.map((group) => (
-            <div key={group.heading}>
-              {!collapsed && (
-                <p className="px-2 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-faint">
-                  {group.heading}
-                </p>
-              )}
-              <div className="space-y-0.5">
-                {group.items.map((item) => (
-                  <NavButton
-                    key={item.id}
-                    item={item}
-                    active={active === item.id}
-                    collapsed={collapsed}
-                    onClick={() => !item.soon && onNavigate(item.id)}
-                  />
-                ))}
+          {NAV.map((group) => {
+            const noProject = group.inProject && projectName === null
+            const heading = group.heading === 'Project' && projectName ? projectName : group.heading
+            return (
+              <div key={group.heading}>
+                {!collapsed && heading && (
+                  <p
+                    title={noProject ? 'Open a project to use these' : heading}
+                    className="truncate px-2 pb-1.5 text-2xs font-semibold uppercase tracking-wider text-faint"
+                  >
+                    {heading}
+                  </p>
+                )}
+                <div className="space-y-0.5">
+                  {group.items.map((item) => (
+                    <NavButton
+                      key={item.id}
+                      item={item}
+                      active={active === item.id}
+                      activeExtra={active === item.extra?.id}
+                      disabled={item.soon || (noProject && !item.anyTime)}
+                      collapsed={collapsed}
+                      onNavigate={onNavigate}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </nav>
 
         <div className="border-t border-border p-2">
@@ -174,40 +235,76 @@ export function AppShell({ active, onNavigate, title, actions, children }: AppSh
 function NavButton({
   item,
   active,
+  activeExtra,
+  disabled,
   collapsed,
-  onClick,
+  onNavigate,
 }: {
   item: NavItem
   active: boolean
+  activeExtra: boolean
+  disabled?: boolean
   collapsed: boolean
-  onClick: () => void
+  onNavigate: (id: string) => void
 }) {
   const Icon = item.icon
+  const extra = item.extra
+  const ExtraIcon = extra?.icon
+
+  if (item.isLabel) {
+    return (
+      <div
+        title={collapsed ? item.label : undefined}
+        className={cn('flex items-center gap-2.5 px-2 py-1.5 text-sm text-muted', disabled && 'opacity-45')}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        {!collapsed && <span className="truncate">{item.label}</span>}
+      </div>
+    )
+  }
 
   return (
-    <button
-      onClick={onClick}
-      disabled={item.soon}
-      title={collapsed ? item.label : undefined}
-      aria-current={active ? 'page' : undefined}
-      className={cn(
-        'group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors',
-        active
-          ? 'bg-accent-soft font-medium text-accent'
-          : 'text-muted hover:bg-raised hover:text-ink',
-        item.soon && 'cursor-default opacity-45 hover:bg-transparent hover:text-muted',
-      )}
-    >
-      <Icon className="h-4 w-4 shrink-0" />
-      {!collapsed && (
-        <>
-          <span className="truncate">{item.label}</span>
-          {item.soon && (
-            <span className="ml-auto text-2xs font-normal text-faint">soon</span>
+    <div className="relative">
+      <button
+        onClick={() => !disabled && onNavigate(item.id)}
+        disabled={disabled}
+        title={collapsed ? item.label : undefined}
+        aria-current={active ? 'page' : undefined}
+        className={cn(
+          'group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors',
+          active || activeExtra
+            ? 'bg-accent-soft font-medium text-accent'
+            : 'text-muted hover:bg-raised hover:text-ink',
+          disabled && 'cursor-default opacity-45 hover:bg-transparent hover:text-muted',
+          extra && !collapsed && 'pr-8',
+          item.nested && !collapsed && 'pl-8',
+        )}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        {!collapsed && (
+          <>
+            <span className="truncate">{item.label}</span>
+            {item.soon && (
+              <span className="ml-auto text-2xs font-normal text-faint">soon</span>
+            )}
+          </>
+        )}
+      </button>
+      {extra && ExtraIcon && !collapsed && !disabled && (
+        <button
+          onClick={() => onNavigate(extra.id)}
+          title={extra.label}
+          aria-label={extra.label}
+          aria-current={activeExtra ? 'page' : undefined}
+          className={cn(
+            'absolute right-1 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded transition-colors',
+            activeExtra ? 'bg-accent text-accent-ink' : 'text-muted hover:bg-raised hover:text-ink',
           )}
-        </>
+        >
+          <ExtraIcon className="h-3.5 w-3.5" />
+        </button>
       )}
-    </button>
+    </div>
   )
 }
 
