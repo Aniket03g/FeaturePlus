@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArchiveRestore, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { projectOf, useRouter, type Route } from '@/lib/router'
 import { useProject } from '@/lib/queries'
@@ -13,7 +13,6 @@ import { PublishedList } from '@/pages/PublishedList'
 import { ProjectDashboard } from '@/pages/ProjectDashboard'
 import { FeatureDetail } from '@/pages/FeatureDetail'
 import { NewProjectDialog } from '@/pages/NewProjectDialog'
-import { RestoreBackupDialog } from '@/pages/RestoreBackupDialog'
 import { DependencyCanvas } from '@/pages/DependencyCanvas'
 import { Releases } from '@/pages/Releases'
 import { ReleaseDetail } from '@/pages/ReleaseDetail'
@@ -25,6 +24,7 @@ import { VersionsPage } from '@/pages/VersionsPage'
 import { Team } from '@/pages/Team'
 import { Templates } from '@/pages/Templates'
 import { Imports } from '@/pages/Imports'
+import { Backups } from '@/pages/Backups'
 import { Playground } from '@/pages/Playground'
 import { CopyEditor, MyVersionsPage, MyWorkingLatest } from '@/pages/MyWorking'
 import { MySpaceDashboard } from '@/pages/MySpaceDashboard'
@@ -50,12 +50,14 @@ const SECTION: Record<Route['name'], string> = {
   code: 'code',
   contracts: 'contracts',
   briefing: 'briefing',
-  versions: 'versions',
-  merge: 'versions',
-  compare: 'versions',
+  // Versions has no sidebar item of its own: it is reached from Published.
+  versions: 'featureList',
+  merge: 'featureList',
+  compare: 'featureList',
   team: 'team',
   templates: 'templates',
   imports: 'imports',
+  backups: 'backups',
   playground: 'playground',
   myWorking: 'myInProgress',
   myCopy: 'myInProgress',
@@ -69,7 +71,6 @@ const PROJECT_SECTIONS: Record<string, Route['name']> = {
   featureList: 'project',
   inProgress: 'inProgress',
   dependencies: 'dependencies',
-  versions: 'versions',
   releases: 'releases',
   prs: 'pullRequests',
   code: 'code',
@@ -84,6 +85,7 @@ const TOP_LEVEL_SECTIONS: Record<string, Route> = {
   team: { name: 'team' },
   templates: { name: 'templates' },
   imports: { name: 'imports' },
+  backups: { name: 'backups' },
   playground: { name: 'playground' },
   myInProgress: { name: 'myWorking' },
   myVersions: { name: 'myVersions' },
@@ -116,11 +118,10 @@ export function App() {
   const { route, navigate } = useRouter()
   const [search, setSearch] = useState('')
   const [creatingProject, setCreatingProject] = useState(false)
-  const [restoringBackup, setRestoringBackup] = useState(false)
   const currentProject = projectOf(route)
 
   // The sidebar's Project group leads into the project that is open or, on a
-  // page outside any project (My Space, the dashboard), the last one opened.
+  // page outside any project (My Area, the dashboard), the last one opened.
   const [lastProject, setLastProject] = useState(0)
   useEffect(() => setLastProject(readLastProject(user?.id)), [user?.id])
   useEffect(() => {
@@ -171,10 +172,6 @@ export function App() {
         route.name === 'projects' ? (
           <>
             <SearchInput value={search} onChange={setSearch} placeholder="Search projects…" />
-            <Button size="sm" variant="secondary" onClick={() => setRestoringBackup(true)}>
-              <ArchiveRestore className="h-3.5 w-3.5" />
-              Restore backup
-            </Button>
             <Button size="sm" onClick={() => setCreatingProject(true)}>
               <Plus className="h-3.5 w-3.5" />
               New project
@@ -194,7 +191,7 @@ export function App() {
       )}
       {route.name === 'projectDashboard' && <ProjectDashboard projectId={route.projectId} />}
       {route.name === 'project' && <PublishedList projectId={route.projectId} />}
-      {route.name === 'inProgress' && <ProjectDetail projectId={route.projectId} />}
+      {route.name === 'inProgress' && <ProjectDetail key={route.projectId} projectId={route.projectId} />}
       {route.name === 'feature' && (
         <FeatureDetail
           projectId={route.projectId}
@@ -224,6 +221,7 @@ export function App() {
       {route.name === 'team' && <Team />}
       {route.name === 'templates' && <Templates />}
       {route.name === 'imports' && <Imports />}
+      {route.name === 'backups' && <Backups />}
       {route.name === 'playground' && <Playground />}
       {route.name === 'myWorking' && <MyWorkingLatest />}
       {route.name === 'myVersions' && <MyVersionsPage />}
@@ -237,15 +235,6 @@ export function App() {
           onClose={() => setCreatingProject(false)}
           onCreated={(projectId) => {
             setCreatingProject(false)
-            navigate({ name: 'project', projectId })
-          }}
-        />
-      )}
-      {restoringBackup && (
-        <RestoreBackupDialog
-          onClose={() => setRestoringBackup(false)}
-          onOpenProject={(projectId) => {
-            setRestoringBackup(false)
             navigate({ name: 'project', projectId })
           }}
         />
@@ -269,7 +258,7 @@ const SCOPED_TITLE: Partial<Record<Route['name'], string>> = {
   contracts: 'Contracts',
   briefing: 'Briefing',
   versions: 'Versions',
-  inProgress: 'Working list',
+  inProgress: 'Feature List',
   merge: 'Merge a copy',
   compare: 'Compare',
 }
@@ -290,33 +279,35 @@ function Title() {
     case 'projects':
       return <span>Projects</span>
     case 'team':
-      return <span>Team</span>
+      return <span>Teams</span>
     case 'templates':
       return <span>Templates</span>
     case 'imports':
       return <span>Import a project</span>
+    case 'backups':
+      return <span>Backup &amp; Restore</span>
     case 'playground':
       return <span>Playground</span>
     case 'myWorking':
     case 'myCopy':
       return (
         <span>
-          My Space
-          <span className="ml-2 font-normal text-muted">Working</span>
+          My Area
+          <span className="ml-2 font-normal text-muted">My Feature List</span>
         </span>
       )
     case 'mySpace':
       return (
         <span>
-          My Space
+          My Area
           <span className="ml-2 font-normal text-muted">Dashboard</span>
         </span>
       )
     case 'myVersions':
       return (
         <span>
-          My Space
-          <span className="ml-2 font-normal text-muted">My Versions</span>
+          My Area
+          <span className="ml-2 font-normal text-muted">My Saved Versions</span>
         </span>
       )
     case 'project':

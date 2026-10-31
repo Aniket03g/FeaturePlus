@@ -41,7 +41,7 @@ export function MySpaceDashboard() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-base font-semibold text-ink">My Space</h2>
+        <h2 className="text-base font-semibold text-ink">My Area</h2>
         <p className="mt-0.5 text-sm text-muted">What you are working on, and what changed in your projects.</p>
       </div>
 
@@ -95,7 +95,7 @@ export function MySpaceDashboard() {
                         </span>
                       </span>
                       {p.latest && p.unpublished > 0 && (
-                        <Badge tone="warning" title="Changes in the Working list since the latest publish">
+                        <Badge tone="warning" title="Changes in the Feature List since the latest publish">
                           {plural(p.unpublished, 'unpublished change')}
                         </Badge>
                       )}
@@ -167,7 +167,7 @@ function ContinueCard() {
           <>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-ink">No copy to work on yet</p>
-              <p className="text-xs text-muted">Pull a project's Published or Working list into My Space to rework it.</p>
+              <p className="text-xs text-muted">Pull a project's Published list or Feature List into My Area to rework it.</p>
             </div>
             <Button size="sm" onClick={() => navigate({ name: 'myWorking' })}>
               <Plus className="h-3.5 w-3.5" />

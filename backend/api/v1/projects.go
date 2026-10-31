@@ -232,6 +232,9 @@ func (h *ProjectsHandler) Delete(c *gin.Context) {
 	if dbErr := h.db.Where("project_id = ?", id).Delete(&models.FeatureCopy{}).Error; dbErr != nil {
 		log.WithError(dbErr).WithField("project", id).Warn("could not remove a deleted project's copies")
 	}
+	if dbErr := h.db.Where("project_id = ?", id).Delete(&models.ProjectVisit{}).Error; dbErr != nil {
+		log.WithError(dbErr).WithField("project", id).Warn("could not remove a deleted project's visits")
+	}
 
 	api.NoContent(c)
 }

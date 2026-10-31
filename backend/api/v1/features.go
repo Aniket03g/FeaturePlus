@@ -36,6 +36,7 @@ func (h *FeaturesHandler) Register(g *gin.RouterGroup) {
 	g.POST("/projects/:id/features", h.Create)
 	g.GET("/projects/:id/tags", h.ProjectTags)
 	g.POST("/projects/:id/features/clear-colors", h.ClearColors)
+	g.POST("/projects/:id/visit", h.Visit)
 
 	features := g.Group("/features")
 	{

@@ -92,7 +92,7 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
             </Button>
           )}
           {canSave && (
-            <Button size="sm" variant="secondary" className="gap-1.5" onClick={() => setSaving(true)} title="Save the Working list without publishing it">
+            <Button size="sm" variant="secondary" className="gap-1.5" onClick={() => setSaving(true)} title="Save the Feature List without publishing it">
               <Plus className="h-3.5 w-3.5" />
               Save checkpoint
             </Button>
@@ -314,12 +314,12 @@ function VersionsTab({
         <EmptyScreen
           picture={<StackPicture />}
           title="Nothing published yet"
-          text="Publishing makes the Working list the published one that everyone reads. Each publish is kept here as Published #1, #2… so you can always look back and compare."
+          text="Publishing makes the Feature List the published one that everyone reads. Each publish is kept here as Published #1, #2… so you can always look back and compare."
         >
           {onPublish ? (
             <Button onClick={onPublish}>
               <Send className="h-3.5 w-3.5" />
-              Publish the Working list
+              Publish the Feature List
             </Button>
           ) : (
             <p className="text-sm text-faint">An owner or editor of this project can publish.</p>
@@ -399,7 +399,7 @@ function InProgressCard({ projectId, latest, onPublish }: { projectId: number; l
               className="font-medium text-ink hover:underline"
               onClick={() => navigate({ name: 'inProgress', projectId })}
             >
-              Working list
+              Feature List
             </button>
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
@@ -520,7 +520,7 @@ function PublishRow({
             size="sm"
             className="h-7 gap-1 px-2 text-xs"
             onClick={() => navigate({ name: 'compare', projectId, from: String(version.id), to: 'current' })}
-            title="Compare with the Working list, or another version"
+            title="Compare with the Feature List, or another version"
           >
             <span className="hidden sm:inline">Compare</span>
             <GitCompare className="h-3.5 w-3.5 sm:hidden" />

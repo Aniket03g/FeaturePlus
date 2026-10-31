@@ -30,6 +30,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
  *   /app/team                                people and roles
  *   /app/templates                           the template catalogue
  *   /app/imports                             saved analyses and GitHub import
+ *   /app/backups                             back up a project, or restore one
  *   /app/playground                          draft a feature list, then import it
  *   /app/my/working                          My Space: the copy you edited last, open for editing
  *   /app/my/working/:projectId/:copyId       one particular copy, open for editing
@@ -60,6 +61,7 @@ export type Route =
   | { name: 'team' }
   | { name: 'templates' }
   | { name: 'imports' }
+  | { name: 'backups' }
   | { name: 'playground' }
   | { name: 'myWorking' }
   | { name: 'myVersions' }
@@ -73,6 +75,7 @@ const TOP_LEVEL: Record<string, Route> = {
   team: { name: 'team' },
   templates: { name: 'templates' },
   imports: { name: 'imports' },
+  backups: { name: 'backups' },
   playground: { name: 'playground' },
 }
 
@@ -205,6 +208,8 @@ export function routeToPath(route: Route): string {
       return `${BASE}/templates`
     case 'imports':
       return `${BASE}/imports`
+    case 'backups':
+      return `${BASE}/backups`
     case 'playground':
       return `${BASE}/playground`
   }

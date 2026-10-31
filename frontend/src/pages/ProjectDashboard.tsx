@@ -127,10 +127,10 @@ function PlanStatus({ projectId, canEdit }: { projectId: number; canEdit: boolea
         </div>
 
         <div>
-          <p className="text-2xs font-semibold uppercase tracking-wider text-faint">Working</p>
+          <p className="text-2xs font-semibold uppercase tracking-wider text-faint">Feature List</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm">
             {!latest ? (
-              <span className="text-muted">Everything in the Working list is unpublished.</span>
+              <span className="text-muted">Everything in the Feature List is unpublished.</span>
             ) : since.isLoading ? (
               <Skeleton className="h-5 w-40" />
             ) : changes === 0 ? (
@@ -157,7 +157,7 @@ function PlanStatus({ projectId, canEdit }: { projectId: number; canEdit: boolea
             )}
             <Button variant="secondary" size="sm" onClick={() => navigate({ name: 'inProgress', projectId })}>
               <Pencil className="h-3.5 w-3.5" />
-              Open Working
+              Open Feature List
             </Button>
             {canEdit && (!latest || changes > 0) && (
               <Button size="sm" onClick={() => setPublishing(true)}>

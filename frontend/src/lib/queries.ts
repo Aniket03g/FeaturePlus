@@ -79,11 +79,12 @@ export function useProjects(params: { page?: number; q?: string; per_page?: numb
 
 /**
  * For the screens two people may have open at once: check the server every
- * 10 seconds while the tab is showing, and straight away when someone comes
- * back to it, so one person's changes reach the other without a refresh.
- * Nothing is fetched while the tab is in the background.
+ * 5 minutes while the tab is showing, and straight away when someone comes
+ * back to it, so one person's changes reach the other. The Working list also
+ * has a Refresh button for when that's too slow. Nothing is fetched while the
+ * tab is in the background.
  */
-const SHARED_LIVE = { refetchInterval: 10_000, refetchOnWindowFocus: 'always' } as const
+const SHARED_LIVE = { refetchInterval: 5 * 60_000, refetchOnWindowFocus: 'always' } as const
 
 export function useProject(id: number) {
   return useQuery({
@@ -265,6 +266,16 @@ export function useClearColors(projectId: number) {
       queryClient.invalidateQueries({ queryKey: ['features', projectId] })
       queryClient.invalidateQueries({ queryKey: ['feature'] })
     },
+  })
+}
+
+/**
+ * Records that you opened the project's working list now, and answers with
+ * when you last did (null the first time), to show what changed in between.
+ */
+export function useProjectVisit(projectId: number) {
+  return useMutation({
+    mutationFn: () => api.post<{ previous: string | null }>(`/projects/${projectId}/visit`),
   })
 }
 

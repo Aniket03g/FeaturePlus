@@ -150,13 +150,13 @@ export function PublishedList({ projectId }: { projectId: number }) {
             </div>
             <p className="text-sm font-medium text-ink">Nothing published yet</p>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted">
-              The published list is the agreed plan. It is made by publishing the Working list
+              The published list is the agreed plan. It is made by publishing the Feature List
               {canPublish ? '.' : ', which an owner or editor of this project can do.'}
             </p>
             {canPublish && (
               <Button size="sm" className="mt-3" onClick={() => navigate({ name: 'inProgress', projectId })}>
                 <Pencil className="h-3.5 w-3.5" />
-                Go to the Working list to publish
+                Go to the Feature List to publish
               </Button>
             )}
           </CardBody>
@@ -176,7 +176,7 @@ export function PublishedList({ projectId }: { projectId: number }) {
             {canPublish && (
               <Button variant="secondary" size="sm" className="h-7" onClick={() => navigate({ name: 'inProgress', projectId })}>
                 <Pencil className="h-3 w-3" />
-                Edit in the Working list
+                Edit in the Feature List
               </Button>
             )}
           </div>

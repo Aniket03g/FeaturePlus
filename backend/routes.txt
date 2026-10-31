@@ -156,12 +156,13 @@ Method: POST, Path: /api/v1/projects/:id/copies/:copyId/unpublish
 Method: POST, Path: /api/v1/projects/:id/copies/:copyId/merge
 Method: POST, Path: /api/v1/projects/:id/features
 Method: POST, Path: /api/v1/projects/:id/features/clear-colors
+Method: POST, Path: /api/v1/projects/:id/visit
+Method: POST, Path: /api/v1/projects/:id/versions
 Method: POST, Path: /api/v1/projects/:id/transfer
 Method: POST, Path: /api/v1/projects/:id/template
 Method: POST, Path: /api/v1/projects/:id/members
 Method: POST, Path: /api/v1/projects/:id/dependencies
 Method: POST, Path: /api/v1/projects/:id/releases
-Method: POST, Path: /api/v1/projects/:id/versions
 Method: POST, Path: /api/v1/projects/:id/publish
 Method: POST, Path: /api/v1/projects/:id/github/sync
 Method: POST, Path: /api/v1/playground/import

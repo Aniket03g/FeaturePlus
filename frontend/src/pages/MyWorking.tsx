@@ -89,7 +89,7 @@ function copySource(copy: MyCopy | { source: string; base: MyCopy['base']; creat
   return `uploaded file, based on v${copy.base.number}`
 }
 
-// ---------- My Versions: the list of your copies ----------
+// ---------- My Saved Versions: the list of your copies ----------
 
 export function MyVersionsPage() {
   const { navigate } = useRouter()
@@ -117,7 +117,7 @@ export function MyVersionsPage() {
         <div className="min-w-[16rem] flex-1">
           <h2 className="flex items-center gap-2 text-base font-semibold text-ink">
             <GitBranch className="h-4 w-4 text-faint" />
-            My Versions
+            My Saved Versions
           </h2>
           <p className="mt-0.5 text-sm text-muted">Your own copies of feature lists, to change as you like.</p>
         </div>
@@ -152,7 +152,7 @@ export function MyVersionsPage() {
           <CardBody className="px-4 py-14 text-center">
             <p className="text-sm font-medium text-ink">No copies yet</p>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted">
-              Pull a project's Published or Working list in here, then rework it however you like without touching the
+              Pull a project's Published list or Feature List in here, then rework it however you like without touching the
               project.
             </p>
             <Button size="sm" className="mt-3" onClick={() => setStarting(true)}>
@@ -344,7 +344,7 @@ function StartWorkingCopyDialog({
                 latest ? 'The agreed plan, as last published.' : 'Nothing has been published in this project yet.',
                 published.isSuccess && !latest,
               )}
-              {choice('working', 'Working', 'The project’s list as it is right now, including unpublished changes.')}
+              {choice('working', 'Feature List', 'The project’s list as it is right now, including unpublished changes.')}
             </div>
           )}
           <Input
@@ -373,7 +373,7 @@ function StartWorkingCopyDialog({
 /**
  * Opens your most recently edited copy that can still be edited, so Working
  * is where you left off. Copies shared or merged before are read-only and are
- * skipped; they stay reachable from My Versions.
+ * skipped; they stay reachable from My Saved Versions.
  */
 export function MyWorkingLatest() {
   const { navigate } = useRouter()
@@ -416,9 +416,9 @@ export function MyWorkingLatest() {
         <CardBody className="px-4 py-14 text-center">
           <p className="text-sm font-medium text-ink">Nothing to work on yet</p>
           <p className="mx-auto mt-1 max-w-md text-xs text-muted">
-            Pull a project's Published or Working list in here, then rework it however you like without touching the
+            Pull a project's Published list or Feature List in here, then rework it however you like without touching the
             project.
-            {others > 0 && ' Your older copies are read-only; find them in My Versions.'}
+            {others > 0 && ' Your older copies are read-only; find them in My Saved Versions.'}
           </p>
           <div className="mt-3 flex justify-center gap-2">
             <Button size="sm" onClick={() => setStarting(true)}>
@@ -427,7 +427,7 @@ export function MyWorkingLatest() {
             </Button>
             {others > 0 && (
               <Button size="sm" variant="secondary" onClick={() => navigate({ name: 'myVersions' })}>
-                My Versions
+                My Saved Versions
               </Button>
             )}
           </div>
@@ -474,7 +474,7 @@ function CopySwitcher({ projectId, copyId }: { projectId: number; copyId: number
         New copy
       </Button>
       <Button variant="ghost" size="sm" className="h-8" onClick={() => navigate({ name: 'myVersions' })}>
-        All in My Versions
+        All in My Saved Versions
       </Button>
       {starting && (
         <StartWorkingCopyDialog

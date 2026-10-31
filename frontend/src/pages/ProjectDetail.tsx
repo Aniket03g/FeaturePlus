@@ -1,21 +1,20 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
-  Archive,
   ArrowLeft,
   Check,
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
+  Clock,
   Download,
-  FileCode,
   GripVertical,
   History,
-  LayoutTemplate,
   ListChecks,
   Loader2,
-  Network,
   Palette,
+  RefreshCw,
   Send,
   Plus,
   Users,
@@ -28,13 +27,13 @@ import {
   useMoveFeature,
   useProject,
   useProjectTags,
+  useProjectVisit,
   useUpdateFeature,
 } from '@/lib/queries'
 import { gapTarget, intoTarget, MAX_DEPTH, type DropRow, type DropTarget } from '@/lib/tree-drop'
-import { downloadFeatureFile, FEATURE_FILE_NAME } from '@/lib/feature-file'
-import { downloadBackup } from '@/lib/backup'
 import { useRouter } from '@/lib/router'
 import { ApiError } from '@/lib/api'
+import { downloadFeatureFile, FEATURE_FILE_NAME } from '@/lib/feature-file'
 import { Card, CardBody } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -43,7 +42,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
 import { NewFeatureDialog } from './NewFeatureDialog'
 import { ColorDot } from '@/components/FeatureColor'
-import { ApplyTemplateDialog } from './ApplyTemplateDialog'
 import { ShareDialog } from './ShareDialog'
 import { PublishDialog } from './PublishDialog'
 import { cn, percent, plural } from '@/lib/utils'
@@ -188,14 +186,26 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   const [tag, setTag] = useState('')
   const [search, setSearch] = useState('')
   const [creating, setCreating] = useState(false)
-  const [applying, setApplying] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [recentOnly, setRecentOnly] = useState(false)
 
-  const filters = useMemo(
-    () => ({ status: statuses, tag, q: search }),
-    [statuses, tag, search],
-  )
+  // When you last opened this list: undefined until the server answers, null
+  // on a first visit. Asked once per visit, which also records this one, so
+  // the next visit counts from now.
+  const [since, setSince] = useState<string | null | undefined>(undefined)
+  const recordVisit = useProjectVisit(projectId)
+  const visited = useRef(false)
+  useEffect(() => {
+    if (visited.current) return
+    visited.current = true
+    recordVisit.mutate(undefined, {
+      onSuccess: (visit) => setSince(visit.previous),
+      onError: () => setSince(null),
+    })
+  }, [recordVisit])
+
+  const filters = useMemo(() => ({ status: statuses, tag, q: search }), [statuses, tag, search])
 
   const project = useProject(projectId)
   const features = useFeatures(projectId, filters)
@@ -218,8 +228,24 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
     if (parentId !== null) setOpen((current) => ({ ...current, [parentId]: true }))
   }
 
-  const hasFilters = statuses.length > 0 || tag !== '' || search !== ''
-  const items = features.data?.items ?? []
+  // What changed since your last visit: new features, and ones edited since.
+  const changes = useMemo(() => {
+    const out = new Map<number, 'new' | 'changed'>()
+    if (!since) return out
+    const last = new Date(since).getTime()
+    for (const f of allFeatures.data?.items ?? []) {
+      if (new Date(f.created_at).getTime() > last) out.set(f.id, 'new')
+      else if (new Date(f.updated_at).getTime() > last) out.set(f.id, 'changed')
+    }
+    return out
+  }, [since, allFeatures.data])
+
+  const hasFilters = statuses.length > 0 || tag !== '' || search !== '' || recentOnly
+  const fetched = useMemo(() => features.data?.items ?? [], [features.data])
+  const items = useMemo(
+    () => (recentOnly ? fetched.filter((f) => changes.has(f.id)) : fetched),
+    [recentOnly, fetched, changes],
+  )
 
   // Which parents are open, by feature id. Unset means the default: L0 open,
   // deeper levels closed, so a big project opens on its outline.
@@ -240,8 +266,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
     () => buildTree(allFeatures.data?.items ?? items, hasFilters ? items : null),
     [allFeatures.data, items, hasFilters],
   )
-  const isOpen = (node: TreeNode) =>
-    hasFilters || (open[node.feature.id] ?? node.depth === 0)
+  const isOpen = (node: TreeNode) => hasFilters || (open[node.feature.id] ?? node.depth === 0)
   const rows = visibleRows(tree, isOpen)
   const hasNesting = tree.some((node) => node.children.length > 0)
 
@@ -376,15 +401,14 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   }
 
   function toggleStatus(status: FeatureStatus) {
-    setStatuses((current) =>
-      current.includes(status) ? current.filter((s) => s !== status) : [...current, status],
-    )
+    setStatuses((current) => (current.includes(status) ? current.filter((s) => s !== status) : [...current, status]))
   }
 
   function clearFilters() {
     setStatuses([])
     setTag('')
     setSearch('')
+    setRecentOnly(false)
   }
 
   if (project.isError) {
@@ -425,7 +449,9 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             <>
               <div className="flex items-center gap-2">
                 <h2 className="truncate text-base font-semibold text-ink">{project.data?.name}</h2>
-                <Badge tone="accent" className="shrink-0 whitespace-nowrap">Working</Badge>
+                <Badge tone="accent" className="shrink-0 whitespace-nowrap">
+                  Feature List
+                </Badge>
                 {role && role !== 'owner' && (
                   <Badge
                     tone={role === 'admin' ? 'warning' : 'neutral'}
@@ -439,55 +465,22 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                   </Badge>
                 )}
               </div>
-              {project.data?.description && (
-                <p className="mt-0.5 text-sm text-muted">{project.data.description}</p>
-              )}
+              {project.data?.description && <p className="mt-0.5 text-sm text-muted">{project.data.description}</p>}
             </>
           )}
         </div>
 
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => navigate({ name: 'code', projectId })}
-          >
-            <FileCode className="h-3.5 w-3.5" />
-            Code
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => navigate({ name: 'dependencies', projectId })}
-          >
-            <Network className="h-3.5 w-3.5" />
-            Dependencies
-          </Button>
-          <DownloadFileButton projectId={projectId} />
-          {role === 'owner' && <BackupButton projectId={projectId} />}
-          <Button variant="secondary" size="sm" onClick={() => navigate({ name: 'versions', projectId })}>
-            <History className="h-3.5 w-3.5" />
-            Versions
-          </Button>
+          <RefreshButton />
           <Button variant="secondary" size="sm" onClick={() => setSharing(true)}>
             <Users className="h-3.5 w-3.5" />
             Share
           </Button>
           {canEdit && (
-            <>
-              <Button variant="secondary" size="sm" onClick={() => setApplying(true)}>
-                <LayoutTemplate className="h-3.5 w-3.5" />
-                Template
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => setCreating(true)}>
-                <Plus className="h-3.5 w-3.5" />
-                New feature
-              </Button>
-              <Button size="sm" onClick={() => setPublishing(true)} title="Make this list the published one">
-                <Send className="h-3.5 w-3.5" />
-                Publish
-              </Button>
-            </>
+            <Button size="sm" onClick={() => setPublishing(true)} title="Make this list the published one">
+              <Send className="h-3.5 w-3.5" />
+              Publish
+            </Button>
           )}
         </div>
       </div>
@@ -497,94 +490,105 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
           <MiniStat label="Features" value={stats.feature_count} />
           <MiniStat label="Done" value={stats.completed_features} tone="success" />
           <MiniStat label="Tasks" value={stats.task_count} />
-          <MiniStat
-            label="Progress"
-            value={`${percent(stats.completed_features, stats.feature_count)}%`}
-          />
+          <MiniStat label="Progress" value={`${percent(stats.completed_features, stats.feature_count)}%`} />
         </div>
       )}
 
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
-          <div className="flex gap-1">
-            {STATUSES.map((status) => (
-              <FilterChip
-                key={status}
-                active={statuses.includes(status)}
-                onClick={() => toggleStatus(status)}
-              >
-                {STATUS_LABEL[status]}
-              </FilterChip>
-            ))}
-          </div>
-
-          {(tags.data?.items.length ?? 0) > 0 && (
+          {!arranging && (
             <>
-              <div className="mx-1 h-5 w-px bg-border" />
-              <div className="flex flex-wrap gap-1">
-                {tags.data?.items.slice(0, 8).map((t) => (
-                  <FilterChip
-                    key={t.name}
-                    active={tag === t.name}
-                    onClick={() => setTag(tag === t.name ? '' : t.name)}
-                  >
-                    {t.name}
-                    <span className="ml-1 text-faint">{t.count}</span>
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search features…"
+                aria-label="Search features"
+                className="h-7 w-48 rounded-md border border-border bg-bg px-2.5 text-xs text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
+              />
+
+              <div className="flex gap-1">
+                {STATUSES.map((status) => (
+                  <FilterChip key={status} active={statuses.includes(status)} onClick={() => toggleStatus(status)}>
+                    {STATUS_LABEL[status]}
                   </FilterChip>
                 ))}
               </div>
-            </>
-          )}
 
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter features…"
-            aria-label="Filter features"
-            className="ml-auto h-7 w-48 rounded-md border border-border bg-bg px-2.5 text-xs text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
-          />
+              {(tags.data?.items.length ?? 0) > 0 && (
+                <>
+                  <div className="mx-1 h-5 w-px bg-border" />
+                  <div className="flex flex-wrap gap-1">
+                    {tags.data?.items.slice(0, 8).map((t) => (
+                      <FilterChip
+                        key={t.name}
+                        active={tag === t.name}
+                        onClick={() => setTag(tag === t.name ? '' : t.name)}
+                      >
+                        {t.name}
+                        <span className="ml-1 text-faint">{t.count}</span>
+                      </FilterChip>
+                    ))}
+                  </div>
+                </>
+              )}
 
-          {hasFilters && (
-            <Button variant="ghost" size="sm" className="h-7" onClick={clearFilters}>
-              <X className="h-3 w-3" />
-              Clear
-            </Button>
-          )}
+              {canEdit &&
+                (allFeatures.data?.items ?? []).some((f) => f.color) &&
+                (clearingColors ? (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="text-danger">Remove every colour, for everyone?</span>
+                    <Button variant="secondary" size="sm" className="h-7" onClick={() => setClearingColors(false)}>
+                      Keep
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-7 bg-danger hover:bg-danger/90"
+                      loading={clearColors.isPending}
+                      onClick={() =>
+                        clearColors.mutate(undefined, {
+                          onSettled: () => setClearingColors(false),
+                          onError: (err) =>
+                            setMoveError(err instanceof ApiError ? err.message : 'Could not remove the colours'),
+                        })
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-7"
+                    onClick={() => setClearingColors(true)}
+                    title="Take the colour off every feature in this project"
+                  >
+                    <Palette className="h-3 w-3" />
+                    Remove colours
+                  </Button>
+                ))}
 
-          {canEdit &&
-            (allFeatures.data?.items ?? []).some((f) => f.color) &&
-            (clearingColors ? (
-              <div className="flex items-center gap-1.5 text-xs">
-                <span className="text-danger">Remove every colour, for everyone?</span>
-                <Button variant="secondary" size="sm" className="h-7" onClick={() => setClearingColors(false)}>
-                  Keep
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-7 bg-danger hover:bg-danger/90"
-                  loading={clearColors.isPending}
-                  onClick={() =>
-                    clearColors.mutate(undefined, {
-                      onSettled: () => setClearingColors(false),
-                      onError: (err) => setMoveError(err instanceof ApiError ? err.message : 'Could not remove the colours'),
-                    })
-                  }
-                >
-                  Remove
-                </Button>
-              </div>
-            ) : (
               <Button
-                variant="secondary"
+                variant={recentOnly ? 'primary' : 'secondary'}
                 size="sm"
                 className="h-7"
-                onClick={() => setClearingColors(true)}
-                title="Take the colour off every feature in this project"
+                aria-pressed={recentOnly}
+                disabled={!since}
+                onClick={() => setRecentOnly((v) => !v)}
+                title={
+                  since === undefined
+                    ? 'Checking your last visit…'
+                    : since === null
+                      ? 'From your next visit, what changed since this one shows here'
+                      : `Show only what is new or changed since your last visit (${when(since)})`
+                }
               >
-                <Palette className="h-3 w-3" />
-                Remove colours
+                <Clock className="h-3 w-3" />
+                Recent changes
+                {since && <span className={cn('tabular-nums', !recentOnly && 'text-faint')}>{changes.size}</span>}
               </Button>
-            ))}
+            </>
+          )}
 
           {canEdit && items.length > 0 && (
             <Button
@@ -609,6 +613,33 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
               {arranging ? <Check className="h-3 w-3" /> : <GripVertical className="h-3 w-3" />}
               {arranging ? 'Done arranging' : 'Arrange'}
             </Button>
+          )}
+
+          {!arranging && (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-7"
+                onClick={() => navigate({ name: 'versions', projectId })}
+              >
+                <History className="h-3 w-3" />
+                Versions
+              </Button>
+              <DownloadFileButton projectId={projectId} />
+              {canEdit && (
+                <Button size="sm" className="h-7" onClick={() => setCreating(true)}>
+                  <Plus className="h-3 w-3" />
+                  Add feature
+                </Button>
+              )}
+              {hasFilters && (
+                <Button variant="ghost" size="sm" className="h-7" onClick={clearFilters}>
+                  <X className="h-3 w-3" />
+                  Clear
+                </Button>
+              )}
+            </>
           )}
 
           {hasNesting && !hasFilters && (
@@ -653,16 +684,9 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
               </div>
               <p className="text-sm font-medium text-ink">Could not load features</p>
               <p className="mx-auto mt-1 max-w-md text-xs text-muted">
-                {features.error instanceof ApiError
-                  ? features.error.message
-                  : 'The server could not be reached.'}
+                {features.error instanceof ApiError ? features.error.message : 'The server could not be reached.'}
               </p>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-3"
-                onClick={() => features.refetch()}
-              >
+              <Button variant="secondary" size="sm" className="mt-3" onClick={() => features.refetch()}>
                 Try again
               </Button>
             </div>
@@ -672,7 +696,11 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                 <ListChecks className="h-5 w-5" />
               </div>
               <p className="text-sm font-medium text-ink">
-                {hasFilters ? 'No features match these filters' : 'No features yet'}
+                {recentOnly && since && !(statuses.length > 0 || tag !== '' || search !== '')
+                  ? `Nothing has changed since your last visit (${when(since)})`
+                  : hasFilters
+                    ? 'No features match these filters'
+                    : 'No features yet'}
               </p>
               {hasFilters ? (
                 <Button variant="ghost" size="sm" className="mt-2" onClick={clearFilters}>
@@ -699,8 +727,8 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-accent-soft/40 px-4 py-2 text-xs text-muted">
                   <GripVertical className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden />
                   <span className="min-w-0 flex-1">
-                    Drag a feature by its handle. Drop it between rows to place it there (slide right or left for a deeper or
-                    higher level), or onto a row to put it inside. Features go down to L{MAX_DEPTH}.
+                    Drag a feature by its handle. Drop it between rows to place it there (slide right or left for a
+                    deeper or higher level), or onto a row to put it inside. Features go down to L{MAX_DEPTH}.
                   </span>
                   {moveError && <span className="text-danger">{moveError}</span>}
                 </div>
@@ -714,19 +742,19 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                     moving={drag?.excluded.has(node.feature.id) ?? false}
                     open={isOpen(node)}
                     canToggle={!hasFilters}
-                    onToggle={() =>
-                      setOpen((current) => ({ ...current, [node.feature.id]: !isOpen(node) }))
-                    }
-                    onOpen={() =>
-                      navigate({ name: 'feature', projectId, featureId: node.feature.id, editable: true })
-                    }
+                    onToggle={() => setOpen((current) => ({ ...current, [node.feature.id]: !isOpen(node) }))}
+                    onOpen={() => navigate({ name: 'feature', projectId, featureId: node.feature.id, editable: true })}
                     adding={addingTo === node.feature.id}
+                    change={changes.get(node.feature.id)}
                     onColor={
                       canEdit
                         ? (color) =>
                             updateFeature.mutate(
                               { id: node.feature.id, color },
-                              { onError: (err) => setMoveError(err instanceof ApiError ? err.message : 'Could not change the colour') },
+                              {
+                                onError: (err) =>
+                                  setMoveError(err instanceof ApiError ? err.message : 'Could not change the colour'),
+                              },
                             )
                         : undefined
                     }
@@ -752,7 +780,9 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                   aria-hidden
                   className={cn(
                     'pointer-events-none absolute right-2 z-20',
-                    drag.mark.height > 0 ? 'rounded-md border-2 border-accent bg-accent-soft/30' : 'h-0.5 rounded-full bg-accent',
+                    drag.mark.height > 0
+                      ? 'rounded-md border-2 border-accent bg-accent-soft/30'
+                      : 'h-0.5 rounded-full bg-accent',
                   )}
                   style={{
                     top: drag.mark.height > 0 ? drag.mark.top : drag.mark.top - 1,
@@ -806,18 +836,12 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
 
       {items.length > 0 && (
         <p className="text-xs text-faint">
-          {plural(features.data?.meta.total ?? 0, 'feature')}
+          {plural(recentOnly ? items.length : (features.data?.meta.total ?? 0), 'feature')}
           {hasFilters && ' matching'}
         </p>
       )}
 
-      {creating && (
-        <NewFeatureDialog projectId={projectId} onClose={() => setCreating(false)} />
-      )}
-
-      {applying && (
-        <ApplyTemplateDialog projectId={projectId} onClose={() => setApplying(false)} />
-      )}
+      {creating && <NewFeatureDialog projectId={projectId} onClose={() => setCreating(false)} />}
 
       {sharing && project.data && (
         <ShareDialog
@@ -839,24 +863,13 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   )
 }
 
-function MiniStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: number | string
-  tone?: 'success'
-}) {
+function MiniStat({ label, value, tone }: { label: string; value: number | string; tone?: 'success' }) {
   return (
     <Card>
       <CardBody className="px-3 py-2.5">
         <p className="text-2xs font-medium uppercase tracking-wider text-faint">{label}</p>
         <p
-          className={cn(
-            'mt-0.5 text-lg font-semibold tabular-nums',
-            tone === 'success' ? 'text-success' : 'text-ink',
-          )}
+          className={cn('mt-0.5 text-lg font-semibold tabular-nums', tone === 'success' ? 'text-success' : 'text-ink')}
         >
           {value}
         </p>
@@ -893,6 +906,8 @@ function FilterChip({
 /** Indent per level, in pixels. */
 const INDENT = 20
 
+const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
 /**
  * Room at the left of every row before the tree starts: the colour circles sit
  * here, in one column whatever a feature's level.
@@ -924,8 +939,11 @@ function FeatureRow({
   adding,
   onAddInside,
   onColor,
+  change,
 }: {
   node: TreeNode
+  /** New or changed since your last visit. */
+  change?: 'new' | 'changed'
   /** Arrange mode: a handle to drag by, and the row no longer opens the feature. */
   arranging: boolean
   onGrab: (event: ReactPointerEvent) => void
@@ -983,10 +1001,7 @@ function FeatureRow({
         />
       ))}
 
-      <div
-        className="flex shrink-0 items-center self-stretch"
-        style={{ paddingLeft: gutter + LEAD + depth * INDENT }}
-      >
+      <div className="flex shrink-0 items-center self-stretch" style={{ paddingLeft: gutter + LEAD + depth * INDENT }}>
         {children.length > 0 ? (
           // The click area spans the full row height and 8px either side of the
           // arrow, so a near-miss toggles instead of opening the feature.
@@ -1011,7 +1026,10 @@ function FeatureRow({
           button that keyboard users reach, and its click bubbles up here. */}
       <div
         onClick={arranging ? undefined : onOpen}
-        className={cn('flex min-w-0 flex-1 items-center gap-4 py-3 pl-2 pr-4 text-left', !arranging && 'cursor-pointer')}
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-4 py-3 pl-2 pr-4 text-left',
+          !arranging && 'cursor-pointer',
+        )}
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -1027,6 +1045,15 @@ function FeatureRow({
             >
               {feature.title}
             </button>
+            {change && (
+              <Badge
+                tone={change === 'new' ? 'success' : 'warning'}
+                className="shrink-0"
+                title={change === 'new' ? 'Added since your last visit' : 'Changed since your last visit'}
+              >
+                {change === 'new' ? 'New' : 'Changed'}
+              </Badge>
+            )}
             {parts.total > 0 && (
               <span
                 className={cn(
@@ -1063,9 +1090,7 @@ function FeatureRow({
             {/* Categories are not shown in the list for now: the tree already
                 groups features, and the label sat apart from the name. */}
           </div>
-          {feature.description && (
-            <p className="mt-0.5 truncate text-xs text-muted">{feature.description}</p>
-          )}
+          {feature.description && <p className="mt-0.5 truncate text-xs text-muted">{feature.description}</p>}
           {feature.tags.length > 0 && (
             <div className="mt-1.5">
               <TagList tags={feature.tags} />
@@ -1149,20 +1174,10 @@ function QuickAddRow({
     <div className="relative flex items-center bg-accent-soft/40 py-2 pr-4">
       {/* The same guide lines as the rows, so the box sits in the outline. */}
       {Array.from({ length: depth }).map((_, i) => (
-        <span
-          key={i}
-          aria-hidden
-          className="absolute inset-y-0 w-px bg-border"
-          style={{ left: 16 + 9 + i * INDENT }}
-        />
+        <span key={i} aria-hidden className="absolute inset-y-0 w-px bg-border" style={{ left: 16 + 9 + i * INDENT }} />
       ))}
-      <div
-        className="flex min-w-0 flex-1 items-center gap-2"
-        style={{ paddingLeft: LEAD + depth * INDENT + 18 + 8 }}
-      >
-        <span className="shrink-0 rounded border border-accent/50 px-1 font-mono text-2xs text-accent">
-          L{depth}
-        </span>
+      <div className="flex min-w-0 flex-1 items-center gap-2" style={{ paddingLeft: LEAD + depth * INDENT + 18 + 8 }}>
+        <span className="shrink-0 rounded border border-accent/50 px-1 font-mono text-2xs text-accent">L{depth}</span>
         <input
           ref={input}
           autoFocus
@@ -1183,51 +1198,17 @@ function QuickAddRow({
         {saving && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted" />}
       </div>
       <span className="ml-3 hidden shrink-0 text-2xs sm:block">
-        {error ? <span className="text-danger">{error}</span> : <span className="text-faint">Enter adds · Esc closes</span>}
+        {error ? (
+          <span className="text-danger">{error}</span>
+        ) : (
+          <span className="text-faint">Enter adds · Esc closes</span>
+        )}
       </span>
     </div>
   )
 }
 
-/**
- * Downloads everything in the project as one .zip, to keep safe or to restore
- * on another FeaturePlus. Only the owner sees it, as only they may take one.
- */
-function BackupButton({ projectId }: { projectId: number }) {
-  const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
-  const [message, setMessage] = useState('')
-
-  async function download() {
-    setState('busy')
-    try {
-      await downloadBackup(projectId)
-      setState('idle')
-    } catch (err) {
-      setMessage(err instanceof ApiError ? err.message : 'Download failed')
-      setState('failed')
-    }
-  }
-
-  return (
-    <Button
-      variant="secondary"
-      size="sm"
-      onClick={download}
-      disabled={state === 'busy'}
-      title={
-        state === 'failed'
-          ? `${message}. Click to try again.`
-          : 'Download everything in this project as one file, to keep safe or restore elsewhere'
-      }
-      className={cn(state === 'failed' && 'text-danger')}
-    >
-      {state === 'busy' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
-      {state === 'failed' ? 'Backup failed' : state === 'busy' ? 'Packing…' : 'Backup'}
-    </Button>
-  )
-}
-
-/** Saves the project's features as FEATURES.md, ready to commit to the repo. */
+/** Saves the list as FEATURES.md: every feature with its description and notes. */
 function DownloadFileButton({ projectId }: { projectId: number }) {
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle')
 
@@ -1245,13 +1226,37 @@ function DownloadFileButton({ projectId }: { projectId: number }) {
     <Button
       variant="secondary"
       size="sm"
+      className={cn('h-7', state === 'failed' && 'text-danger')}
       onClick={download}
       disabled={state === 'busy'}
-      title={state === 'failed' ? 'Download failed. Click to try again.' : `Save the feature list as ${FEATURE_FILE_NAME}`}
-      className={cn(state === 'failed' && 'text-danger')}
+      title={
+        state === 'failed' ? 'Download failed. Click to try again.' : `Save the feature list as ${FEATURE_FILE_NAME}`
+      }
     >
-      {state === 'busy' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-      {state === 'failed' ? 'Download failed' : 'Download .md'}
+      {state === 'busy' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+      {state === 'failed' ? 'Download failed' : 'Download'}
+    </Button>
+  )
+}
+
+/**
+ * Fetches everything on screen again now, for when someone else has just made
+ * a change and waiting for the next automatic check is too slow.
+ */
+function RefreshButton() {
+  const queryClient = useQueryClient()
+  const fetching = useIsFetching() > 0
+
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => queryClient.refetchQueries({ type: 'active' })}
+      disabled={fetching}
+      title="Load the latest changes from everyone now"
+    >
+      <RefreshCw className={cn('h-3.5 w-3.5', fetching && 'animate-spin')} />
+      Refresh
     </Button>
   )
 }

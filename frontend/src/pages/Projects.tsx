@@ -205,7 +205,7 @@ function ProjectCard({ project, onOpen }: { project: Project; onOpen: () => void
           )}
         </div>
 
-        <p className="line-clamp-2 min-h-[2rem] text-xs text-muted">
+        <p className="min-h-[2rem] whitespace-pre-line break-words text-xs text-muted">
           {project.description || 'No description'}
         </p>
 

@@ -21,12 +21,11 @@ import {
   Shapes,
   KeyRound,
   ListTree,
-  History,
   MessageSquare,
   GitBranch,
   ArrowLeftRight,
+  Archive,
   BadgeCheck,
-  Pencil,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
@@ -83,28 +82,27 @@ const NAV: NavGroup[] = [
     inProject: true,
     items: [
       { id: 'projectDashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'featureListLabel', label: 'Feature List', icon: ListTree, isLabel: true },
+      // The list everyone edits; Published is the agreed copy of it, and
+      // Versions is reached from the Published screen.
+      { id: 'inProgress', label: 'Feature List', icon: ListTree },
       {
         id: 'featureList',
         label: 'Published',
         icon: BadgeCheck,
-        nested: true,
         extra: { id: 'dependencies', label: 'Dependencies', icon: Network },
       },
-      { id: 'inProgress', label: 'Working', icon: Pencil, nested: true },
-      { id: 'versions', label: 'Versions', icon: History },
       { id: 'messages', label: 'Messages', icon: MessageSquare, soon: true },
+      { id: 'settingsLabel', label: 'Settings', icon: Settings, isLabel: true, anyTime: true },
       // The team page is not per project yet, so it stays usable from anywhere.
-      { id: 'team', label: 'Team', icon: Users, anyTime: true },
+      { id: 'team', label: 'Teams', icon: Users, nested: true, anyTime: true },
     ],
   },
   {
-    heading: 'My Space',
+    heading: 'My Area',
     items: [
       { id: 'myDashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { id: 'myFeatureListLabel', label: 'Feature List', icon: ListTree, isLabel: true },
-      { id: 'myInProgress', label: 'Working', icon: Pencil, nested: true },
-      { id: 'myVersions', label: 'My Versions', icon: GitBranch },
+      { id: 'myInProgress', label: 'My Feature List', icon: ListTree },
+      { id: 'myVersions', label: 'My Saved Versions', icon: GitBranch },
       { id: 'playground', label: 'Playground', icon: Shapes },
     ],
   },
@@ -113,11 +111,12 @@ const NAV: NavGroup[] = [
     items: [
       { id: 'templates', label: 'Templates', icon: LayoutTemplate },
       { id: 'imports', label: 'Import / Export', icon: ArrowLeftRight },
+      { id: 'backups', label: 'Backup & Restore', icon: Archive },
     ],
   },
   {
     // Screens not in the new layout yet, kept reachable until each is decided.
-    heading: 'Other',
+    heading: 'Misc',
     inProject: true,
     items: [
       { id: 'code', label: 'Linked code', icon: FileCode },
