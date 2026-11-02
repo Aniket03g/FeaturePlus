@@ -367,8 +367,8 @@ func (h *MembersHandler) usersByID(members []models.ProjectMember) (map[int]mode
 func shareableRole(raw string) (models.ProjectRole, error) {
 	role := models.ProjectRole(strings.ToLower(strings.TrimSpace(raw)))
 	if !role.IsShareable() {
-		return "", api.Validation("Choose editor or viewer").
-			WithField("role", "Must be editor or viewer")
+		return "", api.Validation("Choose publisher, editor or viewer").
+			WithField("role", "Must be publisher, editor or viewer")
 	}
 	return role, nil
 }

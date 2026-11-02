@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/FeaturePlus/backend/api"
@@ -135,8 +136,7 @@ func TestSaveVersionRefusals(t *testing.T) {
 		status     int
 	}{
 		{"same tag in another case", `{"tag":"release ONE"}`, http.StatusConflict},
-		{"blank tag", `{"tag":"   "}`, http.StatusUnprocessableEntity},
-		{"no tag", `{}`, http.StatusUnprocessableEntity},
+		{"tag too long", `{"tag":"` + strings.Repeat("x", 51) + `"}`, http.StatusUnprocessableEntity},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -98,7 +98,9 @@ export function ComparePage({ projectId, from: fromText, to: toText }: { project
         <optgroup label="Versions">
           {versions.data!.map((v) => (
             <option key={v.id} value={String(v.id)}>
-              v{v.number} · {v.tag}
+              {v.label}
+              {v.publish_number > 0 ? ' · published' : ''}
+              {v.notes || v.tag ? ` · ${v.notes || v.tag}` : ''}
             </option>
           ))}
         </optgroup>

@@ -490,26 +490,35 @@ func (h *VersionsHandler) loadMerge(db *gorm.DB, project *models.Project, copyID
 		return in, api.Internal(err)
 	}
 
-	in.taskCounts = map[uint]int{}
-	ids := make([]uint, 0, len(in.live.Features))
-	for _, row := range in.live.Features {
-		ids = append(ids, row.FeatureID)
-	}
-	if len(ids) > 0 {
-		var counts []struct {
-			FeatureID uint
-			N         int
-		}
-		if err := db.Model(&models.Task{}).Select("feature_id, COUNT(*) AS n").
-			Where("feature_id IN ? AND deleted_at IS NULL", ids).Group("feature_id").Scan(&counts).Error; err != nil {
-			return in, api.Internal(err)
-		}
-		for _, c := range counts {
-			in.taskCounts[c.FeatureID] = c.N
-		}
+	if in.taskCounts, err = taskCountsOf(db, in.live); err != nil {
+		return in, api.Internal(err)
 	}
 	in.copy = fc
 	return in, nil
+}
+
+// taskCountsOf is the number of tasks of each feature in list that has any.
+func taskCountsOf(db *gorm.DB, list OpenedProject) (map[uint]int, error) {
+	out := map[uint]int{}
+	ids := make([]uint, 0, len(list.Features))
+	for _, row := range list.Features {
+		ids = append(ids, row.FeatureID)
+	}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var counts []struct {
+		FeatureID uint
+		N         int
+	}
+	if err := db.Model(&models.Task{}).Select("feature_id, COUNT(*) AS n").
+		Where("feature_id IN ? AND deleted_at IS NULL", ids).Group("feature_id").Scan(&counts).Error; err != nil {
+		return nil, err
+	}
+	for _, c := range counts {
+		out[c.FeatureID] = c.N
+	}
+	return out, nil
 }
 
 func (h *VersionsHandler) mergeTarget(c *gin.Context) (*models.Project, uint, int, bool) {
@@ -606,7 +615,7 @@ func (h *VersionsHandler) Merge(c *gin.Context) {
 			return err
 		}
 
-		if err := applyMerge(tx, project.ID, in.live, plan, uint(userID), number); err != nil {
+		if _, err := applyMerge(tx, project.ID, in.live, plan, uint(userID), "From merging copy "+number, false); err != nil {
 			return err
 		}
 
@@ -653,8 +662,14 @@ func (h *VersionsHandler) Merge(c *gin.Context) {
 	api.OK(c, result)
 }
 
-// applyMerge writes a ready plan into the project.
-func applyMerge(tx *gorm.DB, projectID int, live OpenedProject, plan mergePlan, userID uint, copyNumber string) error {
+// applyMerge writes a ready plan into the project. depNote is put on the
+// dependencies it adds. It returns each feature's id by key, the copy's keys
+// for new features included.
+//
+// With reuseIDs, a feature the plan brings back that was deleted gets its old
+// id again when that id is free, so it is the same feature as before: its
+// key matches the version it came from, and comparing the two shows no change.
+func applyMerge(tx *gorm.DB, projectID int, live OpenedProject, plan mergePlan, userID uint, depNote string, reuseIDs bool) (map[string]uint, error) {
 	ids := map[string]uint{}
 	for _, row := range live.Features {
 		ids[row.Key] = row.FeatureID
@@ -676,8 +691,19 @@ func applyMerge(tx *gorm.DB, projectID int, live OpenedProject, plan mergePlan, 
 			Priority:        models.PriorityMedium,
 			ParentFeatureID: parentID(add.parentKey),
 		}
+		if reuseIDs {
+			if old, err := strconv.ParseUint(strings.TrimPrefix(add.key, "f"), 10, 64); err == nil && strings.HasPrefix(add.key, "f") {
+				var taken int64
+				if err := tx.Unscoped().Model(&models.Feature{}).Where("id = ?", old).Count(&taken).Error; err != nil {
+					return nil, err
+				}
+				if taken == 0 {
+					feature.ID = uint(old)
+				}
+			}
+		}
 		if err := tx.Create(&feature).Error; err != nil {
-			return err
+			return nil, err
 		}
 		ids[add.key] = feature.ID
 	}
@@ -695,7 +721,7 @@ func applyMerge(tx *gorm.DB, projectID int, live OpenedProject, plan mergePlan, 
 			updates["position"] = models.NextFeaturePosition(tx, projectID, parentID(up.parentKey))
 		}
 		if err := tx.Model(&models.Feature{}).Where("id = ?", ids[up.key]).Updates(updates).Error; err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -704,16 +730,16 @@ func applyMerge(tx *gorm.DB, projectID int, live OpenedProject, plan mergePlan, 
 			Where("parent_id = ? AND child_id = ? AND parent_type = ? AND child_type = ?",
 				ids[need.parentKey], ids[need.childKey], models.EntityTypeFeature, models.EntityTypeFeature).
 			Delete(&models.Dependency{}).Error; err != nil {
-			return err
+			return nil, err
 		}
 	}
 	for _, need := range plan.needAdds {
 		if err := tx.Create(&models.Dependency{
 			ParentID: ids[need.parentKey], ParentType: models.EntityTypeFeature,
 			ChildID: ids[need.childKey], ChildType: models.EntityTypeFeature,
-			Description: "From merging copy " + copyNumber, CreatedByID: userID,
+			Description: depNote, CreatedByID: userID,
 		}).Error; err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -724,11 +750,11 @@ func applyMerge(tx *gorm.DB, projectID int, live OpenedProject, plan mergePlan, 
 			Where("(parent_type = ? AND parent_id = ?) OR (child_type = ? AND child_id = ?)",
 				models.EntityTypeFeature, id, models.EntityTypeFeature, id).
 			Delete(&models.Dependency{}).Error; err != nil {
-			return err
+			return nil, err
 		}
 		if err := tx.Unscoped().Delete(&models.Feature{}, id).Error; err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return ids, nil
 }

@@ -78,7 +78,7 @@ function copyTitle(copy: { name: string; number: number }) {
 
 /** Where a copy came from, in words. */
 function copySource(copy: MyCopy | { source: string; base: MyCopy['base']; created_at: string }) {
-  if (copy.source === 'published') return `from Published #${copy.base.publish_number}`
+  if (copy.source === 'published') return `from published ${copy.base.label}`
   if (copy.source === 'working') {
     const when = new Date(copy.created_at).toLocaleDateString(undefined, {
       day: 'numeric',
@@ -86,7 +86,7 @@ function copySource(copy: MyCopy | { source: string; base: MyCopy['base']; creat
     })
     return `from Working, ${when}`
   }
-  return `uploaded file, based on v${copy.base.number}`
+  return `uploaded file, based on ${copy.base.label}`
 }
 
 // ---------- My Saved Versions: the list of your copies ----------
@@ -340,7 +340,7 @@ function StartWorkingCopyDialog({
               <span className="text-xs font-medium text-muted">Copy from</span>
               {choice(
                 'published',
-                latest ? `Published #${latest.publish_number}` : 'Published',
+                latest ? `Published ${latest.label}` : 'Published',
                 latest ? 'The agreed plan, as last published.' : 'Nothing has been published in this project yet.',
                 published.isSuccess && !latest,
               )}

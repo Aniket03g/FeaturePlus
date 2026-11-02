@@ -24,6 +24,8 @@ import (
 const (
 	canView   = models.RoleViewer
 	canEdit   = models.RoleEditor
+	// canPublish is publishing a version and putting one back as the list.
+	canPublish = models.RolePublisher
 	ownerOnly = models.RoleOwner
 )
 
@@ -82,6 +84,9 @@ func requireProjectRole(c *gin.Context, db *gorm.DB, projectID int, need models.
 func refusal(have, need models.ProjectRole) error {
 	if need == models.RoleOwner {
 		return api.Forbidden("Only the project's owner can do this")
+	}
+	if need == models.RolePublisher {
+		return api.Forbidden("Only the owner or a publisher can do this")
 	}
 	if have == models.RoleViewer {
 		return api.Forbidden("You can view this project but not change it")

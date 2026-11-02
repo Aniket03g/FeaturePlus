@@ -33,6 +33,8 @@ type SpacePublish struct {
 	ProjectName   string    `json:"project_name"`
 	VersionID     uint      `json:"version_id"`
 	PublishNumber int       `json:"publish_number"`
+	// Label is the version's number as people see it, "v2".
+	Label         string    `json:"label"`
 	Notes         string    `json:"notes"`
 	By            string    `json:"by"`
 	ByID          int       `json:"by_id"`
@@ -150,7 +152,7 @@ func (h *VersionsHandler) Space(c *gin.Context) {
 		}
 		return SpacePublish{
 			ProjectID: v.ProjectID, ProjectName: projectNames[v.ProjectID], VersionID: v.ID,
-			PublishNumber: v.PublishNumber, Notes: v.Notes, By: names[v.SavedByID], ByID: v.SavedByID, At: at,
+			PublishNumber: v.PublishNumber, Label: v.Label(), Notes: v.Notes, By: names[v.SavedByID], ByID: v.SavedByID, At: at,
 		}
 	}
 

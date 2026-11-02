@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ApiError } from '@/lib/api'
 import { AuthProvider } from '@/lib/auth'
 import { ThemeProvider } from '@/lib/theme'
@@ -9,6 +9,15 @@ import { App } from './App'
 import './index.css'
 
 const queryClient = new QueryClient({
+  // Any change that goes through — a feature added, renamed, moved, deleted,
+  // its status or description edited — can change how the Feature List
+  // compares with its versions. So every comparison on screen is checked
+  // again, and the Save / Publish button and the change markers follow at once.
+  mutationCache: new MutationCache({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['version-compare'] })
+    },
+  }),
   defaultOptions: {
     queries: {
       staleTime: 30_000,

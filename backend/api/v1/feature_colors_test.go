@@ -60,12 +60,12 @@ func TestColorIsNotPublished(t *testing.T) {
 	db.Create(&feature)
 
 	versions := versionsRouterAs(t, db, owner.ID)
-	publish := "/api/v1/projects/" + strconv.Itoa(project.ID) + "/publish"
-	if w := do(versions, http.MethodPost, publish, `{}`); w.Code != http.StatusCreated {
-		t.Fatalf("publish: status %d: %s", w.Code, w.Body.String())
+	base := "/api/v1/projects/" + strconv.Itoa(project.ID)
+	if code := publishList(t, versions, base, `{}`); code != http.StatusCreated {
+		t.Fatalf("publish: status %d", code)
 	}
 	db.Model(&feature).Update("color", "green")
-	if w := do(versions, http.MethodPost, publish, `{}`); w.Code != http.StatusConflict {
-		t.Errorf("publish after only a colour change: status %d, want 409 (nothing changed)", w.Code)
+	if code := publishList(t, versions, base, `{}`); code != http.StatusConflict {
+		t.Errorf("publish after only a colour change: status %d, want 409 (nothing changed)", code)
 	}
 }

@@ -50,7 +50,7 @@ func TestMySpaceSummary(t *testing.T) {
 	}
 
 	// The owner publishes; then changes one feature without publishing.
-	do(asOwner, http.MethodPost, base+"/publish", `{"notes":"first plan"}`)
+	publishList(t, asOwner, base, `{"notes":"first plan"}`)
 	db.Model(&feature).Update("title", "Payments")
 
 	got := decodeSpace(t, do(asOther, http.MethodGet, "/api/v1/me/space", "").Body.Bytes())
@@ -67,7 +67,7 @@ func TestMySpaceSummary(t *testing.T) {
 		t.Errorf("owner's first look lists %d new publishes, want 0", len(mine.New))
 	}
 	do(asOwner, http.MethodPost, "/api/v1/me/space/seen", "")
-	do(asOwner, http.MethodPost, base+"/publish", `{}`)
+	publishList(t, asOwner, base, `{}`)
 	if mine := decodeSpace(t, do(asOwner, http.MethodGet, "/api/v1/me/space", "").Body.Bytes()); len(mine.New) != 0 {
 		t.Errorf("owner sees their own publish as new: %+v", mine.New)
 	}

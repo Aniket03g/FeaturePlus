@@ -50,7 +50,7 @@ const SECTION: Record<Route['name'], string> = {
   code: 'code',
   contracts: 'contracts',
   briefing: 'briefing',
-  // Versions has no sidebar item of its own: it is reached from Published.
+  // The sidebar's Versions item covers the versions table and the published list.
   versions: 'featureList',
   merge: 'featureList',
   compare: 'featureList',
@@ -68,7 +68,7 @@ const SECTION: Record<Route['name'], string> = {
 /** The sidebar items that lead into whichever project is currently open. */
 const PROJECT_SECTIONS: Record<string, Route['name']> = {
   projectDashboard: 'projectDashboard',
-  featureList: 'project',
+  featureList: 'versions',
   inProgress: 'inProgress',
   dependencies: 'dependencies',
   releases: 'releases',

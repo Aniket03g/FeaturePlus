@@ -1244,7 +1244,14 @@ export function usePublishReleaseToGitHub(projectId: number, releaseId: number) 
 export interface FeatureVersion {
   id: number
   project_id: number
+  /** The order versions were made in; people see `label` instead. */
   number: number
+  /** "v2" for a publish, "v2.3" for the third save after it. */
+  label: string
+  major: number
+  minor: number
+  /** The version this one was made from; null for the first. */
+  based_on: { id: number; label: string } | null
   tag: string
   notes: string
   feature_count: number
@@ -1255,6 +1262,8 @@ export interface FeatureVersion {
   published_at: string | null
   saved_by: { id: number; name: string }
   created_at: string
+  /** What changed from the version saved before it; only from useVersionsWithChanges. */
+  changes?: { added: number; removed: number; changed: number }
 }
 
 /** A saved version with its contents: the list as it was, in the shape the playground opens. */
@@ -1283,12 +1292,24 @@ export function useVersions(projectId: number, enabled = true) {
   })
 }
 
+/** The versions with what each changed from the one before it, for the versions table. */
+export function useVersionsWithChanges(projectId: number) {
+  return useQuery({
+    queryKey: [...versionKeys.project(projectId), 'changes'] as const,
+    queryFn: () => api.get<FeatureVersion[]>(`/projects/${projectId}/versions`, { query: { changes: 1 } }),
+    enabled: projectId > 0,
+  })
+}
+
 export function useSaveVersion(projectId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (body: { tag: string; notes: string }) =>
+    mutationFn: (body: { tag?: string; notes: string }) =>
       api.post<FeatureVersion>(`/projects/${projectId}/versions`, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: ['version-compare', projectId] })
+    },
   })
 }
 
@@ -1303,15 +1324,65 @@ export function usePublished(projectId: number) {
   })
 }
 
-/** Publish the Working list as it stands, as the next Published #. */
-export function usePublish(projectId: number) {
+/** Publish one saved version. The newest save becomes the next whole number in place; an older one is published as a new row. */
+export function usePublishVersion(projectId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (body: { notes: string }) =>
-      api.post<FeatureVersion>(`/projects/${projectId}/publish`, body),
+    mutationFn: ({ versionId, notes }: { versionId: number; notes: string }) =>
+      api.post<FeatureVersion>(`/projects/${projectId}/versions/${versionId}/publish`, { notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['published', projectId] })
       queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: ['version-compare', projectId] })
+    },
+  })
+}
+
+export interface MergeChangeRow {
+  kind: string
+  key: string
+  title: string
+  path?: string
+  from?: string
+  to?: string
+}
+
+/** What putting a version back as the Feature List would do. */
+export interface RestorePreview {
+  version: FeatureVersion
+  /** Changes in the list not saved as a version; going back waits until there are none. */
+  unsaved: number
+  /** The newest saved version's label. */
+  latest: string
+  changes: MergeChangeRow[]
+  /** Features whose description or notes would change. */
+  described: string[]
+  notes: { title: string; message: string }[]
+  problems: string[]
+  ready: boolean
+}
+
+export function useRestorePreview(projectId: number, versionId: number | null) {
+  return useQuery({
+    queryKey: ['restore-preview', projectId, versionId] as const,
+    queryFn: () => api.get<RestorePreview>(`/projects/${projectId}/versions/${versionId}/restore`),
+    enabled: projectId > 0 && versionId !== null,
+    staleTime: 0,
+  })
+}
+
+export function useRestoreVersion(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (versionId: number) =>
+      api.post<{ saved: FeatureVersion; notes: { title: string; message: string }[] }>(
+        `/projects/${projectId}/versions/${versionId}/restore`,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: ['version-compare', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['features', projectId] })
+      queryClient.invalidateQueries()
     },
   })
 }
@@ -1333,8 +1404,8 @@ export function useVersion(projectId: number, versionId: number, enabled = true)
 export type VersionRef = number | `c${number}` | 'current'
 
 export interface VersionComparison {
-  from: { current: boolean; copy?: boolean; id?: number; number?: number; tag?: string }
-  to: { current: boolean; copy?: boolean; id?: number; number?: number; tag?: string }
+  from: { current: boolean; copy?: boolean; id?: number; number?: number; tag?: string; label?: string }
+  to: { current: boolean; copy?: boolean; id?: number; number?: number; tag?: string; label?: string }
   added: number
   removed: number
   changed: number
@@ -1368,6 +1439,7 @@ export function useCompareLists(projectId: number, from: VersionRef | null, to: 
       }),
     enabled: projectId > 0 && from !== null && to !== null,
     placeholderData: (previous) => previous,
+    ...liveSide(from, to),
   })
 }
 
@@ -1380,7 +1452,17 @@ export function useVersionComparison(projectId: number, from: VersionRef | null,
       }),
     enabled: projectId > 0 && from !== null && to !== null,
     placeholderData: (previous) => previous,
+    ...liveSide(from, to),
   })
+}
+
+/**
+ * A comparison with the list as it is now goes out of date with anyone's
+ * edit, so it is checked again each time it is shown and when the tab is
+ * come back to. Two saved versions never change, so their comparison can wait.
+ */
+function liveSide(from: VersionRef | null, to: VersionRef | null) {
+  return from === 'current' || to === 'current' ? { staleTime: 0, refetchOnWindowFocus: 'always' as const } : {}
 }
 
 export function fetchVersion(projectId: number, versionId: number) {
@@ -1397,7 +1479,7 @@ export interface FeatureCopy {
   /** Where it was started from in My Space; empty for one made by uploading a file. */
   source: '' | 'published' | 'working'
   /** The version it is based on; publish_number is set when that was a publish. */
-  base: { id: number; number: number; tag: string; publish_number: number }
+  base: { id: number; number: number; tag: string; publish_number: number; label: string }
   owner: { id: number; name: string }
   /** Goes up by one each time the copy is uploaded again. */
   revision: number
@@ -1506,6 +1588,7 @@ export interface SpacePublish {
   project_name: string
   version_id: number
   publish_number: number
+  label: string
   notes: string
   by: string
   by_id: number
@@ -1589,7 +1672,7 @@ export function useSetCopyPublished(projectId: number) {
 
 /** What a checked upload would do: its version, the copy it replaces, and its changes. */
 export interface CopyCheck {
-  base: { id: number; number: number; tag: string }
+  base: { id: number; number: number; tag: string; publish_number: number; label: string }
   replaces: FeatureCopy | null
   comparison: VersionComparison
 }

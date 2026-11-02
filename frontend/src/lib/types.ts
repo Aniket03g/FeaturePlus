@@ -35,10 +35,11 @@ export interface Project {
  * viewer looks. Admin is someone running the server, with the owner's powers
  * in a project that is not theirs.
  */
-export type ProjectRole = 'owner' | 'editor' | 'viewer' | 'admin'
+export type ProjectRole = 'owner' | 'publisher' | 'editor' | 'viewer' | 'admin'
 
 export const ROLE_LABEL: Record<ProjectRole, string> = {
   owner: 'Owner',
+  publisher: 'Publisher',
   editor: 'Editor',
   viewer: 'Viewer',
   admin: 'Admin',
@@ -47,6 +48,11 @@ export const ROLE_LABEL: Record<ProjectRole, string> = {
 /** Owner or admin: can share, transfer, delete and link GitHub. */
 export function canManage(role: ProjectRole | undefined) {
   return role === 'owner' || role === 'admin'
+}
+
+/** Owner, publisher or admin: can publish a version and put an old one back as the Feature List. */
+export function canPublish(role: ProjectRole | undefined) {
+  return role === 'owner' || role === 'publisher' || role === 'admin'
 }
 
 /** One person a project is shared with. The owner is listed too, first. */

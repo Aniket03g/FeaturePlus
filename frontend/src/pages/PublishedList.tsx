@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ChevronRight,
   Download,
-  History,
   Loader2,
   Lock,
   Network,
@@ -23,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill, PriorityPill } from '@/components/FeatureBits'
 import { Markdown } from '@/components/Markdown'
 import { ShareDialog } from './ShareDialog'
+import { ProjectListTabs } from './VersionsPage'
 import { cn, plural } from '@/lib/utils'
 import { ROLE_LABEL, canManage, type FeaturePriority, type FeatureStatus } from '@/lib/types'
 
@@ -129,16 +129,14 @@ export function PublishedList({ projectId }: { projectId: number }) {
               Download .md
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => navigate({ name: 'versions', projectId })}>
-            <History className="h-3.5 w-3.5" />
-            Versions
-          </Button>
           <Button variant="secondary" size="sm" onClick={() => setSharing(true)}>
             <Users className="h-3.5 w-3.5" />
             Share
           </Button>
         </div>
       </div>
+
+      <ProjectListTabs projectId={projectId} active="published" />
 
       {published.isLoading ? (
         <Skeleton className="h-40 w-full" />
@@ -151,7 +149,7 @@ export function PublishedList({ projectId }: { projectId: number }) {
             <p className="text-sm font-medium text-ink">Nothing published yet</p>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted">
               The published list is the agreed plan. It is made by publishing the Feature List
-              {canPublish ? '.' : ', which an owner or editor of this project can do.'}
+              {canPublish ? '.' : ': save it as a version, then an owner or publisher of this project can publish it.'}
             </p>
             {canPublish && (
               <Button size="sm" className="mt-3" onClick={() => navigate({ name: 'inProgress', projectId })}>
@@ -166,7 +164,8 @@ export function PublishedList({ projectId }: { projectId: number }) {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-raised px-3 py-2 text-xs text-muted">
             <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span className="min-w-0 flex-1">
-              <span className="font-medium text-ink">Published #{version.publish_number}</span>
+              <span className="font-mono font-semibold text-ink">{version.label}</span>{' '}
+              <span className="font-medium text-ink">· Live</span>
               {' · '}
               {when} by {version.saved_by.name || 'someone since removed'}
               {' · '}

@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 // FeatureVersion is a saved copy of a project's feature list: the whole tree
 // as it stood when someone saved it, under a tag they chose. Versions are
@@ -20,6 +23,18 @@ type FeatureVersion struct {
 	// than one someone chose to save.
 	Auto bool `gorm:"not null;default:false"`
 
+	// Major and Minor are the number people see: v2 for the second publish,
+	// v2.1, v2.2… for the saves after it, v0.1, v0.2… for saves before the
+	// first publish. Number above stays the order versions were made in.
+	// Both 0 marks a row from before this numbering; NumberVersions fills it.
+	Major int `gorm:"not null;default:0"`
+	Minor int `gorm:"not null;default:0"`
+
+	// BasedOnID is the version this one was made from: for a save, the
+	// version saved before it; for a publish of an older version, that
+	// version; for going back, the version gone back to. Nil for the first.
+	BasedOnID *uint `gorm:"index"`
+
 	// PublishNumber is 1, 2, 3… for the versions published from the
 	// in-progress list, in the order they were published, and 0 for one only
 	// saved. The latest published version is what the published list shows.
@@ -32,4 +47,12 @@ type FeatureVersion struct {
 	Snapshot     string `gorm:"type:text;not null"`
 
 	CreatedAt time.Time
+}
+
+// Label is how a version is named on screen: "v2" or "v2.3".
+func (v FeatureVersion) Label() string {
+	if v.Minor == 0 {
+		return "v" + strconv.Itoa(v.Major)
+	}
+	return "v" + strconv.Itoa(v.Major) + "." + strconv.Itoa(v.Minor)
 }

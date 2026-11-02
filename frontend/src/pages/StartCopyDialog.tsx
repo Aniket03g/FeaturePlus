@@ -149,14 +149,16 @@ export function StartCopyDialog({
             >
               {versions.map((v) => (
                 <option key={v.id} value={v.id}>
-                  v{v.number} · {v.tag}
+                  {v.label}
+                  {v.publish_number > 0 ? ' · published' : ''}
+                  {v.notes || v.tag ? ` · ${v.notes || v.tag}` : ''}
                 </option>
               ))}
             </select>
             {version && (
               <p className="flex min-w-0 items-center gap-1.5 rounded-md border border-border px-2 py-1 font-mono text-2xs text-muted">
                 <FileText className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{versionFileName(projectName, version.number)}</span>
+                <span className="truncate">{versionFileName(projectName, version.label)}</span>
               </p>
             )}
             <Button size="sm" className="w-full gap-1.5" onClick={download} loading={downloading} disabled={!version}>
@@ -278,14 +280,14 @@ export function StartCopyDialog({
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-ink">
                   File read · {plural(check.comparison.to_list?.features.length ?? 0, 'feature')} ·{' '}
-                  {changeCount === 0 ? `no changes from v${check.base.number} yet` : `${plural(changeCount, 'change')} from v${check.base.number}`}
+                  {changeCount === 0 ? `no changes from ${check.base.label} yet` : `${plural(changeCount, 'change')} from ${check.base.label}`}
                 </p>
                 {replacing ? (
                   <p className="mt-0.5 text-xs text-muted">
                     Replaces your copy “{replacing.name || `Copy ${replacing.number}`}”
                     {replacing.revision > 1 && ` (uploaded ${replacing.revision} times)`}.
                     <span className="block text-faint">
-                      It downloads as {copyFileName(projectName, check.base.number, replacing)}
+                      It downloads as {copyFileName(projectName, check.base.label, replacing)}
                     </span>
                   </p>
                 ) : (

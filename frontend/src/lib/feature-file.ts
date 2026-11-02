@@ -23,14 +23,14 @@ function slug(name: string) {
     .slice(0, 40)
 }
 
-/** What a version downloads as: the project and the version, e.g. food-delivery-app_v1.md. */
-export function versionFileName(projectName: string, number: number) {
-  return `${slug(projectName) || 'features'}_v${number}.md`
+/** What a version downloads as: the project and the version, e.g. food-delivery-app_v2.3.md. */
+export function versionFileName(projectName: string, label: string) {
+  return `${slug(projectName) || 'features'}_${label}.md`
 }
 
-/** What a copy downloads as, e.g. food-delivery-app_v1_checkout-rework.md. */
-export function copyFileName(projectName: string, baseNumber: number, copy: { name: string; number: number }) {
-  return `${slug(projectName) || 'features'}_v${baseNumber}_${slug(copy.name) || `copy${copy.number}`}.md`
+/** What a copy downloads as, e.g. food-delivery-app_v2.3_checkout-rework.md. */
+export function copyFileName(projectName: string, baseLabel: string, copy: { name: string; number: number }) {
+  return `${slug(projectName) || 'features'}_${baseLabel}_${slug(copy.name) || `copy${copy.number}`}.md`
 }
 
 /**
@@ -45,7 +45,7 @@ export async function downloadVersionFile(projectId: number, versionId: number) 
   const version = await fetchVersion(projectId, versionId)
   saveAsMarkdown(
     version.snapshot,
-    versionFileName(version.snapshot.project.name, version.number),
+    versionFileName(version.snapshot.project.name, version.label),
     stampLine({ project: projectId, version: version.id }),
   )
 }
@@ -55,7 +55,7 @@ export async function downloadCopyFile(projectId: number, copyId: number) {
   const copy = await fetchCopy(projectId, copyId)
   saveAsMarkdown(
     copy.snapshot,
-    copyFileName(copy.snapshot.project.name, copy.base.number, copy),
+    copyFileName(copy.snapshot.project.name, copy.base.label, copy),
     stampLine({ project: projectId, version: copy.base.id, copy: copy.id, revision: copy.revision }),
   )
 }

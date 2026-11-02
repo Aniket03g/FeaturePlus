@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertCircle, ArrowRight, Clock, GitCompare, Pencil, Send, Users } from 'lucide-react'
+import { AlertCircle, ArrowRight, Clock, GitCompare, Pencil, Save, Send, Users } from 'lucide-react'
 import {
   useDependencyGraph,
   useFeatures,
@@ -17,9 +17,10 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill } from '@/components/FeatureBits'
-import { PublishDialog } from './PublishDialog'
+import { PublishDialog, SaveVersionDialog } from './PublishDialog'
+import { useWorkingState } from '@/lib/working'
 import { cn, percent, plural } from '@/lib/utils'
-import { ROLE_LABEL, type Feature } from '@/lib/types'
+import { ROLE_LABEL, canPublish, type Feature } from '@/lib/types'
 
 /** No filters: the same key the project's feature lists use, so all share one request. */
 const ALL_FEATURES = { status: [], tag: '', q: '' }
@@ -67,7 +68,7 @@ export function ProjectDashboard({ projectId }: { projectId: number }) {
         )}
       </div>
 
-      <PlanStatus projectId={projectId} canEdit={canEdit} />
+      <PlanStatus projectId={projectId} canEdit={canEdit} mayPublish={canPublish(project.data?.my_role)} />
 
       {features.isLoading ? (
         <Skeleton className="h-20 w-full" />
@@ -90,12 +91,22 @@ export function ProjectDashboard({ projectId }: { projectId: number }) {
 }
 
 /** What is published, and what the working list holds that isn't yet. */
-function PlanStatus({ projectId, canEdit }: { projectId: number; canEdit: boolean }) {
+function PlanStatus({
+  projectId,
+  canEdit,
+  mayPublish,
+}: {
+  projectId: number
+  canEdit: boolean
+  mayPublish: boolean
+}) {
   const { navigate } = useRouter()
   const published = usePublished(projectId)
   const latest = published.data ?? null
   const since = useVersionComparison(projectId, latest ? latest.id : null, latest ? 'current' : null)
   const [publishing, setPublishing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const working = useWorkingState(projectId)
 
   const changes = since.data ? since.data.added + since.data.removed + since.data.changed : 0
 
@@ -113,7 +124,7 @@ function PlanStatus({ projectId, canEdit }: { projectId: number; canEdit: boolea
                 className="mt-1 text-left text-sm font-medium text-ink hover:underline"
                 onClick={() => navigate({ name: 'project', projectId })}
               >
-                Published #{latest.publish_number}
+                <span className="font-mono">{latest.label}</span>
                 {latest.notes && <span className="font-normal text-muted"> · “{latest.notes}”</span>}
               </button>
               <p className="text-xs text-muted">
@@ -134,7 +145,7 @@ function PlanStatus({ projectId, canEdit }: { projectId: number; canEdit: boolea
             ) : since.isLoading ? (
               <Skeleton className="h-5 w-40" />
             ) : changes === 0 ? (
-              <span className="text-muted">No changes since Published #{latest.publish_number}.</span>
+              <span className="text-muted">No changes since {latest.label}.</span>
             ) : (
               <>
                 <span className="font-medium text-ink">{plural(changes, 'change')} not yet published</span>
@@ -159,17 +170,24 @@ function PlanStatus({ projectId, canEdit }: { projectId: number; canEdit: boolea
               <Pencil className="h-3.5 w-3.5" />
               Open Feature List
             </Button>
-            {canEdit && (!latest || changes > 0) && (
+            {canEdit && (working.neverSaved || (working.unsaved ?? 0) > 0) && (
+              <Button size="sm" onClick={() => setSaving(true)}>
+                <Save className="h-3.5 w-3.5" />
+                Save as <span className="font-mono">{working.nextSave}</span>
+              </Button>
+            )}
+            {mayPublish && working.latest && working.unsaved === 0 && working.latest.publish_number === 0 && (
               <Button size="sm" onClick={() => setPublishing(true)}>
                 <Send className="h-3.5 w-3.5" />
-                Publish{latest ? ` as #${latest.publish_number + 1}` : ''}
+                Publish <span className="font-mono">{working.latest.label}</span>
               </Button>
             )}
           </div>
         </div>
       </CardBody>
-      {publishing && (
-        <PublishDialog projectId={projectId} onClose={() => setPublishing(false)} onPublished={() => setPublishing(false)} />
+      {saving && <SaveVersionDialog projectId={projectId} onClose={() => setSaving(false)} />}
+      {publishing && working.latest && (
+        <PublishDialog projectId={projectId} version={working.latest} onClose={() => setPublishing(false)} />
       )}
     </Card>
   )
@@ -351,7 +369,7 @@ function RecentActivity({ projectId, items }: { projectId: number; items: Featur
               {publishes.map((v) => (
                 <li key={v.id} className="flex items-baseline gap-2 text-sm">
                   <Badge tone="accent" className="shrink-0 font-mono">
-                    #{v.publish_number}
+                    {v.label}
                   </Badge>
                   <span className="min-w-0 flex-1 truncate text-ink">{v.notes || v.tag}</span>
                   <span className="shrink-0 text-xs text-faint">{when(v.published_at ?? v.created_at)}</span>

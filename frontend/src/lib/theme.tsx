@@ -35,6 +35,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       const next = theme === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : theme
       setResolved(next)
       document.documentElement.classList.toggle('dark', next === 'dark')
+      // Tells the browser which theme its own parts follow: the open list of a
+      // dropdown, scrollbars, date pickers. Without it they stay light.
+      document.documentElement.style.colorScheme = next
     }
 
     apply()
@@ -55,9 +58,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  return (
-    <ThemeContext.Provider value={{ theme, resolved, setTheme }}>{children}</ThemeContext.Provider>
-  )
+  return <ThemeContext.Provider value={{ theme, resolved, setTheme }}>{children}</ThemeContext.Provider>
 }
 
 export function useTheme() {

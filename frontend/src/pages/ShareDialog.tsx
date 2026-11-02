@@ -9,11 +9,12 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ROLE_LABEL, type ProjectRole } from '@/lib/types'
 
-const SHAREABLE: ProjectRole[] = ['editor', 'viewer']
+const SHAREABLE: ProjectRole[] = ['publisher', 'editor', 'viewer']
 
 const ROLE_HINT: Record<ProjectRole, string> = {
   owner: 'Can do everything, including sharing and deleting the project.',
-  editor: 'Can change features, tasks, releases and the rest. Cannot share or delete.',
+  publisher: 'Everything an editor can, and can publish a version or put an old one back as the Feature List.',
+  editor: 'Can change features, tasks, releases and save versions. Cannot publish, share or delete.',
   viewer: 'Can see everything and comment. Cannot change anything.',
   admin: 'Runs this server. Can do everything the owner can.',
 }

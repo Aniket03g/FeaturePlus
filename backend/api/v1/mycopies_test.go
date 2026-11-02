@@ -56,7 +56,7 @@ func TestStartCopyFromPublishedOrWorking(t *testing.T) {
 	}
 
 	// From the published list: based on the latest publish.
-	do(r, http.MethodPost, base+"/publish", `{}`)
+	publishList(t, r, base, `{}`)
 	third := decodeCopyDetail(t, do(r, http.MethodPost, base+"/copies/start", `{"from":"published"}`).Body.Bytes())
 	if third.Source != "published" || third.Base.PublishNumber != 1 {
 		t.Errorf("from published = %+v", third.CopyDTO)

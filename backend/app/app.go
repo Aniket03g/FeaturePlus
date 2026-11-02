@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	v1 "github.com/FeaturePlus/backend/api/v1"
 	"github.com/FeaturePlus/backend/database"
 	"github.com/FeaturePlus/backend/handlers"
 	"github.com/FeaturePlus/backend/internal/log"
@@ -116,6 +117,13 @@ func openDatabase(cfg Config) (*database.Database, error) {
 		&internalModels.ProjectConnection{},
 	); err != nil {
 		return nil, fmt.Errorf("failed to migrate database: %w", err)
+	}
+	// Versions saved before v2.3-style numbers get theirs.
+	if err := v1.NumberVersions(db.DB); err != nil {
+		return nil, fmt.Errorf("failed to number versions: %w", err)
+	}
+	if err := v1.FillBasedOn(db.DB); err != nil {
+		return nil, fmt.Errorf("failed to fill in what versions are based on: %w", err)
 	}
 
 	return db, nil

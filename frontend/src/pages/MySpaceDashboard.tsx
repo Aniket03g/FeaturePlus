@@ -90,7 +90,7 @@ export function MySpaceDashboard() {
                         </span>
                         <span className="block text-xs text-muted">
                           {p.latest
-                            ? `Published #${p.latest.publish_number} · ${when(p.latest.at)}`
+                            ? `Published ${p.latest.label} · ${when(p.latest.at)}`
                             : 'Nothing published yet'}
                         </span>
                       </span>
@@ -209,7 +209,7 @@ function NewSince({ seenAt, items }: { seenAt: string | null; items: SpacePublis
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-left hover:bg-raised"
                 >
                   <Badge tone="accent" className="shrink-0 font-mono">
-                    #{p.publish_number}
+                    {p.label}
                   </Badge>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm text-ink">

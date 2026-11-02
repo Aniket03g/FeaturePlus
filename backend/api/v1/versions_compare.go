@@ -24,6 +24,8 @@ type VersionSide struct {
 	ID      uint   `json:"id,omitempty"`
 	Number  int    `json:"number,omitempty"`
 	Tag     string `json:"tag,omitempty"`
+	// Label is a version's number as people see it, "v2.3".
+	Label string `json:"label,omitempty"`
 	// Copy is set, with the copy's number in Number, when this side is a copy.
 	Copy bool `json:"copy,omitempty"`
 }
@@ -124,7 +126,7 @@ func (h *VersionsHandler) Compare(c *gin.Context) {
 		if err := json.Unmarshal([]byte(version.Snapshot), &snap); err != nil {
 			return OpenedProject{}, VersionSide{}, api.Internal(err)
 		}
-		return snap.OpenedProject, VersionSide{ID: version.ID, Number: version.Number, Tag: version.Tag}, nil
+		return snap.OpenedProject, VersionSide{ID: version.ID, Number: version.Number, Tag: version.Tag, Label: version.Label()}, nil
 	}
 
 	from, fromSide, err := load("from")

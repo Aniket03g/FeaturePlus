@@ -72,7 +72,7 @@ export function MergePage({ projectId, copyId }: { projectId: number; copyId: nu
   const data = preview.data
   const { copy, changes, clashes, notes, problems } = data
   const name = copy.name || `Copy ${copy.number}`
-  const base = `v${copy.base.number}`
+  const base = copy.base.label
   const left = clashes.filter((clash) => !choices[clash.key]).length
   const ready = data.ready && left === 0 && !preview.isFetching
   const pickAll = (pick: Pick) => setChoices(Object.fromEntries(clashes.map((clash) => [clash.key, pick])))

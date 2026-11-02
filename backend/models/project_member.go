@@ -13,6 +13,9 @@ const (
 	RoleOwner ProjectRole = "owner"
 	// RoleEditor can change the project's contents but not who it is shared with.
 	RoleEditor ProjectRole = "editor"
+	// RolePublisher is an editor who may also publish the list, and put an
+	// old version back in place of it.
+	RolePublisher ProjectRole = "publisher"
 	// RoleViewer can look at everything and change nothing.
 	RoleViewer ProjectRole = "viewer"
 	// RoleAdmin is what someone running the server has in a project that is
@@ -24,7 +27,7 @@ const (
 // IsShareable reports whether a role can be given to someone added to a
 // project. Owner cannot: there is exactly one, and it is the project's own.
 func (r ProjectRole) IsShareable() bool {
-	return r == RoleEditor || r == RoleViewer
+	return r == RolePublisher || r == RoleEditor || r == RoleViewer
 }
 
 // Rank orders roles from least to most able, so a check can ask for "at least
@@ -32,8 +35,10 @@ func (r ProjectRole) IsShareable() bool {
 func (r ProjectRole) Rank() int {
 	switch r {
 	case RoleAdmin:
-		return 4
+		return 5
 	case RoleOwner:
+		return 4
+	case RolePublisher:
 		return 3
 	case RoleEditor:
 		return 2

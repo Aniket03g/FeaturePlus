@@ -82,6 +82,8 @@ type CopyBase struct {
 	Tag    string `json:"tag"`
 	// PublishNumber is set when the version was a publish.
 	PublishNumber int `json:"publish_number"`
+	// Label is the version's number as people see it, "v2.3".
+	Label string `json:"label"`
 }
 
 // CopyDTO describes a copy without its contents.
@@ -290,9 +292,9 @@ func (h *VersionsHandler) SaveCopy(c *gin.Context) {
 		if req.DryRun {
 			after := OpenedProject{Project: baseSnap.Project, Features: features, Releases: baseSnap.Releases}
 			comparison := compareLists(baseSnap.OpenedProject, after)
-			comparison.From = VersionSide{ID: base.ID, Number: base.Number, Tag: base.Tag}
+			comparison.From = VersionSide{ID: base.ID, Number: base.Number, Tag: base.Tag, Label: base.Label()}
 			comparison.FromList, comparison.ToList = &baseSnap.OpenedProject, &after
-			check = &CopyCheck{Base: CopyBase{ID: base.ID, Number: base.Number, Tag: base.Tag}, Comparison: comparison}
+			check = &CopyCheck{Base: CopyBase{ID: base.ID, Number: base.Number, Tag: base.Tag, PublishNumber: base.PublishNumber, Label: base.Label()}, Comparison: comparison}
 			replaces = existing
 			return nil
 		}
@@ -613,11 +615,11 @@ func (h *VersionsHandler) copyDTOs(copies []models.FeatureCopy, userID int) ([]C
 	bases := map[uint]CopyBase{}
 	if len(baseIDs) > 0 {
 		var versions []models.FeatureVersion
-		if err := h.db.Select("id", "number", "tag", "publish_number").Where("id IN ?", baseIDs).Find(&versions).Error; err != nil {
+		if err := h.db.Select("id", "number", "major", "minor", "tag", "publish_number").Where("id IN ?", baseIDs).Find(&versions).Error; err != nil {
 			return nil, err
 		}
 		for _, v := range versions {
-			bases[v.ID] = CopyBase{ID: v.ID, Number: v.Number, Tag: v.Tag, PublishNumber: v.PublishNumber}
+			bases[v.ID] = CopyBase{ID: v.ID, Number: v.Number, Tag: v.Tag, PublishNumber: v.PublishNumber, Label: v.Label()}
 		}
 	}
 

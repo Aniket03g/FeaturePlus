@@ -770,18 +770,29 @@ func restoreBackup(tx *gorm.DB, opened *openedBackup, people *restorePeople, wit
 
 	keys := &snapshotKeys{features: features, releases: releases, projectID: project.ID, stale: map[string]string{}}
 	versions := map[uint]uint{}
+	byNumber := map[int]uint{}
 	for _, v := range b.Versions {
 		snap, err := keys.rewrite(v.Snapshot)
 		if err != nil {
 			return nil, fmt.Errorf("version %d: %w", v.Number, err)
 		}
 		row := models.FeatureVersion{ProjectID: project.ID, Number: v.Number, Tag: v.Tag, Notes: v.Notes,
-			SavedByID: people.author(v.SavedBy), Auto: v.Auto, PublishNumber: v.PublishNumber, PublishedAt: v.PublishedAt,
+			SavedByID: people.author(v.SavedBy), Auto: v.Auto, Major: v.Major, Minor: v.Minor, PublishNumber: v.PublishNumber, PublishedAt: v.PublishedAt,
 			FeatureCount: v.FeatureCount, Snapshot: snap, CreatedAt: v.CreatedAt}
 		if err := omit().Create(&row).Error; err != nil {
 			return nil, err
 		}
 		versions[v.ID] = row.ID
+		byNumber[v.Number] = row.ID
+	}
+	for _, v := range b.Versions {
+		if v.BasedOn == 0 || byNumber[v.BasedOn] == 0 {
+			continue
+		}
+		if err := tx.Model(&models.FeatureVersion{}).Where("id = ?", byNumber[v.Number]).
+			Update("based_on_id", byNumber[v.BasedOn]).Error; err != nil {
+			return nil, err
+		}
 	}
 	for _, c := range b.Copies {
 		snap, err := keys.rewrite(c.Snapshot)
@@ -1039,7 +1050,15 @@ func (h *BackupsHandler) Restore(c *gin.Context) {
 	err = h.db.Transaction(func(tx *gorm.DB) error {
 		var txErr error
 		project, txErr = restoreBackup(tx, opened, people, withFiles, now)
-		return txErr
+		if txErr != nil {
+			return txErr
+		}
+		// A backup from before v2.3-style numbers restores without them,
+		// and without what each version was based on.
+		if err := NumberVersions(tx); err != nil {
+			return err
+		}
+		return FillBasedOn(tx)
 	})
 	if err != nil {
 		api.Fail(c, api.Internal(err))

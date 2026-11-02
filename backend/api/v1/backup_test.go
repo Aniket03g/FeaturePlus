@@ -85,7 +85,7 @@ func seedBackupProject(t *testing.T, db *gorm.DB, files *sqlitefs.SQLiteFS) back
 	mustCreate(t, db, &release)
 
 	fx.parent = models.Feature{ProjectID: project.ID, Title: "Payments", Description: "Take money. ![flow](attachment:flow.png)",
-		Notes: "Ask finance about refunds",
+		Notes:  "Ask finance about refunds",
 		Status: models.StatusInProgress, Priority: models.PriorityHigh, AssigneeID: uint(other.ID), ReleaseID: &release.ID}
 	mustCreate(t, db, &fx.parent)
 	fx.child = models.Feature{ProjectID: project.ID, Title: "Pay by card", ParentFeatureID: &fx.parent.ID}
@@ -156,7 +156,7 @@ func seedBackupProject(t *testing.T, db *gorm.DB, files *sqlitefs.SQLiteFS) back
 		t.Fatalf("drop: %v", err)
 	}
 	mustCreate(t, db, &models.Feature{ProjectID: project.ID, Title: "Added later"})
-	version := models.FeatureVersion{ProjectID: project.ID, Number: 1, Tag: "v1", SavedByID: owner.ID, FeatureCount: len(opened.Features), Snapshot: snapshot}
+	version := models.FeatureVersion{ProjectID: project.ID, Number: 1, Minor: 1, Tag: "v1", SavedByID: owner.ID, FeatureCount: len(opened.Features), Snapshot: snapshot}
 	mustCreate(t, db, &version)
 	mustCreate(t, db, &models.FeatureCopy{ProjectID: project.ID, Number: 1, BaseVersionID: version.ID, OwnerID: other.ID,
 		Revision: 1, Name: "Checkout rework", FeatureCount: 1, Snapshot: snapshot})

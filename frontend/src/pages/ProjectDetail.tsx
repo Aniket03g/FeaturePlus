@@ -15,6 +15,7 @@ import {
   Loader2,
   Palette,
   RefreshCw,
+  Save,
   Send,
   Plus,
   Users,
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react'
 import {
   useClearColors,
+  useCompareLists,
   useCreateFeature,
   useFeatures,
   useMoveFeature,
@@ -43,9 +45,11 @@ import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
 import { NewFeatureDialog } from './NewFeatureDialog'
 import { ColorDot } from '@/components/FeatureColor'
 import { ShareDialog } from './ShareDialog'
-import { PublishDialog } from './PublishDialog'
+import { PublishDialog, SaveVersionDialog } from './PublishDialog'
 import { cn, percent, plural } from '@/lib/utils'
-import { ROLE_LABEL, STATUS_LABEL, canManage, type Feature, type FeatureStatus } from '@/lib/types'
+import { ROLE_LABEL, STATUS_LABEL, canManage, canPublish, type Feature, type FeatureStatus } from '@/lib/types'
+import { buildDiffTree, type DiffNode } from '@/lib/compare-tree'
+import { useWorkingState } from '@/lib/working'
 
 const STATUSES: FeatureStatus[] = ['todo', 'in_progress', 'done']
 
@@ -188,7 +192,48 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   const [creating, setCreating] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [savingVersion, setSavingVersion] = useState(false)
   const [recentOnly, setRecentOnly] = useState(false)
+
+  // Where the list stands against its saved versions, and which version its
+  // rows are marked against: the published one unless someone picks another.
+  const working = useWorkingState(projectId)
+  const [pickedBase, setPickedBase] = useState<number | 'off' | null>(null)
+  const baseId = pickedBase === 'off' ? null : (pickedBase ?? working.live?.id ?? working.latest?.id ?? null)
+  const base = working.versions.find((v) => v.id === baseId) ?? null
+  const comparison = useCompareLists(projectId, baseId, baseId !== null ? 'current' : null)
+  const diff = useMemo(
+    () =>
+      comparison.data?.from_list && comparison.data.to_list && baseId !== null
+        ? buildDiffTree(comparison.data.from_list, comparison.data.to_list)
+        : null,
+    [comparison.data, baseId],
+  )
+  const [openDiffs, setOpenDiffs] = useState<Set<number>>(new Set())
+  // Each live feature's marker, by id; and the removed features, by the row
+  // they used to follow (a sibling, or the parent when they came first).
+  const { diffById, removedAfter } = useMemo(() => {
+    const byId = new Map<number, DiffNode>()
+    const after = new Map<string, { node: DiffNode; asChild: boolean }[]>()
+    const visit = (nodes: DiffNode[], parentKey: string) => {
+      let previous = ''
+      for (const node of nodes) {
+        if (node.state === 'removed') {
+          const anchor = previous || parentKey || 'top'
+          const list = after.get(anchor) ?? []
+          list.push({ node, asChild: !previous && parentKey !== '' })
+          after.set(anchor, list)
+          continue
+        }
+        if (node.state === 'ghost') continue
+        byId.set(Number(node.key.slice(1)), node)
+        previous = node.key
+        visit(node.children, node.key)
+      }
+    }
+    if (diff) visit(diff.roots, '')
+    return { diffById: byId, removedAfter: after }
+  }, [diff])
 
   // When you last opened this list: undefined until the server answers, null
   // on a first visit. Asked once per visit, which also records this one, so
@@ -242,10 +287,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
 
   const hasFilters = statuses.length > 0 || tag !== '' || search !== '' || recentOnly
   const fetched = useMemo(() => features.data?.items ?? [], [features.data])
-  const items = useMemo(
-    () => (recentOnly ? fetched.filter((f) => changes.has(f.id)) : fetched),
-    [recentOnly, fetched, changes],
-  )
+  const items = useMemo(() => fetched.filter((f) => !recentOnly || changes.has(f.id)), [recentOnly, fetched, changes])
 
   // Which parents are open, by feature id. Unset means the default: L0 open,
   // deeper levels closed, so a big project opens on its outline.
@@ -428,6 +470,11 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   const role = project.data?.my_role
   // Until the role is known, show the editing buttons rather than flicker them in.
   const canEdit = role !== 'viewer'
+  const mayPublish = canPublish(role)
+  // Publish shows once everything is saved, for a newest save not yet published.
+  const latest = working.latest
+  const publishable = latest !== null && working.unsaved === 0 && latest.publish_number === 0
+  const needsSave = working.neverSaved || (working.unsaved ?? 0) > 0
 
   return (
     <div className="space-y-5">
@@ -452,6 +499,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                 <Badge tone="accent" className="shrink-0 whitespace-nowrap">
                   Feature List
                 </Badge>
+                <WorkingBadge working={working} />
                 {role && role !== 'owner' && (
                   <Badge
                     tone={role === 'admin' ? 'warning' : 'neutral'}
@@ -470,16 +518,35 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
           )}
         </div>
 
-        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {working.live && (
+            <span className="text-xs text-muted">
+              Last published <span className="font-mono font-semibold text-ink">{working.live.label}</span>
+            </span>
+          )}
           <RefreshButton />
+          <Button variant="secondary" size="sm" onClick={() => navigate({ name: 'versions', projectId })}>
+            <History className="h-3.5 w-3.5" />
+            Versions
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => setSharing(true)}>
             <Users className="h-3.5 w-3.5" />
             Share
           </Button>
-          {canEdit && (
-            <Button size="sm" onClick={() => setPublishing(true)} title="Make this list the published one">
+          {canEdit && needsSave && (
+            <Button size="sm" onClick={() => setSavingVersion(true)} title="Keep the list as it is now as a version">
+              <Save className="h-3.5 w-3.5" />
+              Save as <span className="font-mono">{working.nextSave}</span>
+            </Button>
+          )}
+          {mayPublish && publishable && latest && (
+            <Button
+              size="sm"
+              onClick={() => setPublishing(true)}
+              title={`Make ${latest.label} the published list, as ${working.nextPublish}`}
+            >
               <Send className="h-3.5 w-3.5" />
-              Publish
+              Publish <span className="font-mono">{latest.label}</span>
             </Button>
           )}
         </div>
@@ -590,6 +657,49 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             </>
           )}
 
+          {!arranging && working.versions.length > 0 && (
+            <div
+              className={cn(
+                'flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs',
+                diff ? 'border-warning/60 bg-warning-soft/30 text-ink' : 'border-border text-muted',
+              )}
+            >
+              <span className={cn('h-1.5 w-1.5 rounded-full', diff ? 'bg-warning' : 'bg-faint')} aria-hidden />
+              <label htmlFor="changes-since" className="whitespace-nowrap">
+                Changes since
+              </label>
+              <select
+                id="changes-since"
+                value={baseId === null ? 'off' : String(baseId)}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setPickedBase(value === 'off' ? 'off' : Number(value))
+                  setOpenDiffs(new Set())
+                }}
+                className="h-6 cursor-pointer rounded border border-border bg-surface px-1.5 font-mono text-xs font-semibold text-ink hover:border-accent focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
+                title="Mark the features that differ from this version"
+              >
+                <option value="off" className="bg-surface text-muted">
+                  off
+                </option>
+                {working.versions.map((v) => (
+                  <option key={v.id} value={v.id} className="bg-surface text-ink">
+                    {v.label}
+                    {v.publish_number > 0 ? ' · published' : ''}
+                  </option>
+                ))}
+              </select>
+              {diff && (
+                <span
+                  className="tabular-nums text-warning"
+                  title={`${diff.order.length} features differ from ${base?.label}`}
+                >
+                  {diff.order.length}
+                </span>
+              )}
+            </div>
+          )}
+
           {canEdit && items.length > 0 && (
             <Button
               variant={arranging ? 'primary' : 'secondary'}
@@ -617,15 +727,6 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
 
           {!arranging && (
             <>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="h-7"
-                onClick={() => navigate({ name: 'versions', projectId })}
-              >
-                <History className="h-3 w-3" />
-                Versions
-              </Button>
               <DownloadFileButton projectId={projectId} />
               {canEdit && (
                 <Button size="sm" className="h-7" onClick={() => setCreating(true)}>
@@ -733,9 +834,24 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                   {moveError && <span className="text-danger">{moveError}</span>}
                 </div>
               )}
+              {!arranging &&
+                (removedAfter.get('top') ?? []).map(({ node: gone }) => (
+                  <RemovedRow key={gone.key} node={gone} depth={0} base={base?.label ?? ''} />
+                ))}
               {rows.map((node) => (
                 <div key={node.feature.id} className="divide-y divide-border">
                   <FeatureRow
+                    diff={diffById.get(node.feature.id)}
+                    base={base?.label ?? ''}
+                    diffOpen={openDiffs.has(node.feature.id)}
+                    onToggleDiff={() =>
+                      setOpenDiffs((current) => {
+                        const next = new Set(current)
+                        if (next.has(node.feature.id)) next.delete(node.feature.id)
+                        else next.add(node.feature.id)
+                        return next
+                      })
+                    }
                     node={node}
                     arranging={arranging}
                     onGrab={(e) => startDrag(node, e)}
@@ -764,6 +880,15 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                         : undefined
                     }
                   />
+                  {!arranging &&
+                    (removedAfter.get(`f${node.feature.id}`) ?? []).map(({ node: gone, asChild }) => (
+                      <RemovedRow
+                        key={gone.key}
+                        node={gone}
+                        depth={asChild ? node.depth + 1 : node.depth}
+                        base={base?.label ?? ''}
+                      />
+                    ))}
                   {addingTo === node.feature.id && (
                     <QuickAddRow
                       depth={node.depth + 1}
@@ -852,12 +977,9 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
           onLeft={() => navigate({ name: 'projects' })}
         />
       )}
-      {publishing && (
-        <PublishDialog
-          projectId={projectId}
-          onClose={() => setPublishing(false)}
-          onPublished={() => navigate({ name: 'project', projectId })}
-        />
+      {savingVersion && <SaveVersionDialog projectId={projectId} onClose={() => setSavingVersion(false)} />}
+      {publishing && latest && (
+        <PublishDialog projectId={projectId} version={latest} onClose={() => setPublishing(false)} />
       )}
     </div>
   )
@@ -940,7 +1062,18 @@ function FeatureRow({
   onAddInside,
   onColor,
   change,
+  diff,
+  base,
+  diffOpen,
+  onToggleDiff,
 }: {
+  /** How this feature differs from the version picked in "Changes since". */
+  diff?: DiffNode
+  /** That version's label, v2. */
+  base: string
+  /** The before/after of its details is showing under the row. */
+  diffOpen: boolean
+  onToggleDiff: () => void
   node: TreeNode
   /** New or changed since your last visit. */
   change?: 'new' | 'changed'
@@ -963,169 +1096,319 @@ function FeatureRow({
   const { feature, depth, children, context, parts } = node
   const tasks = feature.tasks
   const gutter = arranging ? ARRANGE_GUTTER : 0
+  const marker = diff && !arranging ? describeDiff(diff) : null
 
   return (
-    <div
-      data-row-id={feature.id}
-      data-depth={depth}
-      data-parent={depth > 0 && feature.parent_feature_id != null ? feature.parent_feature_id : ''}
-      className={cn(
-        'group/row relative flex items-center transition-colors hover:bg-raised',
-        context && 'opacity-50',
-        moving && 'opacity-30',
-      )}
-    >
-      {arranging && (
-        <button
-          type="button"
-          onPointerDown={onGrab}
-          aria-label={`Drag ${feature.title}`}
-          title="Drag to move"
-          className="absolute inset-y-0 left-1 z-10 grid w-7 cursor-grab touch-none place-items-center text-faint hover:text-accent active:cursor-grabbing"
+    <>
+      <div
+        data-row-id={feature.id}
+        data-depth={depth}
+        data-parent={depth > 0 && feature.parent_feature_id != null ? feature.parent_feature_id : ''}
+        className={cn(
+          'group/row relative flex items-center transition-colors hover:bg-raised',
+          context && 'opacity-50',
+          moving && 'opacity-30',
+        )}
+      >
+        {marker && (
+          <span
+            aria-hidden
+            className={cn('absolute inset-y-0 left-0 w-[3px]', marker.tone === 'success' ? 'bg-success' : 'bg-warning')}
+          />
+        )}
+        {arranging && (
+          <button
+            type="button"
+            onPointerDown={onGrab}
+            aria-label={`Drag ${feature.title}`}
+            title="Drag to move"
+            className="absolute inset-y-0 left-1 z-10 grid w-7 cursor-grab touch-none place-items-center text-faint hover:text-accent active:cursor-grabbing"
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        )}
+
+        <div className="absolute top-1/2 z-10 -translate-y-1/2" style={{ left: gutter + 8 }}>
+          <ColorDot color={feature.color} title={feature.title} onChange={onColor} quiet />
+        </div>
+
+        {/* One guide line per level above this one. */}
+        {Array.from({ length: depth }).map((_, i) => (
+          <span
+            key={i}
+            aria-hidden
+            className="absolute inset-y-0 w-px bg-border"
+            style={{ left: gutter + LEAD + 9 + i * INDENT }}
+          />
+        ))}
+
+        <div
+          className="flex shrink-0 items-center self-stretch"
+          style={{ paddingLeft: gutter + LEAD + depth * INDENT }}
         >
-          <GripVertical className="h-4 w-4" />
-        </button>
-      )}
+          {children.length > 0 ? (
+            // The click area spans the full row height and 8px either side of the
+            // arrow, so a near-miss toggles instead of opening the feature.
+            <button
+              onClick={onToggle}
+              disabled={!canToggle}
+              aria-expanded={open}
+              aria-label={`${open ? 'Hide' : 'Show'} the parts of ${feature.title}`}
+              className="group relative z-10 -mx-2 grid h-full place-items-center px-2 text-faint hover:text-ink disabled:pointer-events-none"
+            >
+              <span className="grid h-[18px] w-[18px] place-items-center rounded group-hover:bg-border">
+                <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-90')} />
+              </span>
+            </button>
+          ) : (
+            <span className="w-[18px]" />
+          )}
+        </div>
 
-      <div className="absolute top-1/2 z-10 -translate-y-1/2" style={{ left: gutter + 8 }}>
-        <ColorDot color={feature.color} title={feature.title} onChange={onColor} quiet />
+        {/* The whole row opens the feature. It is a div, not a button, so the
+          "+" after the title can be a button of its own; the title is the
+          button that keyboard users reach, and its click bubbles up here. */}
+        <div
+          onClick={arranging ? undefined : onOpen}
+          className={cn(
+            'flex min-w-0 flex-1 items-center gap-4 py-3 pl-2 pr-4 text-left',
+            !arranging && 'cursor-pointer',
+          )}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span
+                className="shrink-0 rounded border border-border px-1 font-mono text-2xs text-faint"
+                title={`Level ${depth}`}
+              >
+                L{depth}
+              </span>
+              <button
+                type="button"
+                className="truncate rounded-sm text-left text-sm font-medium text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                {feature.title}
+              </button>
+              {marker && (
+                <>
+                  {marker.canOpen ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onToggleDiff()
+                      }}
+                      aria-expanded={diffOpen}
+                      title={`${diffOpen ? 'Hide' : 'Show'} what changed since ${base}`}
+                      className="shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                    >
+                      <Badge tone={marker.tone} className="cursor-pointer">
+                        {marker.word}
+                      </Badge>
+                    </button>
+                  ) : (
+                    <Badge tone={marker.tone} className="shrink-0" title={`Since ${base}`}>
+                      {marker.word}
+                    </Badge>
+                  )}
+                  {marker.detail && <span className="min-w-0 truncate text-xs text-faint">{marker.detail}</span>}
+                </>
+              )}
+              {change && !marker && (
+                <Badge
+                  tone={change === 'new' ? 'success' : 'warning'}
+                  className="shrink-0"
+                  title={change === 'new' ? 'Added since your last visit' : 'Changed since your last visit'}
+                >
+                  {change === 'new' ? 'New' : 'Changed'}
+                </Badge>
+              )}
+              {parts.total > 0 && (
+                <span
+                  className={cn(
+                    'shrink-0 text-2xs tabular-nums',
+                    parts.done === parts.total ? 'text-success' : 'text-faint',
+                  )}
+                  title={`${parts.done} of ${plural(parts.total, 'part')} done`}
+                >
+                  {parts.done}/{parts.total} done
+                </span>
+              )}
+              {onAddInside && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onAddInside()
+                  }}
+                  title={`Add a feature inside ${feature.title} (L${depth + 1})`}
+                  aria-label={`Add a feature inside ${feature.title}`}
+                  aria-expanded={adding}
+                  // Always shown on touch screens, which have no hover; with a
+                  // mouse it appears when the row is hovered, so the list stays quiet.
+                  className={cn(
+                    'grid h-8 w-8 shrink-0 place-items-center rounded-md border transition [@media(hover:hover)]:h-6 [@media(hover:hover)]:w-6',
+                    adding
+                      ? 'border-accent bg-accent-soft text-accent'
+                      : 'border-border text-muted hover:border-accent hover:text-accent [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-visible:opacity-100 [@media(hover:hover)]:group-hover/row:opacity-100',
+                  )}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {/* Categories are not shown in the list for now: the tree already
+                groups features, and the label sat apart from the name. */}
+            </div>
+            {feature.description && <p className="mt-0.5 truncate text-xs text-muted">{feature.description}</p>}
+            {feature.tags.length > 0 && (
+              <div className="mt-1.5">
+                <TagList tags={feature.tags} />
+              </div>
+            )}
+          </div>
+
+          <div className="hidden w-28 shrink-0 sm:block">
+            <StatusPill status={feature.status} />
+          </div>
+
+          <div className="hidden w-24 shrink-0 lg:block">
+            <PriorityPill priority={feature.priority} />
+          </div>
+
+          <div className="w-28 shrink-0 text-right">
+            {tasks && tasks.total > 0 ? (
+              <>
+                <p className="text-xs tabular-nums text-muted">
+                  {tasks.completed}/{tasks.total} tasks
+                </p>
+                <Progress
+                  className="mt-1"
+                  value={tasks.completed}
+                  total={tasks.total}
+                  tone={tasks.completed === tasks.total ? 'success' : 'accent'}
+                  label={`${feature.title} task completion`}
+                />
+              </>
+            ) : (
+              <p className="text-xs text-faint">No tasks</p>
+            )}
+          </div>
+        </div>
       </div>
+      {diffOpen && diff && diff.details.length > 0 && (
+        <div className="space-y-2 bg-raised/40 py-3 pr-4" style={{ paddingLeft: gutter + LEAD + depth * INDENT + 26 }}>
+          {diff.details.map((d) => (
+            <div key={d.label}>
+              <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-faint">{d.label}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="rounded-md border border-danger/30 bg-danger-soft/30 px-3 py-2">
+                  <p className="mb-0.5 text-2xs font-medium text-danger">In {base}</p>
+                  <p className="whitespace-pre-wrap break-words text-xs text-ink">
+                    {d.from || <span className="text-faint">(empty)</span>}
+                  </p>
+                </div>
+                <div className="rounded-md border border-success/30 bg-success-soft/30 px-3 py-2">
+                  <p className="mb-0.5 text-2xs font-medium text-success">Now</p>
+                  <p className="whitespace-pre-wrap break-words text-xs text-ink">
+                    {d.to || <span className="text-faint">(empty)</span>}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
 
-      {/* One guide line per level above this one. */}
+/** The marker on a row: one word, and a few words of what changed. */
+function describeDiff(
+  node: DiffNode,
+): { word: string; detail: string; tone: 'success' | 'warning'; canOpen: boolean } | null {
+  if (node.state === 'added') return { word: 'New', detail: '', tone: 'success', canOpen: false }
+  if (node.state !== 'changed') return null
+  const canOpen = node.details.length > 0
+  const parts: string[] = []
+  let word = 'Edited'
+  if (node.kinds.includes('moved')) {
+    word = 'Moved'
+    parts.push(`from ${node.movedFrom || 'the top level'}`)
+  }
+  if (node.kinds.includes('renamed')) {
+    if (word === 'Edited') word = 'Renamed'
+    parts.push(`was “${node.oldTitle}”`)
+  }
+  if (node.details.length > 0) parts.push(`${node.details.map((d) => d.label.toLowerCase()).join(', ')} changed`)
+  if (node.kinds.includes('needs')) parts.push('dependencies changed')
+  return { word, detail: parts.join(' · '), tone: 'warning', canOpen }
+}
+
+/** A feature the picked version had and the list no longer does, where it used to be. */
+function RemovedRow({ node, depth, base }: { node: DiffNode; depth: number; base: string }) {
+  return (
+    <div className="relative flex items-center bg-danger-soft/10" title={`In ${base}, removed since`}>
+      <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-danger" />
       {Array.from({ length: depth }).map((_, i) => (
         <span
           key={i}
           aria-hidden
           className="absolute inset-y-0 w-px bg-border"
-          style={{ left: gutter + LEAD + 9 + i * INDENT }}
+          style={{ left: LEAD + 9 + i * INDENT }}
         />
       ))}
-
-      <div className="flex shrink-0 items-center self-stretch" style={{ paddingLeft: gutter + LEAD + depth * INDENT }}>
-        {children.length > 0 ? (
-          // The click area spans the full row height and 8px either side of the
-          // arrow, so a near-miss toggles instead of opening the feature.
-          <button
-            onClick={onToggle}
-            disabled={!canToggle}
-            aria-expanded={open}
-            aria-label={`${open ? 'Hide' : 'Show'} the parts of ${feature.title}`}
-            className="group relative z-10 -mx-2 grid h-full place-items-center px-2 text-faint hover:text-ink disabled:pointer-events-none"
-          >
-            <span className="grid h-[18px] w-[18px] place-items-center rounded group-hover:bg-border">
-              <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-90')} />
-            </span>
-          </button>
-        ) : (
-          <span className="w-[18px]" />
-        )}
-      </div>
-
-      {/* The whole row opens the feature. It is a div, not a button, so the
-          "+" after the title can be a button of its own; the title is the
-          button that keyboard users reach, and its click bubbles up here. */}
       <div
-        onClick={arranging ? undefined : onOpen}
-        className={cn(
-          'flex min-w-0 flex-1 items-center gap-4 py-3 pl-2 pr-4 text-left',
-          !arranging && 'cursor-pointer',
-        )}
+        className="flex min-w-0 flex-1 items-center gap-2 py-2.5 pr-4"
+        style={{ paddingLeft: LEAD + depth * INDENT + 26 }}
       >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span
-              className="shrink-0 rounded border border-border px-1 font-mono text-2xs text-faint"
-              title={`Level ${depth}`}
-            >
-              L{depth}
-            </span>
-            <button
-              type="button"
-              className="truncate rounded-sm text-left text-sm font-medium text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            >
-              {feature.title}
-            </button>
-            {change && (
-              <Badge
-                tone={change === 'new' ? 'success' : 'warning'}
-                className="shrink-0"
-                title={change === 'new' ? 'Added since your last visit' : 'Changed since your last visit'}
-              >
-                {change === 'new' ? 'New' : 'Changed'}
-              </Badge>
-            )}
-            {parts.total > 0 && (
-              <span
-                className={cn(
-                  'shrink-0 text-2xs tabular-nums',
-                  parts.done === parts.total ? 'text-success' : 'text-faint',
-                )}
-                title={`${parts.done} of ${plural(parts.total, 'part')} done`}
-              >
-                {parts.done}/{parts.total} done
-              </span>
-            )}
-            {onAddInside && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onAddInside()
-                }}
-                title={`Add a feature inside ${feature.title} (L${depth + 1})`}
-                aria-label={`Add a feature inside ${feature.title}`}
-                aria-expanded={adding}
-                // Always shown on touch screens, which have no hover; with a
-                // mouse it appears when the row is hovered, so the list stays quiet.
-                className={cn(
-                  'grid h-8 w-8 shrink-0 place-items-center rounded-md border transition [@media(hover:hover)]:h-6 [@media(hover:hover)]:w-6',
-                  adding
-                    ? 'border-accent bg-accent-soft text-accent'
-                    : 'border-border text-muted hover:border-accent hover:text-accent [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:focus-visible:opacity-100 [@media(hover:hover)]:group-hover/row:opacity-100',
-                )}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {/* Categories are not shown in the list for now: the tree already
-                groups features, and the label sat apart from the name. */}
-          </div>
-          {feature.description && <p className="mt-0.5 truncate text-xs text-muted">{feature.description}</p>}
-          {feature.tags.length > 0 && (
-            <div className="mt-1.5">
-              <TagList tags={feature.tags} />
-            </div>
-          )}
-        </div>
-
-        <div className="hidden w-28 shrink-0 sm:block">
-          <StatusPill status={feature.status} />
-        </div>
-
-        <div className="hidden w-24 shrink-0 lg:block">
-          <PriorityPill priority={feature.priority} />
-        </div>
-
-        <div className="w-28 shrink-0 text-right">
-          {tasks && tasks.total > 0 ? (
-            <>
-              <p className="text-xs tabular-nums text-muted">
-                {tasks.completed}/{tasks.total} tasks
-              </p>
-              <Progress
-                className="mt-1"
-                value={tasks.completed}
-                total={tasks.total}
-                tone={tasks.completed === tasks.total ? 'success' : 'accent'}
-                label={`${feature.title} task completion`}
-              />
-            </>
-          ) : (
-            <p className="text-xs text-faint">No tasks</p>
-          )}
-        </div>
+        <span className="shrink-0 rounded border border-border px-1 font-mono text-2xs text-faint">L{depth}</span>
+        <span className="truncate text-sm text-faint line-through">{node.title}</span>
+        <Badge tone="danger" className="shrink-0">
+          Removed
+        </Badge>
+        {node.children.length > 0 && (
+          <span className="text-xs text-faint">and {plural(node.children.length, 'feature')} inside</span>
+        )}
       </div>
     </div>
+  )
+}
+
+/**
+ * The header's word on where the list stands: changes since the last saved
+ * version, or all saved. Edits are kept as they are made; this only counts
+ * what is not saved as a version yet.
+ */
+function WorkingBadge({ working }: { working: ReturnType<typeof useWorkingState> }) {
+  const pill =
+    'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-2xs font-medium'
+  if (working.isLoading) return null
+  if (working.neverSaved) {
+    return (
+      <span className={cn(pill, 'border-warning/50 bg-warning-soft/40 text-warning')}>
+        <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+        Not saved as a version yet
+      </span>
+    )
+  }
+  if (!working.latest || working.unsaved === null) return null
+  if (working.unsaved > 0) {
+    return (
+      <span
+        className={cn(pill, 'border-warning/50 bg-warning-soft/40 text-warning')}
+        title="Your edits are kept as you make them; this counts what is not saved as a version yet"
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+        {plural(working.unsaved, 'change')} since <span className="font-mono">{working.latest.label}</span>
+      </span>
+    )
+  }
+  return (
+    <span className={cn(pill, 'border-border text-muted')}>
+      <Check className="h-3 w-3 text-success" />
+      Saved as <span className="font-mono">{working.latest.label}</span>
+      {working.latest.publish_number > 0 && ' · published'}
+    </span>
   )
 }
 

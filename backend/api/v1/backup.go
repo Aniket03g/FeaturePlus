@@ -266,6 +266,12 @@ type BackupVersion struct {
 	Notes   string `json:"notes"`
 	SavedBy string `json:"saved_by"`
 	Auto    bool   `json:"auto"`
+	// The v2.3-style number; absent from backups made before it, which get
+	// numbered on restore.
+	Major int `json:"major,omitempty"`
+	Minor int `json:"minor,omitempty"`
+	// BasedOn is the Number of the version this one was made from.
+	BasedOn int `json:"based_on,omitempty"`
 	// Set on a version published from the in-progress list; see FeatureVersion.
 	PublishNumber int             `json:"publish_number,omitempty"`
 	PublishedAt   *time.Time      `json:"published_at,omitempty"`
@@ -598,14 +604,22 @@ func collectBackup(db *gorm.DB, files *sqlitefs.SQLiteFS, project *models.Projec
 	if err := db.Where("project_id = ?", project.ID).Order("number").Find(&versions).Error; err != nil {
 		return out, nil, err
 	}
+	numberOf := map[uint]int{}
 	for _, v := range versions {
+		numberOf[v.ID] = v.Number
+	}
+	for _, v := range versions {
+		basedOn := 0
+		if v.BasedOnID != nil {
+			basedOn = numberOf[*v.BasedOnID]
+		}
 		snap, err := snapshotJSON(v.Snapshot)
 		if err != nil {
 			return out, nil, fmt.Errorf("version %d: %w", v.Number, err)
 		}
 		out.Versions = append(out.Versions, BackupVersion{
 			ID: v.ID, Number: v.Number, Tag: v.Tag, Notes: v.Notes, SavedBy: people.ref(v.SavedByID),
-			Auto: v.Auto, PublishNumber: v.PublishNumber, PublishedAt: v.PublishedAt,
+			Auto: v.Auto, Major: v.Major, Minor: v.Minor, BasedOn: basedOn, PublishNumber: v.PublishNumber, PublishedAt: v.PublishedAt,
 			FeatureCount: v.FeatureCount, Snapshot: snap, CreatedAt: v.CreatedAt,
 		})
 	}

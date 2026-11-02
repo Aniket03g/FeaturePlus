@@ -25,7 +25,7 @@ import {
   GitBranch,
   ArrowLeftRight,
   Archive,
-  BadgeCheck,
+  History,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
@@ -82,13 +82,13 @@ const NAV: NavGroup[] = [
     inProject: true,
     items: [
       { id: 'projectDashboard', label: 'Dashboard', icon: LayoutDashboard },
-      // The list everyone edits; Published is the agreed copy of it, and
-      // Versions is reached from the Published screen.
+      // The list everyone edits, and its saved and published versions; the
+      // published list is a tab on the Versions screen.
       { id: 'inProgress', label: 'Feature List', icon: ListTree },
       {
         id: 'featureList',
-        label: 'Published',
-        icon: BadgeCheck,
+        label: 'Versions',
+        icon: History,
         extra: { id: 'dependencies', label: 'Dependencies', icon: Network },
       },
       { id: 'messages', label: 'Messages', icon: MessageSquare, soon: true },
