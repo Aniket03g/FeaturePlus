@@ -292,8 +292,14 @@ func planMerge(base, copied, live OpenedProject, taskCounts map[uint]int, choice
 
 	// Features the copy removed.
 	deleted := map[string]bool{}
+	// A feature the copy's new one was matched to by name is the copy's
+	// feature now, so it is never removed as one the copy left out.
+	matched := map[string]bool{}
+	for _, to := range plan.alias {
+		matched[to] = true
+	}
 	for _, was := range base.Features {
-		if _, kept := copyRows[was.Key]; kept {
+		if _, kept := copyRows[was.Key]; kept || matched[was.Key] {
 			continue
 		}
 		now, inLive := liveRows[was.Key]
@@ -374,7 +380,14 @@ func planMerge(base, copied, live OpenedProject, taskCounts map[uint]int, choice
 				has[need] = true
 			}
 		}
-		for _, need := range minus(row.Needs, before) {
+		// The copy's needs, with its new features matched by name read as the
+		// list's own, so the same dependency is not seen as one removed and
+		// one added.
+		wants := make([]string, 0, len(row.Needs))
+		for _, need := range row.Needs {
+			wants = append(wants, resolve(need))
+		}
+		for _, need := range minus(wants, before) {
 			target := resolve(need)
 			if !exists(target) || deleted[target] || has[target] || target == key {
 				continue
@@ -383,7 +396,7 @@ func planMerge(base, copied, live OpenedProject, taskCounts map[uint]int, choice
 			plan.needAdds = append(plan.needAdds, mergeNeed{childKey: key, parentKey: target})
 			plan.changes = append(plan.changes, MergeChange{Kind: "needs_added", Key: key, Title: nameOf(key), To: nameOf(target)})
 		}
-		for _, need := range minus(before, row.Needs) {
+		for _, need := range minus(before, wants) {
 			if !has[need] || deleted[need] {
 				continue
 			}

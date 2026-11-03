@@ -165,7 +165,7 @@ export function PublishedList({ projectId }: { projectId: number }) {
             <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden />
             <span className="min-w-0 flex-1">
               <span className="font-mono font-semibold text-ink">{version.label}</span>{' '}
-              <span className="font-medium text-ink">· Live</span>
+              <span className="font-medium text-ink">· Published</span>
               {' · '}
               {when} by {version.saved_by.name || 'someone since removed'}
               {' · '}

@@ -3,6 +3,7 @@ import {
   ChevronRight,
   Download,
   GitCompare,
+  ListTree,
   Loader2,
   MoreHorizontal,
   RotateCcw,
@@ -13,6 +14,8 @@ import {
 import {
   useCopies,
   useProject,
+  useSetVersionNote,
+  useSetWorkingNote,
   useVersion,
   useVersionsWithChanges,
   type FeatureCopy,
@@ -23,6 +26,7 @@ import { useWorkingState, versionNote } from '@/lib/working'
 import { StartCopyDialog } from '@/pages/StartCopyDialog'
 import { PublishDialog, RestoreDialog, SaveVersionDialog } from '@/pages/PublishDialog'
 import { useRouter } from '@/lib/router'
+import { NoteEditor } from '@/components/NoteEditor'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -120,7 +124,7 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
                     navigate({
                       name: 'compare',
                       projectId,
-                      from: String((working.live && working.live.id !== list[0].id ? working.live : list[1]).id),
+                      from: String((working.published && working.published.id !== list[0].id ? working.published : list[1]).id),
                       to: String(list[0].id),
                     })
                   }
@@ -193,6 +197,17 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
 const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
+function Counts({ c }: { c: { added: number; removed: number; changed: number } }) {
+  if (c.added + c.removed + c.changed === 0) return <span className="font-sans text-faint">Unchanged</span>
+  return (
+    <span className="flex gap-1.5">
+      {c.added > 0 && <span className="text-success">+{c.added}</span>}
+      {c.changed > 0 && <span className="text-warning">~{c.changed}</span>}
+      {c.removed > 0 && <span className="text-danger">−{c.removed}</span>}
+    </span>
+  )
+}
+
 function VersionsTable({
   projectId,
   versions,
@@ -210,9 +225,11 @@ function VersionsTable({
 }) {
   const { navigate } = useRouter()
   const working = useWorkingState(projectId)
-  const [viewing, setViewing] = useState<number | null>(null)
+  const setWorkingNote = useSetWorkingNote(projectId)
+  const setVersionNote = useSetVersionNote(projectId)
+  const [previewing, setPreviewing] = useState<number | null>(null)
   const [publishing, setPublishing] = useState<FeatureVersion | null>(null)
-  const [restoring, setRestoring] = useState<FeatureVersion | null>(null)
+  const [opening, setOpening] = useState<FeatureVersion | null>(null)
   const [message, setMessage] = useState('')
 
   if (versions.isLoading) {
@@ -237,7 +254,9 @@ function VersionsTable({
   const all = versions.data ?? []
   const shown = publishedOnly ? all.filter((v) => v.publish_number > 0) : all
   const unsaved = working.unsaved ?? 0
-  const latest = working.latest
+  const base = working.latest
+  const changed = unsaved > 0 || working.neverSaved
+  const goToWorking = () => navigate({ name: 'inProgress', projectId })
 
   return (
     <div className="space-y-3">
@@ -247,9 +266,9 @@ function VersionsTable({
         </p>
       )}
       <Card className="overflow-x-auto">
-        <table className="w-full min-w-[840px] text-sm">
+        <table className="w-full min-w-[1000px] text-sm">
           <thead>
-            <tr className="border-b border-border text-left text-2xs font-semibold uppercase tracking-wider text-faint">
+            <tr className="whitespace-nowrap border-b border-border text-left text-2xs font-semibold uppercase tracking-wider text-faint">
               <th className="px-4 py-2.5 font-semibold">Version</th>
               <th className="px-4 py-2.5 font-semibold">Based on</th>
               <th className="px-4 py-2.5 font-semibold">Note</th>
@@ -260,63 +279,71 @@ function VersionsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {/* The Feature List itself, on top. */}
-            <tr className={cn(unsaved > 0 || working.neverSaved ? 'bg-warning-soft/20' : '')}>
-              <td className="px-4 py-3">
-                <button
-                  type="button"
-                  className="flex items-center gap-2 font-medium text-ink hover:underline"
-                  onClick={() => navigate({ name: 'inProgress', projectId })}
-                >
-                  <span
-                    className={cn('h-2 w-2 rounded-full', unsaved > 0 || working.neverSaved ? 'bg-warning' : 'bg-success')}
-                    aria-hidden
-                  />
-                  Feature List
-                </button>
+            {/* The working version, on top: what it is based on, and whether it changed since. */}
+            <tr className={cn(changed ? 'bg-warning-soft/20' : 'bg-accent-soft/10')}>
+              <td className="whitespace-nowrap px-4 py-3">
+                <span className="flex items-center gap-2 text-ink">
+                  <span className={cn('h-2 w-2 rounded-full', changed ? 'bg-warning' : 'bg-success')} aria-hidden />
+                  Working version
+                </span>
               </td>
-              <td className="px-4 py-3 font-mono text-xs text-muted">{latest ? latest.label : '—'}</td>
-              <td className="px-4 py-3 text-muted">
-                {working.neverSaved
-                  ? 'Not saved as a version yet'
-                  : working.unsaved === null
-                    ? '…'
-                    : unsaved > 0
-                      ? `${plural(unsaved, 'change')} since ${latest?.label}`
-                      : `Everything saved as ${latest?.label}`}
+              <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted">{base ? base.label : '—'}</td>
+              <td className="min-w-[16rem] max-w-sm px-4 py-3">
+                <NoteEditor
+                  note={working.note}
+                  empty={canSave ? 'Add a note' : 'No note'}
+                  title={working.note && working.noteBy ? `Note by ${working.noteBy}` : undefined}
+                  onSave={canSave ? (note) => setWorkingNote.mutateAsync(note) : undefined}
+                />
               </td>
               <td className="px-4 py-3 text-muted">—</td>
               <td className="px-4 py-3 text-muted">now</td>
-              <td className="px-4 py-3">
-                {working.unsavedCounts && unsaved > 0 && (
-                  <span className="flex gap-1.5 font-mono text-xs">
-                    {working.unsavedCounts.added > 0 && <span className="text-success">+{working.unsavedCounts.added}</span>}
-                    {working.unsavedCounts.changed > 0 && <span className="text-warning">~{working.unsavedCounts.changed}</span>}
-                    {working.unsavedCounts.removed > 0 && <span className="text-danger">−{working.unsavedCounts.removed}</span>}
-                  </span>
+              <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
+                {working.neverSaved ? (
+                  <span className="font-sans text-warning">Not saved yet</span>
+                ) : working.unsavedCounts ? (
+                  <Counts c={working.unsavedCounts} />
+                ) : (
+                  <span className="text-faint">…</span>
                 )}
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center justify-end gap-2">
-                  {latest && unsaved > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => navigate({ name: 'compare', projectId, from: String(latest.id), to: 'current' })}
-                    >
-                      See changes
-                    </Button>
+                  <Button variant="secondary" size="sm" className="whitespace-nowrap" onClick={goToWorking}>
+                    <ListTree className="h-3.5 w-3.5" />
+                    Go to working version
+                  </Button>
+                  {base && unsaved > 0 && (
+                    <RowMenu
+                      label="More for the working version"
+                      items={[
+                        {
+                          icon: <GitCompare className="h-3.5 w-3.5" />,
+                          text: `See the changes since ${base.label}`,
+                          onClick: () => navigate({ name: 'compare', projectId, from: String(base.id), to: 'current' }),
+                        },
+                        ...(mayPublish
+                          ? [
+                              {
+                                icon: <RotateCcw className="h-3.5 w-3.5" />,
+                                text: 'Discard the changes',
+                                onClick: () => setOpening(base),
+                              },
+                            ]
+                          : []),
+                      ]}
+                    />
                   )}
-                  {canSave && (unsaved > 0 || working.neverSaved) && (
-                    <Button size="sm" onClick={onSave}>
+                  {canSave && changed && (
+                    <Button size="sm" className="whitespace-nowrap" onClick={onSave}>
                       <Save className="h-3.5 w-3.5" />
                       Save as <span className="font-mono">{working.nextSave}</span>
                     </Button>
                   )}
-                  {mayPublish && latest && unsaved === 0 && latest.publish_number === 0 && (
-                    <Button size="sm" onClick={() => setPublishing(latest)}>
+                  {mayPublish && base && unsaved === 0 && base.publish_number === 0 && (
+                    <Button size="sm" className="whitespace-nowrap" onClick={() => setPublishing(base)}>
                       <Send className="h-3.5 w-3.5" />
-                      Publish <span className="font-mono">{latest.label}</span>
+                      Publish <span className="font-mono">{base.label}</span>
                     </Button>
                   )}
                 </div>
@@ -328,12 +355,15 @@ function VersionsTable({
                 key={v.id}
                 projectId={projectId}
                 version={v}
-                live={working.live?.id === v.id}
+                live={base?.id === v.id}
                 indent={!publishedOnly && v.publish_number === 0 && v.major > 0}
-                viewing={viewing === v.id}
-                onView={() => setViewing(viewing === v.id ? null : v.id)}
-                onPublish={mayPublish && working.live?.id !== v.id ? () => setPublishing(v) : undefined}
-                onRestore={mayPublish ? () => setRestoring(v) : undefined}
+                previewing={previewing === v.id}
+                onPreview={() => setPreviewing(previewing === v.id ? null : v.id)}
+                onView={
+                  base?.id === v.id ? goToWorking : mayPublish ? () => setOpening(v) : undefined
+                }
+                onPublish={mayPublish && working.published?.id !== v.id ? () => setPublishing(v) : undefined}
+                onNote={canSave ? (notes) => setVersionNote.mutateAsync({ versionId: v.id, notes }) : undefined}
               />
             ))}
           </tbody>
@@ -345,12 +375,16 @@ function VersionsTable({
             </div>
             <p className="text-sm font-medium text-ink">No versions yet</p>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted">
-              Save the Feature List to keep it as it is now. Saves count up as v0.1, v0.2… and publishing one makes it
-              v1, the list everyone reads.
+              Save the working version to keep it as it is now. Saves count up as v0.1, v0.2… and publishing one
+              makes it v1, the list everyone reads.
             </p>
           </div>
         )}
       </Card>
+      <p className="text-xs text-faint">
+        <span className="font-medium text-muted">Live</span> marks the version the working version is based on.{' '}
+        {mayPublish ? 'View opens a version as the working version.' : 'Only the owner or a publisher can open a version as the working version.'}
+      </p>
 
       {publishing && (
         <PublishDialog
@@ -360,14 +394,12 @@ function VersionsTable({
           onPublished={(label) => setMessage(`Published as ${label}. Everyone now reads this list.`)}
         />
       )}
-      {restoring && (
+      {opening && (
         <RestoreDialog
           projectId={projectId}
-          version={restoring}
-          onClose={() => setRestoring(null)}
-          onDone={(saved) =>
-            setMessage(`The Feature List is back to how it was in ${restoring.label}, and was saved as ${saved}.`)
-          }
+          version={opening}
+          onClose={() => setOpening(null)}
+          onDone={() => navigate({ name: 'inProgress', projectId })}
         />
       )}
     </div>
@@ -379,23 +411,26 @@ function VersionRow({
   version,
   live,
   indent,
-  viewing,
+  previewing,
+  onPreview,
   onView,
   onPublish,
-  onRestore,
+  onNote,
 }: {
   projectId: number
   version: FeatureVersion
+  /** The working version is based on this one. */
   live: boolean
   indent: boolean
-  viewing: boolean
-  onView: () => void
+  previewing: boolean
+  onPreview: () => void
+  /** Opens it as the working version; missing without the right to. */
+  onView?: () => void
   onPublish?: () => void
-  onRestore?: () => void
+  onNote?: (notes: string) => Promise<unknown>
 }) {
   const { navigate } = useRouter()
   const published = version.publish_number > 0
-  const note = versionNote(version)
   const c = version.changes
   const [downloading, setDownloading] = useState(false)
 
@@ -410,50 +445,49 @@ function VersionRow({
 
   return (
     <>
-      <tr className={cn(published && 'bg-success-soft/10')}>
-        <td className="px-4 py-3">
+      <tr className={cn(live ? 'bg-accent-soft/10' : published && 'bg-success-soft/10')}>
+        <td className="whitespace-nowrap px-4 py-3">
           <div className={cn('flex items-center gap-2', indent && 'pl-5')}>
             {indent && <span aria-hidden className="-ml-4 h-3 w-3 rounded-bl border-b border-l border-border" />}
             <span className={cn('font-mono', published ? 'font-bold text-ink' : 'text-muted')}>{version.label}</span>
             {published && <Badge tone="success">Published</Badge>}
-            {live && <Badge tone="accent">Live</Badge>}
+            {live && (
+              <Badge tone="accent" title="The working version is based on this version">
+                Live
+              </Badge>
+            )}
           </div>
         </td>
         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted">
           {version.based_on ? version.based_on.label : '—'}
         </td>
-        <td className={cn('max-w-xs px-4 py-3', published ? 'font-semibold text-ink' : 'text-ink')}>
-          {note ? <span className="line-clamp-2">{note}</span> : <span className="font-normal text-faint">No note</span>}
+        <td className="min-w-[16rem] max-w-sm px-4 py-3">
+          <NoteEditor note={versionNote(version)} strong={published} onSave={onNote} />
         </td>
-        <td className={cn('px-4 py-3', published ? 'font-semibold text-ink' : 'text-muted')}>
+        <td className={cn('whitespace-nowrap px-4 py-3', published ? 'font-semibold text-ink' : 'text-muted')}>
           {version.saved_by.name || 'someone since removed'}
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-muted">{when(version.published_at ?? version.created_at)}</td>
         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
-          {c ? (
-            c.added + c.removed + c.changed === 0 ? (
-              <span className="text-faint">no changes</span>
-            ) : (
-              <span className="flex gap-1.5">
-                {c.added > 0 && <span className="text-success">+{c.added}</span>}
-                {c.changed > 0 && <span className="text-warning">~{c.changed}</span>}
-                {c.removed > 0 && <span className="text-danger">−{c.removed}</span>}
-              </span>
-            )
-          ) : (
-            <span className="font-sans text-muted">{plural(version.feature_count, 'feature')}</span>
-          )}
+          {c ? <Counts c={c} /> : <span className="font-sans text-muted">{plural(version.feature_count, 'feature')}</span>}
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center justify-end gap-1.5">
-            <Button variant="ghost" size="sm" onClick={onView} aria-expanded={viewing}>
-              {viewing ? 'Hide' : 'View'}
-            </Button>
+            {onView && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onView}
+                title={live ? 'Go to the working version' : `Open ${version.label} as the working version`}
+              >
+                View
+              </Button>
+            )}
             <Button
               variant="secondary"
               size="sm"
               onClick={() => navigate({ name: 'compare', projectId, from: String(version.id), to: 'current' })}
-              title={`What changed from ${version.label} to the Feature List now`}
+              title={`What changed from ${version.label} to the working version`}
             >
               Compare
             </Button>
@@ -463,15 +497,11 @@ function VersionRow({
                 ...(onPublish
                   ? [{ icon: <Send className="h-3.5 w-3.5" />, text: `Publish ${version.label}`, onClick: onPublish }]
                   : []),
-                ...(onRestore
-                  ? [
-                      {
-                        icon: <RotateCcw className="h-3.5 w-3.5" />,
-                        text: 'Make this the Feature List',
-                        onClick: onRestore,
-                      },
-                    ]
-                  : []),
+                {
+                  icon: <ListTree className="h-3.5 w-3.5" />,
+                  text: previewing ? 'Hide the list' : 'Look at the list',
+                  onClick: onPreview,
+                },
                 {
                   icon: downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />,
                   text: 'Download .md',
@@ -482,7 +512,7 @@ function VersionRow({
           </div>
         </td>
       </tr>
-      {viewing && (
+      {previewing && (
         <tr>
           <td colSpan={7} className="bg-raised/30 px-4 py-3">
             <VersionTree projectId={projectId} versionId={version.id} />

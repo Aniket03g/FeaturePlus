@@ -112,7 +112,9 @@ func TestSavesAreMinorVersionsAndPublishingMakesTheNextWholeNumber(t *testing.T)
 			bases[v.Label] = "-"
 		}
 	}
-	want := map[string]string{"v0.1": "-", "v1": "v0.1", "v1.1": "v1", "v1.2": "v1.1", "v2": "v1.1", "v2.1": "v2"}
+	// v2 was published from the older v1.1 while the Feature List still held
+	// v1.2, so the save after it is based on v1.2.
+	want := map[string]string{"v0.1": "-", "v1": "v0.1", "v1.1": "v1", "v1.2": "v1.1", "v2": "v1.1", "v2.1": "v1.2"}
 	for label, b := range want {
 		if bases[label] != b {
 			t.Errorf("%s based on %q, want %q (all: %v)", label, bases[label], b, bases)
@@ -186,9 +188,12 @@ func TestGoingBackPutsAVersionInPlaceOfTheList(t *testing.T) {
 		Data RestoreResult `json:"data"`
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &result)
-	if result.Data.Saved.Label != "v0.3" || result.Data.Saved.Notes != "Went back to v0.1" ||
-		result.Data.Saved.BasedOn == nil || result.Data.Saved.BasedOn.Label != "v0.1" {
-		t.Fatalf("saved after going back = %+v", result.Data.Saved)
+	// Nothing new is saved: the working version is now based on v0.1.
+	if result.Data.Base.Label != "v0.1" {
+		t.Fatalf("based on after opening v0.1 = %+v", result.Data.Base)
+	}
+	if list := decodeVersions(t, do(r, http.MethodGet, base+"/versions", "").Body.Bytes()); len(list) != 2 {
+		t.Fatalf("opening a version saved a new one: %d versions", len(list))
 	}
 
 	var features []models.Feature
@@ -242,5 +247,137 @@ func TestNumberVersionsNumbersOldRows(t *testing.T) {
 		if v.Label() != want[i] {
 			t.Errorf("version %d = %s, want %s", v.Number, v.Label(), want[i])
 		}
+	}
+}
+
+func TestGoingBackKeepsAFeatureReAddedUnderTheSameName(t *testing.T) {
+	db := newTestDB(t)
+	owner, _, project := seed(t, db)
+	r := versionsRouterAs(t, db, owner.ID)
+	base := "/api/v1/projects/" + strconv.Itoa(project.ID)
+
+	search := models.Feature{ProjectID: project.ID, Title: "Search"}
+	db.Create(&search)
+	results := models.Feature{ProjectID: project.ID, Title: "Results"}
+	db.Create(&results)
+	db.Create(&models.Dependency{ParentID: search.ID, ParentType: models.EntityTypeFeature,
+		ChildID: results.ID, ChildType: models.EntityTypeFeature})
+	old := saveV(t, r, base, "")
+
+	// Search deleted, then a new Search added: a different feature, same name,
+	// and Results made to need the new one.
+	db.Unscoped().Where("parent_id = ? OR child_id = ?", search.ID, search.ID).Delete(&models.Dependency{})
+	db.Unscoped().Delete(&search)
+	again := models.Feature{ProjectID: project.ID, Title: "Search"}
+	db.Create(&again)
+	db.Create(&models.Dependency{ParentID: again.ID, ParentType: models.EntityTypeFeature,
+		ChildID: results.ID, ChildType: models.EntityTypeFeature})
+	saveV(t, r, base, "")
+
+	if w := do(r, http.MethodPost, base+"/versions/"+strconv.Itoa(int(old.ID))+"/restore", ""); w.Code != http.StatusOK {
+		t.Fatalf("restore: status %d: %s", w.Code, w.Body.String())
+	}
+	var features []models.Feature
+	db.Where("project_id = ?", project.ID).Find(&features)
+	if len(features) != 2 {
+		t.Fatalf("after going back = %+v, want Search and Results", features)
+	}
+	var needs int64
+	db.Model(&models.Dependency{}).Where("parent_id = ? AND child_id = ?", again.ID, results.ID).Count(&needs)
+	if needs != 1 {
+		t.Errorf("Results no longer needs the kept Search")
+	}
+}
+
+func decodeWorking(t *testing.T, r *gin.Engine, base string) WorkingDTO {
+	t.Helper()
+	var out struct {
+		Data WorkingDTO `json:"data"`
+	}
+	w := do(r, http.MethodGet, base+"/working", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("working: status %d: %s", w.Code, w.Body.String())
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &out)
+	return out.Data
+}
+
+func TestWorkingVersionBaseNoteAndDiscard(t *testing.T) {
+	db := newTestDB(t)
+	owner, other, project := seed(t, db)
+	r := versionsRouterAs(t, db, owner.ID)
+	base := "/api/v1/projects/" + strconv.Itoa(project.ID)
+
+	// Nothing saved: no base, the next save is v0.1.
+	if w := decodeWorking(t, r, base); w.Base != nil || w.NextSave != "v0.1" || w.NextPublish != "v1" {
+		t.Fatalf("before any save = %+v", w)
+	}
+
+	cart := models.Feature{ProjectID: project.ID, Title: "Cart"}
+	db.Create(&cart)
+
+	// A note on the working version, offered to and cleared by the save.
+	if w := do(r, http.MethodPatch, base+"/working", `{"note":" Reworking the cart "}`); w.Code != http.StatusNoContent {
+		t.Fatalf("set note: status %d: %s", w.Code, w.Body.String())
+	}
+	if w := decodeWorking(t, r, base); w.Note != "Reworking the cart" || w.NoteBy != "owner" {
+		t.Fatalf("note = %+v", w)
+	}
+	v01 := saveV(t, r, base, "first")
+	if w := decodeWorking(t, r, base); w.Note != "" || w.Base == nil || w.Base.ID != v01.ID ||
+		w.Unsaved == nil || w.Unsaved.Added+w.Unsaved.Removed+w.Unsaved.Changed != 0 {
+		t.Fatalf("after save = %+v", w)
+	}
+
+	db.Model(&cart).Update("title", "Basket")
+	v02 := saveV(t, r, base, "")
+
+	// Open v0.1 as the working version: based on it, unchanged, nothing saved.
+	restore := func(id uint, body string) int {
+		return do(r, http.MethodPost, base+"/versions/"+strconv.Itoa(int(id))+"/restore", body).Code
+	}
+	if code := restore(v01.ID, ""); code != http.StatusOK {
+		t.Fatalf("open v0.1: status %d", code)
+	}
+	w := decodeWorking(t, r, base)
+	if w.Base == nil || w.Base.Label != "v0.1" || w.Unsaved.Changed != 0 {
+		t.Fatalf("after opening v0.1 = %+v", w)
+	}
+	// The next save is numbered on from the newest (v0.3) and based on v0.1.
+	db.Model(&cart).Updates(map[string]any{"title": "Trolley", "status": models.StatusDone})
+	if w := decodeWorking(t, r, base); w.NextSave != "v0.3" || w.Unsaved.Changed != 1 {
+		t.Fatalf("with a change = %+v", w)
+	}
+
+	// Changes block opening another version, unless discarded.
+	if code := restore(v02.ID, ""); code != http.StatusConflict {
+		t.Fatalf("open with changes: status %d, want 409", code)
+	}
+	// Discard: open the version it is based on again.
+	if code := restore(v01.ID, `{"discard":true}`); code != http.StatusOK {
+		t.Fatalf("discard: status %d", code)
+	}
+	var now models.Feature
+	db.First(&now, cart.ID)
+	if now.Title != "Cart" || now.Status == models.StatusDone {
+		t.Fatalf("after discard = %q / %s, want Cart and its old status", now.Title, now.Status)
+	}
+	if w := decodeWorking(t, r, base); w.Unsaved.Added+w.Unsaved.Removed+w.Unsaved.Changed != 0 {
+		t.Fatalf("after discard there are still changes: %+v", w.Unsaved)
+	}
+
+	saved := saveV(t, r, base, "")
+	if saved.BasedOn == nil || saved.BasedOn.Label != "v0.1" {
+		t.Fatalf("save after opening v0.1 based on %+v, want v0.1", saved.BasedOn)
+	}
+
+	// A saved version's note can be changed, by anyone who can edit.
+	w2 := do(r, http.MethodPatch, base+"/versions/"+strconv.Itoa(int(v02.ID)), `{"notes":"Renamed the cart"}`)
+	if w2.Code != http.StatusOK || decodeVersion(t, w2.Body.Bytes()).Notes != "Renamed the cart" {
+		t.Fatalf("edit note: %d %s", w2.Code, w2.Body.String())
+	}
+	share(t, db, project.ID, other.ID, models.RoleViewer)
+	if w := do(versionsRouterAs(t, db, other.ID), http.MethodPatch, base+"/working", `{"note":"x"}`); w.Code != http.StatusForbidden {
+		t.Fatalf("viewer note: status %d, want 403", w.Code)
 	}
 }

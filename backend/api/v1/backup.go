@@ -93,6 +93,8 @@ type ProjectBackup struct {
 	FeatureCommits     []BackupFeatureCommit    `json:"feature_commits"`
 	Contracts          []BackupContract         `json:"contracts"`
 	Versions           []BackupVersion          `json:"versions"`
+	// Working is what the working version is based on, and its note.
+	Working *BackupWorking `json:"working,omitempty"`
 	Copies             []BackupCopy             `json:"copies"`
 	Members            []BackupMember           `json:"members"`
 	FeatureAccess      []BackupFeatureAccess    `json:"feature_access"`
@@ -278,6 +280,12 @@ type BackupVersion struct {
 	FeatureCount  int             `json:"feature_count"`
 	Snapshot      json.RawMessage `json:"snapshot"`
 	CreatedAt     time.Time       `json:"created_at"`
+}
+
+// BackupWorking is the working version's base, by version Number, and note.
+type BackupWorking struct {
+	BaseNumber int    `json:"base_number,omitempty"`
+	Note       string `json:"note,omitempty"`
 }
 
 type BackupCopy struct {
@@ -622,6 +630,18 @@ func collectBackup(db *gorm.DB, files *sqlitefs.SQLiteFS, project *models.Projec
 			Auto: v.Auto, Major: v.Major, Minor: v.Minor, BasedOn: basedOn, PublishNumber: v.PublishNumber, PublishedAt: v.PublishedAt,
 			FeatureCount: v.FeatureCount, Snapshot: snap, CreatedAt: v.CreatedAt,
 		})
+	}
+
+	var working models.WorkingState
+	if err := db.Where("project_id = ?", project.ID).Limit(1).Find(&working).Error; err != nil {
+		return out, nil, err
+	}
+	if working.ProjectID != 0 {
+		w := &BackupWorking{Note: working.Note}
+		if working.BaseVersionID != nil {
+			w.BaseNumber = numberOf[*working.BaseVersionID]
+		}
+		out.Working = w
 	}
 
 	var copies []models.FeatureCopy

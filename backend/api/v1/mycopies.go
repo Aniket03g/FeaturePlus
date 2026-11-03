@@ -140,13 +140,14 @@ func workingBase(tx *gorm.DB, project *models.Project, userID int) (models.Featu
 		return models.FeatureVersion{}, api.Internal(err)
 	}
 
-	var newest models.FeatureVersion
-	err = tx.Where("project_id = ?", project.ID).Order("number DESC").First(&newest).Error
-	switch {
-	case err == nil && newest.Snapshot == string(now):
-		return newest, nil
-	case err != nil && !errors.Is(err, gorm.ErrRecordNotFound):
+	// The version the working version is based on, when nothing has changed
+	// since, is that list already.
+	base, found, err := basedOnNow(tx, project.ID)
+	if err != nil {
 		return models.FeatureVersion{}, api.Internal(err)
+	}
+	if found && base.Snapshot == string(now) {
+		return base, nil
 	}
 
 	tag, err := freeTag(tx, project.ID, "Starting point for a copy")

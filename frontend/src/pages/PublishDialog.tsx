@@ -15,7 +15,10 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { plural } from '@/lib/utils'
 
-/** Saves the Feature List as the next minor version, v2.3. The note is optional. */
+/**
+ * Saves the Feature List as the next minor version, v2.3. The note is
+ * optional; it starts as the working version's note, if there is one.
+ */
 export function SaveVersionDialog({
   projectId,
   onClose,
@@ -27,7 +30,10 @@ export function SaveVersionDialog({
 }) {
   const save = useSaveVersion(projectId)
   const working = useWorkingState(projectId)
-  const [notes, setNotes] = useState('')
+  // Untouched, the box shows the working version's note.
+  const [typed, setTyped] = useState<string | null>(null)
+  const notes = typed ?? working.note
+  const setNotes = setTyped
   const [error, setError] = useState('')
 
   async function submit(event: FormEvent) {
@@ -98,7 +104,7 @@ export function PublishDialog({
   const [notes, setNotes] = useState(versionNote(version))
   const [error, setError] = useState('')
 
-  const newest = working.latest?.id === version.id && version.publish_number === 0
+  const newest = working.newest?.id === version.id && version.publish_number === 0
   const next = working.nextPublish
   const older = !newest
 
@@ -130,9 +136,9 @@ export function PublishDialog({
                 <span className="font-mono text-ink">{next}</span>. {version.label} itself stays as it is in the list.
               </>
             )}
-            {working.live ? ` It replaces ${working.live.label}, which stays in Versions.` : ''}
+            {working.published ? ` It replaces ${working.published.label}, which stays in Versions.` : ''}
           </p>
-          {older && working.live && (
+          {older && working.published && (
             <p className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-ink">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
               Everyone will see the list as it was in {version.label}, not the newest one. The Feature List itself does
@@ -176,8 +182,12 @@ const CHANGE_WORD: Record<string, string> = {
 }
 
 /**
- * Puts a saved version back as the Feature List. Shows what would change
- * first; refused while the list has changes not saved as a version.
+ * Opens a saved version as the working version: the Feature List takes that
+ * version's plan, and is based on it afterwards. Nothing new is saved.
+ *
+ * The working version must be unchanged first. With changes, they can be
+ * thrown away here, after a second look at how many there are; opening the
+ * version it is already based on that way is "discard my changes".
  */
 export function RestoreDialog({
   projectId,
@@ -188,28 +198,36 @@ export function RestoreDialog({
   projectId: number
   version: FeatureVersion
   onClose: () => void
-  onDone?: (savedLabel: string) => void
+  /** Called with the label of the version now open as the working version. */
+  onDone?: (label: string) => void
 }) {
   const preview = useRestorePreview(projectId, version.id)
   const restore = useRestoreVersion(projectId)
+  const working = useWorkingState(projectId)
+  const [discard, setDiscard] = useState(false)
   const [error, setError] = useState('')
   const p = preview.data
+
+  const isBase = working.latest?.id === version.id
+  const hasChanges = (p?.unsaved ?? 0) > 0
+  const nothing = p && !hasChanges && p.changes.length === 0 && p.described.length === 0
+  const allowed = Boolean(p) && p!.problems.length === 0 && !nothing && (!hasChanges || discard)
 
   async function go() {
     setError('')
     try {
-      const result = await restore.mutateAsync(version.id)
-      onDone?.(result.saved.label)
+      const result = await restore.mutateAsync({ versionId: version.id, discard: hasChanges && discard })
+      onDone?.(result.base.label)
       onClose()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not reach the server')
     }
   }
 
-  const nothing = p && p.changes.length === 0 && p.described.length === 0
+  const title = isBase ? `Discard the changes since ${version.label}` : `Open ${version.label} as the working version`
 
   return (
-    <Dialog title={`Make ${version.label} the Feature List`} onClose={onClose} wide>
+    <Dialog title={title} onClose={onClose} wide>
       <div className="max-h-[60vh] space-y-3 overflow-y-auto p-4 text-xs">
         {preview.isLoading && <Skeleton className="h-24 w-full" />}
         {preview.isError && (
@@ -217,21 +235,41 @@ export function RestoreDialog({
             {preview.error instanceof ApiError ? preview.error.message : 'Could not work out the changes'}
           </p>
         )}
-        {p && p.unsaved > 0 && (
-          <p className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-ink">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-            The Feature List has {plural(p.unsaved, 'change')} since {p.latest}. Save them as a version first, so you
-            can come back to them.
-          </p>
-        )}
-        {p && p.unsaved === 0 && (
+        {p && (
           <>
             <p className="text-muted">
-              The Feature List's names, nesting, dependencies, descriptions and notes go back to how they were in{' '}
-              <span className="font-mono text-ink">{version.label}</span>. Status, priority and tasks stay as they are.
-              Afterwards the list is saved as a new version, so {p.latest} is still there if you change your mind.
+              {isBase ? (
+                <>
+                  The working version goes back to <span className="font-mono text-ink">{version.label}</span> as it
+                  was saved.
+                </>
+              ) : (
+                <>
+                  The Feature List becomes <span className="font-mono text-ink">{version.label}</span>: its names,
+                  nesting, dependencies, descriptions and notes. Afterwards the working version is based on{' '}
+                  {version.label}.
+                </>
+              )}{' '}
+              Status, priority and tasks stay as they are. Nothing new is saved, and no saved version changes.
             </p>
-            {nothing && <p className="text-ink">The Feature List is already the same as {version.label}.</p>}
+
+            {hasChanges && (
+              <div className="space-y-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-ink">
+                <p className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+                  <span>
+                    The working version has {plural(p.unsaved, 'change')} since {p.latest}, not saved as a version
+                    yet. {isBase ? 'Discarding throws them away.' : 'Save first to keep them, or discard them.'}
+                  </span>
+                </p>
+                <label className="flex cursor-pointer items-center gap-2 pl-5">
+                  <input type="checkbox" checked={discard} onChange={(e) => setDiscard(e.target.checked)} />
+                  <span className="font-medium">Discard my {plural(p.unsaved, 'change')}</span>
+                </label>
+              </div>
+            )}
+
+            {nothing && <p className="text-ink">The working version is already the same as {version.label}.</p>}
             {p.changes.length > 0 && (
               <ul className="divide-y divide-border rounded-md border border-border">
                 {p.changes.map((c, i) => (
@@ -291,8 +329,8 @@ export function RestoreDialog({
         <Button type="button" variant="ghost" onClick={onClose}>
           Cancel
         </Button>
-        <Button onClick={go} loading={restore.isPending} disabled={!p?.ready || Boolean(nothing)}>
-          Make {version.label} the Feature List
+        <Button onClick={go} loading={restore.isPending} disabled={!allowed}>
+          {isBase ? 'Discard changes' : `Open ${version.label}`}
         </Button>
       </div>
     </Dialog>

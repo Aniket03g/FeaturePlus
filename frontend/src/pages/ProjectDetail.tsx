@@ -30,6 +30,7 @@ import {
   useProject,
   useProjectTags,
   useProjectVisit,
+  useSetWorkingNote,
   useUpdateFeature,
 } from '@/lib/queries'
 import { gapTarget, intoTarget, MAX_DEPTH, type DropRow, type DropTarget } from '@/lib/tree-drop'
@@ -49,6 +50,7 @@ import { PublishDialog, SaveVersionDialog } from './PublishDialog'
 import { cn, percent, plural } from '@/lib/utils'
 import { ROLE_LABEL, STATUS_LABEL, canManage, canPublish, type Feature, type FeatureStatus } from '@/lib/types'
 import { buildDiffTree, type DiffNode } from '@/lib/compare-tree'
+import { NoteEditor } from '@/components/NoteEditor'
 import { useWorkingState } from '@/lib/working'
 
 const STATUSES: FeatureStatus[] = ['todo', 'in_progress', 'done']
@@ -198,8 +200,9 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   // Where the list stands against its saved versions, and which version its
   // rows are marked against: the published one unless someone picks another.
   const working = useWorkingState(projectId)
+  const setWorkingNote = useSetWorkingNote(projectId)
   const [pickedBase, setPickedBase] = useState<number | 'off' | null>(null)
-  const baseId = pickedBase === 'off' ? null : (pickedBase ?? working.live?.id ?? working.latest?.id ?? null)
+  const baseId = pickedBase === 'off' ? null : (pickedBase ?? working.published?.id ?? working.latest?.id ?? null)
   const base = working.versions.find((v) => v.id === baseId) ?? null
   const comparison = useCompareLists(projectId, baseId, baseId !== null ? 'current' : null)
   const diff = useMemo(
@@ -310,6 +313,21 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   )
   const isOpen = (node: TreeNode) => hasFilters || (open[node.feature.id] ?? node.depth === 0)
   const rows = visibleRows(tree, isOpen)
+
+  // Where each removed feature is drawn among the visible rows. One that was
+  // the first inside a feature goes straight under that feature; one that
+  // followed a sibling goes after everything shown inside that sibling, so it
+  // never looks as if it sat inside it.
+  const removedRows = new Map<number, { node: DiffNode; depth: number }[]>()
+  rows.forEach((row, i) => {
+    for (const { node: gone, asChild } of removedAfter.get(`f${row.feature.id}`) ?? []) {
+      let at = i
+      if (!asChild) while (at + 1 < rows.length && rows[at + 1].depth > row.depth) at++
+      const list = removedRows.get(rows[at].feature.id) ?? []
+      list.push({ node: gone, depth: asChild ? row.depth + 1 : row.depth })
+      removedRows.set(rows[at].feature.id, list)
+    }
+  })
   const hasNesting = tree.some((node) => node.children.length > 0)
 
   /**
@@ -514,14 +532,28 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                 )}
               </div>
               {project.data?.description && <p className="mt-0.5 text-sm text-muted">{project.data.description}</p>}
+              {(working.note || canEdit) && !working.isLoading && (
+                <div className="mt-1.5 flex max-w-xl items-center gap-2 text-xs">
+                  <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-faint">
+                    Note
+                  </span>
+                  <NoteEditor
+                    note={working.note}
+                    empty="Add a note on what is being worked on"
+                    title={working.note && working.noteBy ? `Note by ${working.noteBy}` : undefined}
+                    onSave={canEdit ? (note) => setWorkingNote.mutateAsync(note) : undefined}
+                    className="min-w-0 flex-1"
+                  />
+                </div>
+              )}
             </>
           )}
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {working.live && (
+          {working.published && (
             <span className="text-xs text-muted">
-              Last published <span className="font-mono font-semibold text-ink">{working.live.label}</span>
+              Last published <span className="font-mono font-semibold text-ink">{working.published.label}</span>
             </span>
           )}
           <RefreshButton />
@@ -881,13 +913,8 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                     }
                   />
                   {!arranging &&
-                    (removedAfter.get(`f${node.feature.id}`) ?? []).map(({ node: gone, asChild }) => (
-                      <RemovedRow
-                        key={gone.key}
-                        node={gone}
-                        depth={asChild ? node.depth + 1 : node.depth}
-                        base={base?.label ?? ''}
-                      />
+                    (removedRows.get(node.feature.id) ?? []).map(({ node: gone, depth }) => (
+                      <RemovedRow key={gone.key} node={gone} depth={depth} base={base?.label ?? ''} />
                     ))}
                   {addingTo === node.feature.id && (
                     <QuickAddRow

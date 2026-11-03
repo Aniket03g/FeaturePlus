@@ -1,52 +1,58 @@
-import { useVersionComparison, useVersions, type FeatureVersion } from '@/lib/queries'
+import { useVersions, useWorking, type FeatureVersion } from '@/lib/queries'
 
 /**
- * Where the Feature List stands against its saved versions:
+ * Where the working version (the Feature List) stands against its saved
+ * versions:
  *
- * - latest: the newest saved version (v2.2), what "changes since" counts from
- * - live: the published version everyone reads (v2)
- * - unsaved: how many features changed since `latest`; 0 means everything is
- *   saved, which is when Publish shows
- * - nextSave / nextPublish: the labels a save or a publish would get now
+ * - latest: the version it is based on (v1.2): the one last saved, or the one
+ *   last opened from the Versions page. Changes are counted from it, and the
+ *   Versions page marks it Live.
+ * - published: the newest published version, the list everyone reads (v2)
+ * - newest: the newest saved version of all
+ * - unsaved: how many features differ from `latest`; 0 means unchanged, which
+ *   is when Publish shows
+ * - nextSave / nextPublish: the numbers a save or a publish would get now
+ * - note: what is being worked on, for everyone; a save offers it as its note
  *
  * Every edit is stored as it is made, so "unsaved" only means "not saved as a
  * version yet"; nothing is lost by leaving the page.
  */
 export function useWorkingState(projectId: number) {
   const versions = useVersions(projectId)
+  const working = useWorking(projectId)
   const list = versions.data ?? []
-  const latest: FeatureVersion | null = list.reduce<FeatureVersion | null>(
+  const data = working.data ?? null
+
+  const newest: FeatureVersion | null = list.reduce<FeatureVersion | null>(
     (best, v) => (!best || v.number > best.number ? v : best),
     null,
   )
-  const live: FeatureVersion | null = list.reduce<FeatureVersion | null>(
+  const published: FeatureVersion | null = list.reduce<FeatureVersion | null>(
     (best, v) => (v.publish_number > 0 && (!best || v.publish_number > best.publish_number) ? v : best),
     null,
   )
-  const sinceLatest = useVersionComparison(projectId, latest ? latest.id : null, latest ? 'current' : null)
-  // An answer for another version (shown while the new one loads) is no
-  // answer: it would show Save just after saving, or Publish just after an edit.
-  const current = sinceLatest.data && !sinceLatest.isPlaceholderData ? sinceLatest.data : null
-  const unsaved = latest && current ? current.added + current.removed + current.changed : null
-
-  const nextSave = latest ? `v${latest.major}.${latest.minor + 1}` : 'v0.1'
-  const nextPublish = `v${(latest?.major ?? 0) + 1}`
+  // The base as the versions list has it, so its label and badges follow edits.
+  const latest = data?.base ? (list.find((v) => v.id === data.base!.id) ?? data.base) : null
+  // A count still on its way, or one for a base that just changed, is no answer.
+  const counts = data?.unsaved && !working.isPlaceholderData ? data.unsaved : null
+  const unsaved = latest && counts ? counts.added + counts.removed + counts.changed : null
 
   return {
-    isLoading: versions.isLoading,
+    isLoading: versions.isLoading || working.isLoading,
     versions: list,
     latest,
-    live,
+    published,
+    newest,
     /** null while it is being worked out, or when nothing is saved yet. */
     unsaved,
     /** The same changes split up: added, removed, changed. */
-    unsavedCounts: latest && current
-      ? { added: current.added, removed: current.removed, changed: current.changed }
-      : null,
+    unsavedCounts: latest ? counts : null,
     /** Nothing saved yet: every feature counts as a change. */
-    neverSaved: versions.isSuccess && !latest,
-    nextSave,
-    nextPublish,
+    neverSaved: working.isSuccess && !data?.base,
+    nextSave: data?.next_save ?? 'v0.1',
+    nextPublish: data?.next_publish ?? 'v1',
+    note: data?.note ?? '',
+    noteBy: data?.note_by ?? '',
   }
 }
 

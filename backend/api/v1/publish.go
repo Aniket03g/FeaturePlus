@@ -110,6 +110,17 @@ func (h *VersionsHandler) Publish(c *gin.Context) {
 		if err := tx.Create(&published).Error; err != nil {
 			return api.Internal(err)
 		}
+		// A working version opened from that version holds the same list as
+		// the publish, so it is based on the publish now.
+		base, found, err := basedOnNow(tx, project.ID)
+		if err != nil {
+			return api.Internal(err)
+		}
+		if found && base.ID == version.ID {
+			if err := setWorkingBase(tx, project.ID, published.ID); err != nil {
+				return api.Internal(err)
+			}
+		}
 		return nil
 	})
 	if txErr != nil {
@@ -168,8 +179,9 @@ func (h *VersionsHandler) Published(c *gin.Context) {
 // are any, going back is refused. Described names the features whose
 // description or notes would change.
 type RestorePreview struct {
-	Version   VersionDTO    `json:"version"`
-	Unsaved   int           `json:"unsaved"`
+	Version VersionDTO `json:"version"`
+	Unsaved int        `json:"unsaved"`
+	// Latest is the label of the version the working version is based on now.
 	Latest    string        `json:"latest"`
 	Changes   []MergeChange `json:"changes"`
 	Described []string      `json:"described"`
@@ -178,13 +190,20 @@ type RestorePreview struct {
 	Ready     bool          `json:"ready"`
 }
 
-// RestoreResult is a finished go-back: what changed, and the version the list
-// was saved as afterwards.
+// RestoreResult is a version opened as the working version: what changed, and
+// the version the working version is now based on.
 type RestoreResult struct {
 	Changes   []MergeChange `json:"changes"`
 	Described []string      `json:"described"`
 	Notes     []MergeNote   `json:"notes"`
-	Saved     VersionDTO    `json:"saved"`
+	Base      VersionDTO    `json:"base"`
+}
+
+// RestoreRequest opens a version as the working version. Discard says the
+// working version's unsaved changes may be thrown away; without it, going
+// ahead with unsaved changes is refused.
+type RestoreRequest struct {
+	Discard bool `json:"discard"`
 }
 
 // restoreInputs is everything going back is worked out from.
@@ -217,9 +236,12 @@ func planRestore(db *gorm.DB, project *models.Project, versionID uint) (restoreI
 		return in, api.Internal(err)
 	}
 
-	var latest models.FeatureVersion
-	if err := db.Where("project_id = ?", project.ID).Order("number DESC").First(&latest).Error; err != nil {
+	latest, found, err := basedOnNow(db, project.ID)
+	if err != nil {
 		return in, api.Internal(err)
+	}
+	if !found {
+		return in, api.Conflict("Nothing is saved yet")
 	}
 	in.latest = latest.Label()
 	latestSnap, err := readSnapshot(latest.Snapshot)
@@ -233,6 +255,13 @@ func planRestore(db *gorm.DB, project *models.Project, versionID uint) (restoreI
 		return in, api.Internal(err)
 	}
 	in.plan = planMerge(in.live, in.target, in.live, in.taskCounts, nil)
+	// The merge's notes speak of a copy; going back has a version instead.
+	for i, note := range in.plan.notes {
+		in.plan.notes[i].Message = strings.ReplaceAll(strings.ReplaceAll(note.Message,
+			"The copy adds it, but the list already has a feature by that name, so that one is used",
+			in.version.Label()+" has it, and the list has a feature by that name now, so that one is kept"),
+			"The copy", in.version.Label())
+	}
 
 	liveRows := indexRows(in.live.Features)
 	for _, row := range in.target.Features {
@@ -276,9 +305,13 @@ func (h *VersionsHandler) PreviewRestore(c *gin.Context) {
 	})
 }
 
-// Restore puts a saved version back as the Feature List: its names, nesting,
-// dependencies, descriptions and notes. Status, priority and tasks are left
-// as they are. The list is then saved as the next version.
+// Restore opens a saved version as the working version: the Feature List
+// takes its names, nesting, dependencies, descriptions and notes. Status,
+// priority and tasks are left as they are. Nothing new is saved: the working
+// version is now based on that version.
+//
+// Opening the version it is already based on, with discard, throws away the
+// working version's unsaved changes.
 //
 // POST /api/v1/projects/:id/versions/:versionId/restore
 func (h *VersionsHandler) Restore(c *gin.Context) {
@@ -286,17 +319,24 @@ func (h *VersionsHandler) Restore(c *gin.Context) {
 	if !ok {
 		return
 	}
+	var req RestoreRequest
+	if c.Request.ContentLength > 0 {
+		if err := api.Bind(c, &req); err != nil {
+			api.Fail(c, err)
+			return
+		}
+	}
 
 	var result RestoreResult
-	var saved models.FeatureVersion
+	var opened models.FeatureVersion
 	txErr := h.db.Transaction(func(tx *gorm.DB) error {
 		in, err := planRestore(tx, project, versionID)
 		if err != nil {
 			return err
 		}
-		if in.unsaved > 0 {
-			return api.Conflict("The Feature List has " + plural(in.unsaved, "change") +
-				" not saved as a version yet. Save them first, so nothing is lost")
+		if in.unsaved > 0 && !req.Discard {
+			return api.Conflict("The working version has " + plural(in.unsaved, "change") +
+				" not saved as a version yet. Save them first, or discard them")
 		}
 		if len(in.plan.problems) > 0 {
 			return api.Conflict("Going back to " + in.version.Label() + " is blocked: " + strings.Join(in.plan.problems, "; "))
@@ -306,6 +346,9 @@ func (h *VersionsHandler) Restore(c *gin.Context) {
 		if err != nil {
 			return err
 		}
+		// Discarding changes puts back everything the version holds, status and
+		// priority too; opening another version leaves progress as it is.
+		discarding := req.Discard && in.version.Label() == in.latest
 		liveRows := indexRows(in.live.Features)
 		for _, row := range in.target.Features {
 			id := ids[row.Key]
@@ -313,24 +356,33 @@ func (h *VersionsHandler) Restore(c *gin.Context) {
 				continue
 			}
 			now, existed := liveRows[row.Key]
-			if existed && now.Description == row.Description && now.Notes == row.Notes {
+			updates := map[string]any{}
+			if !existed || now.Description != row.Description || now.Notes != row.Notes {
+				updates["description"], updates["notes"] = row.Description, row.Notes
+			}
+			if discarding {
+				if row.Status != "" && (!existed || now.Status != row.Status) {
+					updates["status"] = row.Status
+				}
+				if row.Priority != "" && (!existed || now.Priority != row.Priority) {
+					updates["priority"] = row.Priority
+				}
+				if row.Category != "" && (!existed || now.Category != row.Category) {
+					updates["category"] = row.Category
+				}
+			}
+			if len(updates) == 0 {
 				continue
 			}
-			if err := tx.Model(&models.Feature{}).Where("id = ?", id).
-				Updates(map[string]any{"description": row.Description, "notes": row.Notes}).Error; err != nil {
+			if err := tx.Model(&models.Feature{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 				return err
 			}
 		}
 
-		saved, err = saveVersion(tx, project, "", "Went back to "+in.version.Label(), userID, false)
-		if err != nil {
+		if err := setWorkingBase(tx, project.ID, in.version.ID); err != nil {
 			return err
 		}
-		// Made from the version gone back to, not from the one before it.
-		saved.BasedOnID = &in.version.ID
-		if err := tx.Model(&saved).Update("based_on_id", in.version.ID).Error; err != nil {
-			return err
-		}
+		opened = in.version
 		result = RestoreResult{Changes: in.plan.changes, Described: in.described, Notes: in.plan.notes}
 		return nil
 	})
@@ -344,13 +396,13 @@ func (h *VersionsHandler) Restore(c *gin.Context) {
 		return
 	}
 
-	names, err := h.saverNames([]models.FeatureVersion{saved})
+	names, err := h.saverNames([]models.FeatureVersion{opened})
 	if err != nil {
 		api.Fail(c, api.Internal(err))
 		return
 	}
-	result.Saved = h.withBase(newVersionDTO(saved, names), saved)
-	log.WithField("project", project.ID).WithField("version", saved.Label()).Info("went back to a version")
+	result.Base = h.withBase(newVersionDTO(opened, names), opened)
+	log.WithField("project", project.ID).WithField("version", opened.Label()).Info("version opened as the working version")
 	api.OK(c, result)
 }
 

@@ -39,6 +39,9 @@ func (h *VersionsHandler) Register(g *gin.RouterGroup) {
 	// Registered before /:versionId reads it; gin matches the static segment first.
 	g.GET("/projects/:id/versions/compare", h.Compare)
 	g.GET("/projects/:id/versions/:versionId", h.Get)
+	g.PATCH("/projects/:id/versions/:versionId", h.SetVersionNote)
+	g.GET("/projects/:id/working", h.Working)
+	g.PATCH("/projects/:id/working", h.SetWorkingNote)
 	g.POST("/projects/:id/versions/:versionId/publish", h.Publish)
 	g.GET("/projects/:id/versions/:versionId/restore", h.PreviewRestore)
 	g.POST("/projects/:id/versions/:versionId/restore", h.Restore)
@@ -288,6 +291,10 @@ func (h *VersionsHandler) Create(c *gin.Context) {
 		return
 	}
 
+	// The working note described what this save holds; it is done with.
+	if err := setWorkingNote(h.db, projectID, "", userID); err != nil {
+		log.WithError(err).WithField("project", projectID).Warn("could not clear the working note")
+	}
 	log.WithField("project", projectID).WithField("version", version.Number).Info("version saved")
 
 	names, err := h.saverNames([]models.FeatureVersion{version})
@@ -315,13 +322,13 @@ func saveVersion(tx *gorm.DB, project *models.Project, tag, notes string, userID
 	if err != nil {
 		return models.FeatureVersion{}, api.Internal(err)
 	}
+	// A save is made from what the working version is based on: the version
+	// last saved, or the one last opened as the working version.
 	var basedOn *uint
-	if last > 0 {
-		var previous models.FeatureVersion
-		if err := tx.Select("id").Where("project_id = ? AND number = ?", project.ID, last).First(&previous).Error; err != nil {
-			return models.FeatureVersion{}, api.Internal(err)
-		}
-		basedOn = &previous.ID
+	if base, found, err := basedOnNow(tx, project.ID); err != nil {
+		return models.FeatureVersion{}, api.Internal(err)
+	} else if found {
+		basedOn = &base.ID
 	}
 
 	version := models.FeatureVersion{
@@ -338,6 +345,10 @@ func saveVersion(tx *gorm.DB, project *models.Project, tag, notes string, userID
 		Snapshot:     string(snapshot),
 	}
 	if err := tx.Create(&version).Error; err != nil {
+		return models.FeatureVersion{}, api.Internal(err)
+	}
+	// The working version is now this version, unchanged.
+	if err := setWorkingBase(tx, project.ID, version.ID); err != nil {
 		return models.FeatureVersion{}, api.Internal(err)
 	}
 	return version, nil

@@ -16,6 +16,7 @@ const queryClient = new QueryClient({
   mutationCache: new MutationCache({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['version-compare'] })
+      queryClient.invalidateQueries({ queryKey: ['working'] })
     },
   }),
   defaultOptions: {

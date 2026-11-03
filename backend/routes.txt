@@ -24,6 +24,7 @@ Method: GET, Path: /api/v1/projects/:id/backup
 Method: GET, Path: /api/v1/projects/:id/tags
 Method: GET, Path: /api/v1/projects/:id/dependency-graph
 Method: GET, Path: /api/v1/projects/:id/releases
+Method: GET, Path: /api/v1/projects/:id/working
 Method: GET, Path: /api/v1/playground/ai
 Method: GET, Path: /api/v1/playground/saved
 Method: GET, Path: /api/v1/playground/projects/:id
@@ -234,6 +235,8 @@ Method: POST, Path: /prs/:id/approve
 Method: POST, Path: /tasks/:id/prs
 Method: PATCH, Path: /api/v1/projects/:id
 Method: PATCH, Path: /api/v1/projects/:id/members/:userId
+Method: PATCH, Path: /api/v1/projects/:id/versions/:versionId
+Method: PATCH, Path: /api/v1/projects/:id/working
 Method: PATCH, Path: /api/v1/pull-requests/:prId
 Method: PATCH, Path: /api/v1/features/:featureId
 Method: PATCH, Path: /api/v1/tasks/:taskId

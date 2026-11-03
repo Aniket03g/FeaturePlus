@@ -785,6 +785,15 @@ func restoreBackup(tx *gorm.DB, opened *openedBackup, people *restorePeople, wit
 		versions[v.ID] = row.ID
 		byNumber[v.Number] = row.ID
 	}
+	if b.Working != nil {
+		state := models.WorkingState{ProjectID: project.ID, Note: b.Working.Note, UpdatedAt: time.Now()}
+		if id := byNumber[b.Working.BaseNumber]; id != 0 {
+			state.BaseVersionID = &id
+		}
+		if err := tx.Create(&state).Error; err != nil {
+			return nil, err
+		}
+	}
 	for _, v := range b.Versions {
 		if v.BasedOn == 0 || byNumber[v.BasedOn] == 0 {
 			continue

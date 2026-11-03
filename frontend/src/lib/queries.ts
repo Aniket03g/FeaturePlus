@@ -1371,12 +1371,61 @@ export function useRestorePreview(projectId: number, versionId: number | null) {
   })
 }
 
+/** Where the working version stands: what it is based on, its changes and its note. */
+export interface WorkingVersion {
+  base: FeatureVersion | null
+  unsaved: { added: number; removed: number; changed: number } | null
+  note: string
+  note_by: string
+  next_save: string
+  next_publish: string
+}
+
+export function useWorking(projectId: number) {
+  return useQuery({
+    queryKey: ['working', projectId] as const,
+    queryFn: () => api.get<WorkingVersion>(`/projects/${projectId}/working`),
+    enabled: projectId > 0,
+    placeholderData: (previous) => previous,
+    // Anyone's edit changes it, so it is checked each time it is shown.
+    staleTime: 0,
+    refetchOnWindowFocus: 'always',
+  })
+}
+
+export function useSetWorkingNote(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (note: string) => api.patch<void>(`/projects/${projectId}/working`, { note }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['working', projectId] }),
+  })
+}
+
+export function useSetVersionNote(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ versionId, notes }: { versionId: number; notes: string }) =>
+      api.patch<FeatureVersion>(`/projects/${projectId}/versions/${versionId}`, { notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: ['working', projectId] })
+      queryClient.invalidateQueries({ queryKey: ['published', projectId] })
+    },
+  })
+}
+
+/**
+ * Open a saved version as the working version. With discard, the working
+ * version's unsaved changes are thrown away; opening the version it is based
+ * on that way is "discard my changes".
+ */
 export function useRestoreVersion(projectId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (versionId: number) =>
-      api.post<{ saved: FeatureVersion; notes: { title: string; message: string }[] }>(
+    mutationFn: ({ versionId, discard = false }: { versionId: number; discard?: boolean }) =>
+      api.post<{ base: FeatureVersion; notes: { title: string; message: string }[] }>(
         `/projects/${projectId}/versions/${versionId}/restore`,
+        { discard },
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
