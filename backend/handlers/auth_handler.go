@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -21,56 +20,9 @@ func NewAuthHandler(db *gorm.DB) *AuthHandler {
 }
 
 func (h *AuthHandler) Signup(c *gin.Context) {
-	var req struct {
-		Email    string `json:"email"`
-		Username string `json:"username"`
-		Password string `json:"password"`
-		Role     string `json:"role"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	// The requested role is ignored: letting callers pick "manager" let anyone
-	// edit and delete other people's projects. A manager changes roles later.
-	user := models.User{
-		Email:    req.Email,
-		Username: req.Username,
-		Password: req.Password,
-		Role:     "developer",
-	}
-
-	// Make sure password is not empty
-	if user.Password == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password cannot be empty"})
-		return
-	}
-
-	// Store the password temporarily
-	plainPassword := user.Password
-
-	// Hash the password
-	if err := user.HashPassword(plainPassword); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Error hashing password: %v", err)})
-		return
-	}
-
-
-	// Create the user with hashed password
-	if err := h.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("User already exists or database error: %v", err)})
-		return
-	}
-
-	// Return created user ID for confirmation
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "Signup successful",
-		"auth_info": gin.H{
-			"user_id":   user.ID,
-			"user_name": user.Username,
-			"projects":  "P-1,P-2",
-		},
-	})
+	// Accounts are made at /api/v1/auth/signup, which needs an invite code
+	// from an admin. This older route had no such check, so it is closed.
+	c.JSON(http.StatusGone, gin.H{"error": "Sign up in the app with an invite code from your admin"})
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {

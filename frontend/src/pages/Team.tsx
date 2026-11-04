@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { SearchInput } from '@/layouts/AppShell'
 import { cn, plural } from '@/lib/utils'
 import type { User } from '@/lib/types'
+import { InviteCodes } from './InviteCodes'
 
 const ROLES = ['developer', 'manager', 'admin'] as const
 
@@ -67,6 +68,8 @@ export function Team() {
           {error}
         </div>
       )}
+
+      {isAdmin && <InviteCodes />}
 
       <Card>
         <CardBody className="p-0">

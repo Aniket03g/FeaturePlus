@@ -174,10 +174,14 @@ func TestGoingBackPutsAVersionInPlaceOfTheList(t *testing.T) {
 
 	saveV(t, r, base, "the new list")
 
-	// Editors cannot go back.
-	share(t, db, project.ID, other.ID, models.RoleEditor)
+	// Viewers cannot open a version as the working version; editors can.
+	share(t, db, project.ID, other.ID, models.RoleViewer)
 	if w := do(versionsRouterAs(t, db, other.ID), http.MethodPost, restore, ""); w.Code != http.StatusForbidden {
-		t.Fatalf("editor restore: status %d, want 403", w.Code)
+		t.Fatalf("viewer restore: status %d, want 403", w.Code)
+	}
+	db.Model(&models.ProjectMember{}).Where("user_id = ?", other.ID).Update("role", models.RoleEditor)
+	if w := do(versionsRouterAs(t, db, other.ID), http.MethodGet, restore, ""); w.Code != http.StatusOK {
+		t.Fatalf("editor preview: status %d, want 200", w.Code)
 	}
 
 	w = do(r, http.MethodPost, restore, "")

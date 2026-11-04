@@ -184,6 +184,8 @@ type FeatureDTO struct {
 	AssigneeID      uint   `json:"assignee_id"`
 	// Color is a palette name, or empty for none.
 	Color string `json:"color"`
+	// Kind is feature, idea or bug.
+	Kind string `json:"kind"`
 	// Position orders the feature among its siblings, 1 first; 0 is an older
 	// feature that sorts by id.
 	Position int `json:"position"`
@@ -214,6 +216,7 @@ func NewFeatureDTO(f models.Feature, tags []string, tasks *FeatureTaskCounts) Fe
 		Priority:        string(f.Priority),
 		AssigneeID:      f.AssigneeID,
 		Color:           f.Color,
+		Kind:            orDefault(f.Kind, "feature"),
 		Position:        f.Position,
 		Tags:            emptyIfNil(tags),
 		Tasks:           tasks,
@@ -247,6 +250,8 @@ type CreateFeatureRequest struct {
 	ParentFeatureID *uint    `json:"parent_feature_id"`
 	AssigneeID      *uint    `json:"assignee_id"`
 	Tags            []string `json:"tags"`
+	// Kind is feature (the default), idea or bug.
+	Kind string `json:"kind" binding:"omitempty,oneof=feature idea bug"`
 }
 
 // UpdateFeatureRequest is the accepted body for a partial update. Pointers
@@ -263,6 +268,7 @@ type UpdateFeatureRequest struct {
 	AssigneeID      *uint   `json:"assignee_id"`
 	// Color is a palette name; "" removes the colour.
 	Color *string `json:"color" binding:"omitempty,oneof='' red orange yellow green teal blue purple pink"`
+	Kind  *string `json:"kind" binding:"omitempty,oneof=feature idea bug"`
 }
 
 // Apply copies the fields that were present onto a feature model.
@@ -287,6 +293,9 @@ func (r UpdateFeatureRequest) Apply(f *models.Feature) {
 	}
 	if r.ParentFeatureID != nil {
 		f.ParentFeatureID = r.ParentFeatureID
+	}
+	if r.Kind != nil {
+		f.Kind = *r.Kind
 	}
 	if r.AssigneeID != nil {
 		f.AssigneeID = *r.AssigneeID

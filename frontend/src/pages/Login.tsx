@@ -1,10 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Loader2, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/lib/auth'
 import { useTheme } from '@/lib/theme'
-import { ApiError } from '@/lib/api'
+import { ApiError, get } from '@/lib/api'
 
 type Mode = 'signin' | 'signup'
 
@@ -22,6 +22,15 @@ export function Login() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  // An invite code may come in the address (?invite=…) when it is sent as a link.
+  const [inviteCode, setInviteCode] = useState(() => new URLSearchParams(window.location.search).get('invite') ?? '')
+  // Whether this server asks for one: every account does but its first.
+  const [inviteRequired, setInviteRequired] = useState(true)
+  useEffect(() => {
+    get<{ invite_required: boolean }>('/auth/signup')
+      .then((info) => setInviteRequired(info.invite_required))
+      .catch(() => setInviteRequired(true))
+  }, [])
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
@@ -43,7 +52,7 @@ export function Login() {
 
     try {
       if (isSignUp) {
-        await signUp(name.trim(), email.trim(), password)
+        await signUp(name.trim(), email.trim(), password, inviteCode.trim())
         // Leave /app/signup behind, or the address bar would keep saying so.
         window.history.replaceState({}, '', '/app/')
       } else {
@@ -89,7 +98,11 @@ export function Login() {
             {isSignUp ? 'Create your account' : 'Welcome back'}
           </h1>
           <p className="mt-1 text-sm text-muted">
-            {isSignUp ? 'Start planning features with FeaturePlus' : 'Sign in to continue to FeaturePlus'}
+            {isSignUp
+              ? inviteRequired
+                ? 'You need an invite code from your admin'
+                : 'You are the first account here, so you will be the admin'
+              : 'Sign in to continue to FeaturePlus'}
           </p>
         </div>
 
@@ -107,6 +120,22 @@ export function Login() {
             </div>
           )}
 
+          {isSignUp && inviteRequired && (
+            <Input
+              label="Invite code"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="XXXX-XXXX-XXXX"
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+              error={fieldErrors.invite_code}
+              hint="Ask your FeaturePlus admin for a code. Each code works once."
+              className="font-mono tracking-wider"
+              autoFocus={!inviteCode}
+              required
+            />
+          )}
+
           {isSignUp && (
             <Input
               label="Name"
@@ -115,7 +144,7 @@ export function Login() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               error={fieldErrors.name}
-              autoFocus
+              autoFocus={!inviteRequired || Boolean(inviteCode)}
               required
             />
           )}

@@ -275,8 +275,12 @@ func TestPlaygroundImportNeedsEditAccess(t *testing.T) {
 		t.Errorf("a viewer: status %d, want 403", w.Code)
 	}
 	db.Model(&models.ProjectMember{}).Where("user_id = ?", other.ID).Update("role", models.RoleEditor)
+	if w := do(r, http.MethodPost, "/api/v1/playground/import", body); w.Code != http.StatusForbidden {
+		t.Errorf("an editor: status %d, want 403", w.Code)
+	}
+	db.Model(&models.ProjectMember{}).Where("user_id = ?", other.ID).Update("role", models.RolePublisher)
 	if w := do(r, http.MethodPost, "/api/v1/playground/import", body); w.Code != http.StatusCreated {
-		t.Errorf("an editor: status %d, want 201: %s", w.Code, w.Body.String())
+		t.Errorf("a publisher: status %d, want 201: %s", w.Code, w.Body.String())
 	}
 }
 

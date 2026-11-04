@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { X } from 'lucide-react'
-import { useCreateFeature } from '@/lib/queries'
+import { useCreateFeature, useProject } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import {
+  KIND_LABEL,
   PRIORITY_LABEL,
   STATUS_LABEL,
+  canEditPlan,
+  type FeatureKind,
   type FeaturePriority,
   type FeatureStatus,
 } from '@/lib/types'
@@ -33,6 +36,10 @@ export function NewFeatureDialog({
   parentTitle?: string
 }) {
   const create = useCreateFeature(projectId)
+  // Anyone may add; only editors and up set status, priority and tags, so
+  // those are offered to them alone.
+  const shapes = canEditPlan(useProject(projectId).data?.my_role)
+  const [kind, setKind] = useState<FeatureKind>('feature')
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -81,9 +88,8 @@ export function NewFeatureDialog({
       await create.mutateAsync({
         title,
         description,
-        status,
-        priority,
-        tags,
+        kind,
+        ...(shapes ? { status, priority, tags } : {}),
         ...(parentFeatureId ? { parent_feature_id: parentFeatureId } : {}),
       })
       onClose()
@@ -112,15 +118,11 @@ export function NewFeatureDialog({
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 id="new-feature-title" className="text-sm font-semibold text-ink">
-            {parentTitle ? `New feature in ${parentTitle}` : 'New feature'}
+            {parentTitle
+              ? `New ${KIND_LABEL[kind].toLowerCase()} in ${parentTitle}`
+              : `New ${KIND_LABEL[kind].toLowerCase()}`}
           </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0"
-            onClick={onClose}
-            aria-label="Close"
-          >
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose} aria-label="Close">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -135,13 +137,26 @@ export function NewFeatureDialog({
             </div>
           )}
 
+          <Choice
+            label="Type"
+            value={kind}
+            options={Object.entries(KIND_LABEL) as [FeatureKind, string][]}
+            onChange={setKind}
+          />
+
           <Input
             ref={titleRef}
             label="Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             error={fieldErrors.title}
-            placeholder="What should this feature do?"
+            placeholder={
+              kind === 'bug'
+                ? 'What goes wrong?'
+                : kind === 'idea'
+                  ? 'What is the idea?'
+                  : 'What should this feature do?'
+            }
             required
           />
 
@@ -159,35 +174,39 @@ export function NewFeatureDialog({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Choice
-              label="Status"
-              value={status}
-              options={Object.entries(STATUS_LABEL) as [FeatureStatus, string][]}
-              onChange={setStatus}
-            />
-            <Choice
-              label="Priority"
-              value={priority}
-              options={Object.entries(PRIORITY_LABEL) as [FeaturePriority, string][]}
-              onChange={setPriority}
-            />
-          </div>
+          {shapes && (
+            <div className="grid grid-cols-2 gap-3">
+              <Choice
+                label="Status"
+                value={status}
+                options={Object.entries(STATUS_LABEL) as [FeatureStatus, string][]}
+                onChange={setStatus}
+              />
+              <Choice
+                label="Priority"
+                value={priority}
+                options={Object.entries(PRIORITY_LABEL) as [FeaturePriority, string][]}
+                onChange={setPriority}
+              />
+            </div>
+          )}
 
-          <Input
-            label="Tags"
-            value={tagText}
-            onChange={(e) => setTagText(e.target.value)}
-            placeholder="ui, backend"
-            hint="Separate with commas"
-          />
+          {shapes && (
+            <Input
+              label="Tags"
+              value={tagText}
+              onChange={(e) => setTagText(e.target.value)}
+              placeholder="ui, backend"
+              hint="Separate with commas"
+            />
+          )}
 
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancel
             </Button>
             <Button type="submit" loading={create.isPending}>
-              Create feature
+              Add {KIND_LABEL[kind].toLowerCase()}
             </Button>
           </div>
         </form>
@@ -220,9 +239,7 @@ function Choice<T extends string>({
             aria-pressed={value === key}
             className={cn(
               'flex-1 rounded px-1.5 py-1 text-2xs transition-colors',
-              value === key
-                ? 'bg-accent-soft font-medium text-accent'
-                : 'text-muted hover:bg-raised hover:text-ink',
+              value === key ? 'bg-accent-soft font-medium text-accent' : 'text-muted hover:bg-raised hover:text-ink',
             )}
           >
             {text}

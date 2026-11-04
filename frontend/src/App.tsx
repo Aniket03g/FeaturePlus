@@ -21,6 +21,9 @@ import { LinkedCode } from '@/pages/LinkedCode'
 import { Contracts } from '@/pages/Contracts'
 import { BriefingPage } from '@/pages/BriefingPage'
 import { VersionsPage } from '@/pages/VersionsPage'
+import { ProjectSettings } from '@/pages/ProjectSettings'
+import { ProjectTeam } from '@/pages/ProjectTeam'
+import { ProjectMessages } from '@/pages/ProjectMessages'
 import { Team } from '@/pages/Team'
 import { Templates } from '@/pages/Templates'
 import { Imports } from '@/pages/Imports'
@@ -54,7 +57,10 @@ const SECTION: Record<Route['name'], string> = {
   versions: 'featureList',
   merge: 'featureList',
   compare: 'featureList',
-  team: 'team',
+  team: 'users',
+  projectSettings: 'projectSettings',
+  projectTeam: 'projectTeam',
+  projectMessages: 'messages',
   templates: 'templates',
   imports: 'imports',
   backups: 'backups',
@@ -76,13 +82,16 @@ const PROJECT_SECTIONS: Record<string, Route['name']> = {
   code: 'code',
   contracts: 'contracts',
   briefing: 'briefing',
+  projectSettings: 'projectSettings',
+  projectTeam: 'projectTeam',
+  messages: 'projectMessages',
 }
 
 /** The sidebar items that stand on their own. */
 const TOP_LEVEL_SECTIONS: Record<string, Route> = {
   dashboard: { name: 'dashboard' },
   projects: { name: 'projects' },
-  team: { name: 'team' },
+  users: { name: 'team' },
   templates: { name: 'templates' },
   imports: { name: 'imports' },
   backups: { name: 'backups' },
@@ -219,6 +228,9 @@ export function App() {
         <ComparePage projectId={route.projectId} from={route.from} to={route.to} />
       )}
       {route.name === 'team' && <Team />}
+      {route.name === 'projectSettings' && <ProjectSettings projectId={route.projectId} />}
+      {route.name === 'projectTeam' && <ProjectTeam projectId={route.projectId} />}
+      {route.name === 'projectMessages' && <ProjectMessages projectId={route.projectId} />}
       {route.name === 'templates' && <Templates />}
       {route.name === 'imports' && <Imports />}
       {route.name === 'backups' && <Backups />}
@@ -261,6 +273,9 @@ const SCOPED_TITLE: Partial<Record<Route['name'], string>> = {
   inProgress: 'Feature List',
   merge: 'Merge a copy',
   compare: 'Compare',
+  projectSettings: 'Project info',
+  projectTeam: 'Team',
+  projectMessages: 'Messages',
 }
 
 function Title() {
@@ -279,7 +294,7 @@ function Title() {
     case 'projects':
       return <span>Projects</span>
     case 'team':
-      return <span>Teams</span>
+      return <span>Users</span>
     case 'templates':
       return <span>Templates</span>
     case 'imports':

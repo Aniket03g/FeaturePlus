@@ -167,6 +167,9 @@ func (h *ProjectsHandler) Create(c *gin.Context) {
 // Update changes the fields present in the request body.
 //
 // PATCH /api/v1/projects/:id
+//
+// The project's name and description are its own information, set like its
+// conventions: by the owner.
 func (h *ProjectsHandler) Update(c *gin.Context) {
 	id, err := api.IDParam(c, "id")
 	if err != nil {
@@ -174,7 +177,7 @@ func (h *ProjectsHandler) Update(c *gin.Context) {
 		return
 	}
 
-	if _, err := requireProject(c, h.db, id, canEdit); err != nil {
+	if _, err := requireProject(c, h.db, id, ownerOnly); err != nil {
 		api.Fail(c, err)
 		return
 	}
@@ -228,6 +231,12 @@ func (h *ProjectsHandler) Delete(c *gin.Context) {
 	// Its saved versions go too: they are copies of a list that no longer exists.
 	if dbErr := h.db.Where("project_id = ?", id).Delete(&models.FeatureVersion{}).Error; dbErr != nil {
 		log.WithError(dbErr).WithField("project", id).Warn("could not remove a deleted project's versions")
+	}
+	if dbErr := h.db.Where("project_id = ?", id).Delete(&models.FeatureMessage{}).Error; dbErr != nil {
+		log.WithError(dbErr).WithField("project", id).Warn("could not remove a deleted project's messages")
+	}
+	if dbErr := h.db.Where("project_id = ?", id).Delete(&models.ProjectSettings{}).Error; dbErr != nil {
+		log.WithError(dbErr).WithField("project", id).Warn("could not remove a deleted project's settings")
 	}
 	if dbErr := h.db.Where("project_id = ?", id).Delete(&models.WorkingState{}).Error; dbErr != nil {
 		log.WithError(dbErr).WithField("project", id).Warn("could not remove a deleted project's working state")

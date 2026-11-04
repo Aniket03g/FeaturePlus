@@ -45,6 +45,52 @@ export const ROLE_LABEL: Record<ProjectRole, string> = {
   admin: 'Admin',
 }
 
+export type FeatureKind = 'feature' | 'idea' | 'bug'
+
+export const KIND_LABEL: Record<FeatureKind, string> = { feature: 'Feature', idea: 'Idea', bug: 'Bug' }
+
+/*
+ * Who may do what in a project. Roles from least to most able: viewer,
+ * editor, publisher, owner; an admin can do what the owner can.
+ *
+ *   add a feature, idea or bug; write messages; make your own copy — anyone
+ *   change features; open a version as the working version; read anyone's copy — editor
+ *   publish; download and import — publisher
+ *   change the project info; add people — owner
+ */
+const RANK: Record<ProjectRole, number> = { viewer: 1, editor: 2, publisher: 3, owner: 4, admin: 5 }
+const atLeast = (role: ProjectRole | undefined, need: ProjectRole) => role !== undefined && RANK[role] >= RANK[need]
+
+/** Any member: add features, ideas and bugs, and write messages. */
+export function canAdd(role: ProjectRole | undefined) {
+  return role !== undefined
+}
+
+/** Editor and up: change features, open versions as the working version, read anyone's copy. */
+export function canEditPlan(role: ProjectRole | undefined) {
+  return atLeast(role, 'editor')
+}
+
+/** Publisher and up: download the list or a backup, and import into the project. */
+export function canDownload(role: ProjectRole | undefined) {
+  return atLeast(role, 'publisher')
+}
+
+/** Owner (or admin): change the project info and its conventions. */
+export function canEditInfo(role: ProjectRole | undefined) {
+  return atLeast(role, 'owner')
+}
+
+/** What each role can do in a project, in a line. */
+export const ROLE_HINT: Record<ProjectRole, string> = {
+  owner: 'Can do everything, including sharing and deleting the project.',
+  publisher: 'Everything an editor can, and can publish a version, download the list and import into it.',
+  editor:
+    'Can change features, tasks and releases, save versions, open an old one as the working version, and read everyone\'s copies. Cannot publish or download.',
+  viewer: 'Can see everything, add features, ideas and bugs, and write messages. Cannot change what is there.',
+  admin: 'Runs this server. Can do everything the owner can.',
+}
+
 /** Owner or admin: can share, transfer, delete and link GitHub. */
 export function canManage(role: ProjectRole | undefined) {
   return role === 'owner' || role === 'admin'
@@ -89,6 +135,8 @@ export interface Feature {
   priority: FeaturePriority
   /** A palette name the team marked it with in the working list, or empty. */
   color: string
+  /** What the entry is. Anyone on the project may add one. */
+  kind: FeatureKind
   assignee_id: number
   /** Order among the features with the same parent, 1 first; 0 is an older feature, ordered by id. */
   position: number

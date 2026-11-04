@@ -127,7 +127,8 @@ func (h *VersionsHandler) ListCopies(c *gin.Context) {
 		api.Fail(c, err)
 		return
 	}
-	if _, err := requireProject(c, h.db, projectID, canView); err != nil {
+	_, role, err := requireProjectRole(c, h.db, projectID, canView)
+	if err != nil {
 		api.Fail(c, err)
 		return
 	}
@@ -137,9 +138,10 @@ func (h *VersionsHandler) ListCopies(c *gin.Context) {
 		return
 	}
 
+	// Editors and up see everyone's copies; others their own and published ones.
 	var copies []models.FeatureCopy
 	if err := h.db.Omit("snapshot").
-		Where("project_id = ? AND (owner_id = ? OR published_at IS NOT NULL)", projectID, userID).
+		Where("project_id = ? AND (owner_id = ? OR published_at IS NOT NULL OR ?)", projectID, userID, role.Rank() >= canEdit.Rank()).
 		Order("updated_at DESC, id DESC").Find(&copies).Error; err != nil {
 		api.Fail(c, api.Internal(err))
 		return
@@ -167,7 +169,8 @@ func (h *VersionsHandler) GetCopy(c *gin.Context) {
 		api.Fail(c, err)
 		return
 	}
-	if _, err := requireProject(c, h.db, projectID, canView); err != nil {
+	_, role, err := requireProjectRole(c, h.db, projectID, canView)
+	if err != nil {
 		api.Fail(c, err)
 		return
 	}
@@ -177,7 +180,7 @@ func (h *VersionsHandler) GetCopy(c *gin.Context) {
 		return
 	}
 
-	fc, err := findVisibleCopy(h.db, projectID, uint(copyID), userID)
+	fc, err := findVisibleCopy(h.db, projectID, uint(copyID), userID, role.Rank() >= canEdit.Rank())
 	if err != nil {
 		api.Fail(c, err)
 		return
@@ -417,7 +420,7 @@ func (h *VersionsHandler) setPublished(c *gin.Context, publish bool) {
 		return
 	}
 
-	fc, err := findVisibleCopy(h.db, projectID, uint(copyID), userID)
+	fc, err := findVisibleCopy(h.db, projectID, uint(copyID), userID, false)
 	if err != nil {
 		api.Fail(c, err)
 		return
@@ -587,10 +590,13 @@ func readSnapshot(raw string) (versionSnapshot, error) {
 // findVisibleCopy looks a copy up within a project, if the signed-in person
 // may see it: their own, or a published one. Anyone else's draft reads as not
 // found, the same as one that does not exist.
-func findVisibleCopy(db *gorm.DB, projectID int, copyID uint, userID int) (models.FeatureCopy, error) {
+//
+// everyone is for editors and up, who may read anyone's copy (read only: only
+// its owner changes it).
+func findVisibleCopy(db *gorm.DB, projectID int, copyID uint, userID int, everyone bool) (models.FeatureCopy, error) {
 	var fc models.FeatureCopy
-	if dbErr := db.Where("id = ? AND project_id = ? AND (owner_id = ? OR published_at IS NOT NULL)",
-		copyID, projectID, userID).First(&fc).Error; dbErr != nil {
+	if dbErr := db.Where("id = ? AND project_id = ? AND (owner_id = ? OR published_at IS NOT NULL OR ?)",
+		copyID, projectID, userID, everyone).First(&fc).Error; dbErr != nil {
 		return fc, api.FromDB(dbErr, "Copy")
 	}
 	return fc, nil

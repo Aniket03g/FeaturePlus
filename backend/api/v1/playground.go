@@ -144,6 +144,7 @@ type OpenedFeature struct {
 	Status      string `json:"status,omitempty"`
 	Priority    string `json:"priority,omitempty"`
 	Category    string `json:"category,omitempty"`
+	Kind        string `json:"kind,omitempty"`
 }
 
 // OpenedRelease is one of the project's releases, keyed "r" and its id.
@@ -258,6 +259,9 @@ func openProject(db *gorm.DB, project *models.Project, details bool) (OpenedProj
 			out.Status = string(f.Status)
 			out.Priority = string(f.Priority)
 			out.Category = f.Category
+			if f.Kind != "" && f.Kind != "feature" {
+				out.Kind = f.Kind
+			}
 		}
 		return out
 	}
@@ -421,7 +425,9 @@ func (h *PlaygroundHandler) Import(c *gin.Context) {
 		api.Fail(c, api.Validation("Choose a project or a new project, not both"))
 		return
 	case req.ProjectID > 0:
-		found, err := requireProject(c, h.db, req.ProjectID, canEdit)
+		// Importing into a project replaces its plan wholesale, so it is for the
+		// owner and publishers, like downloading it.
+		found, err := requireProject(c, h.db, req.ProjectID, canPublish)
 		if err != nil {
 			api.Fail(c, err)
 			return

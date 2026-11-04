@@ -326,7 +326,7 @@ func TestBackupKeepsAFileWhoseBytesAreMissing(t *testing.T) {
 	}
 }
 
-func TestOnlyTheOwnerCanDownloadABackup(t *testing.T) {
+func TestOnlyOwnerOrPublisherDownloadsABackup(t *testing.T) {
 	db := newTestDB(t)
 	files := newFileStore(t, db)
 	fx := seedBackupProject(t, db, files)
@@ -348,7 +348,8 @@ func TestOnlyTheOwnerCanDownloadABackup(t *testing.T) {
 	}{
 		{"editor", fx.other.ID, "developer", http.StatusForbidden},
 		{"viewer", viewer.ID, "developer", http.StatusForbidden},
-		{"admin who is not the owner", admin.ID, "admin", http.StatusForbidden},
+		// Downloads are for the owner and publishers; an admin has the owner's powers.
+		{"admin who is not the owner", admin.ID, "admin", http.StatusOK},
 		{"someone it is not shared with", stranger.ID, "developer", http.StatusNotFound},
 	}
 	for _, tc := range cases {

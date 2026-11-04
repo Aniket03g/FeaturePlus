@@ -81,7 +81,7 @@ func (h *VersionsHandler) Compare(c *gin.Context) {
 		api.Fail(c, err)
 		return
 	}
-	project, err := requireProject(c, h.db, projectID, canView)
+	project, role, err := requireProjectRole(c, h.db, projectID, canView)
 	if err != nil {
 		api.Fail(c, err)
 		return
@@ -107,7 +107,7 @@ func (h *VersionsHandler) Compare(c *gin.Context) {
 			if err != nil {
 				return OpenedProject{}, VersionSide{}, err
 			}
-			fc, err := findVisibleCopy(h.db, projectID, uint(id), userID)
+			fc, err := findVisibleCopy(h.db, projectID, uint(id), userID, role.Rank() >= canEdit.Rank())
 			if err != nil {
 				return OpenedProject{}, VersionSide{}, err
 			}
@@ -179,6 +179,7 @@ func compareLists(from, to OpenedProject) VersionComparison {
 		same("status", before.Status, row.Status)
 		same("priority", before.Priority, row.Priority)
 		same("category", before.Category, row.Category)
+		same("kind", before.Kind, row.Kind)
 		// Parent and release are compared by key and shown by name: renaming a
 		// parent does not move its children, and two parents can share a name.
 		if before.ParentKey != row.ParentKey {

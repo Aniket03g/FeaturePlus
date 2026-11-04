@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AlertCircle, ArrowLeft, Check, Pencil, Plus, Trash2, X } from 'lucide-react'
-import {
+import { useProjectSettings,
   useCreateFeature,
   useDeleteFeature,
   useFeature,
@@ -25,8 +25,13 @@ import { Markdown } from '@/components/Markdown'
 import { ColorDot } from '@/components/FeatureColor'
 import { FeatureFiles, MarkdownEditor, paragraphBreak } from '@/components/MarkdownEditor'
 import { TaskPanel } from './TaskPanel'
+import { FeatureMessages } from '@/components/FeatureMessages'
 import { cn } from '@/lib/utils'
 import {
+  KIND_LABEL,
+  canAdd,
+  canEditPlan,
+  type FeatureKind,
   PRIORITY_LABEL,
   STATUS_LABEL,
   type FeaturePriority,
@@ -145,6 +150,7 @@ export function FeatureDetail({
   const { navigate } = useRouter()
   const feature = useFeature(featureId)
   const project = useProject(projectId)
+  const colorMeanings = useProjectSettings(projectId).data?.color_meanings
   // The same query as the project's feature list, so it is usually cached.
   const allFeatures = useFeatures(projectId, ALL_FEATURES)
   const update = useUpdateFeature(projectId)
@@ -202,8 +208,10 @@ export function FeatureDetail({
     }))
   // Unknown until the project's list arrives; the add box then shows no level.
   const ownLevel = tree?.rootLevel ?? null
-  // Until the role is known, show the add box rather than flicker it in.
-  const canEdit = editable && project.data?.my_role !== 'viewer'
+  // Anyone on the project adds sub-features, ideas and bugs; editors and up
+  // change what is there.
+  const canEdit = editable && canEditPlan(project.data?.my_role)
+  const mayAdd = editable && canAdd(project.data?.my_role)
 
   /** Opens one part for editing, starting from what is saved. */
   function startEditing(part: EditPart) {
@@ -248,6 +256,15 @@ export function FeatureDetail({
         Edit
       </Button>
     ) : null
+
+  async function setKind(kind: FeatureKind) {
+    setError('')
+    try {
+      await update.mutateAsync({ id: featureId, kind })
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not change the type')
+    }
+  }
 
   async function setStatus(status: FeatureStatus) {
     setError('')
@@ -326,6 +343,7 @@ export function FeatureDetail({
                   <ColorDot
                     color={data.color}
                     title={data.title}
+                    meanings={colorMeanings}
                     className="-ml-1"
                     onChange={
                       canEdit
@@ -464,7 +482,7 @@ export function FeatureDetail({
           <Card>
             <CardHeader className="flex items-center justify-between gap-3">
               <CardTitle>Sub-features</CardTitle>
-              {canEdit && (
+              {mayAdd && (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -477,7 +495,7 @@ export function FeatureDetail({
             </CardHeader>
             <CardBody className="p-0">
               <div className="divide-y divide-border">
-                {canEdit && addingUnder === featureId && (
+                {mayAdd && addingUnder === featureId && (
                   <AddSubFeature
                     projectId={projectId}
                     parentId={featureId}
@@ -530,7 +548,7 @@ export function FeatureDetail({
                           {parts.done}/{parts.total} done
                         </span>
                       )}
-                      {canEdit && tree && (
+                      {mayAdd && tree && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -556,7 +574,7 @@ export function FeatureDetail({
                       <StatusPill status={child.status} />
                     </div>
 
-                    {canEdit && addingUnder === child.id && (
+                    {mayAdd && addingUnder === child.id && (
                       <AddSubFeature
                         projectId={projectId}
                         parentId={child.id}
@@ -575,7 +593,7 @@ export function FeatureDetail({
                     <p className="mt-0.5 text-xs text-faint">
                       A sub-feature is the next level down inside this feature.
                     </p>
-                    {canEdit && addingUnder !== featureId && (
+                    {mayAdd && addingUnder !== featureId && (
                       <Button
                         size="sm"
                         variant="secondary"
@@ -596,7 +614,10 @@ export function FeatureDetail({
             featureId={featureId}
             projectId={projectId}
             onOpenTask={setOpenTaskId}
+            canAdd={canEdit}
           />
+
+          <FeatureMessages projectId={projectId} featureId={featureId} />
         </div>
 
         <div className="space-y-4">
@@ -605,6 +626,24 @@ export function FeatureDetail({
             projectId={projectId}
             ownerId={project.data?.owner_id ?? 0}
           />
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Type</CardTitle>
+            </CardHeader>
+            <CardBody className="space-y-1">
+              {(Object.keys(KIND_LABEL) as FeatureKind[]).map((kind) => (
+                <QuickSet
+                  key={kind}
+                  active={(data.kind ?? 'feature') === kind}
+                  disabled={!canEdit}
+                  onClick={() => setKind(kind)}
+                >
+                  {KIND_LABEL[kind]}
+                </QuickSet>
+              ))}
+            </CardBody>
+          </Card>
 
           <Card>
             <CardHeader>

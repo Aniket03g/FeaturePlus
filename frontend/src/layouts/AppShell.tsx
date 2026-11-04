@@ -17,6 +17,8 @@ import {
   ShieldCheck,
   BookOpen,
   Users,
+  UserCog,
+  Info,
   LayoutTemplate,
   Shapes,
   KeyRound,
@@ -59,6 +61,8 @@ interface NavItem {
   isLabel?: boolean
   /** Indented under the label row before it. */
   nested?: boolean
+  /** Shown only to the server's admins. */
+  adminOnly?: boolean
 }
 
 interface NavGroup {
@@ -91,10 +95,10 @@ const NAV: NavGroup[] = [
         icon: History,
         extra: { id: 'dependencies', label: 'Dependencies', icon: Network },
       },
-      { id: 'messages', label: 'Messages', icon: MessageSquare, soon: true },
+      { id: 'messages', label: 'Messages', icon: MessageSquare },
       { id: 'settingsLabel', label: 'Settings', icon: Settings, isLabel: true, anyTime: true },
-      // The team page is not per project yet, so it stays usable from anywhere.
-      { id: 'team', label: 'Teams', icon: Users, nested: true, anyTime: true },
+      { id: 'projectSettings', label: 'Project info', icon: Info, nested: true },
+      { id: 'projectTeam', label: 'Team', icon: Users, nested: true },
     ],
   },
   {
@@ -112,6 +116,8 @@ const NAV: NavGroup[] = [
       { id: 'templates', label: 'Templates', icon: LayoutTemplate },
       { id: 'imports', label: 'Import / Export', icon: ArrowLeftRight },
       { id: 'backups', label: 'Backup & Restore', icon: Archive },
+      // Every account on the server, and the invite codes to make new ones.
+      { id: 'users', label: 'Users', icon: UserCog, adminOnly: true },
     ],
   },
   {
@@ -174,7 +180,7 @@ export function AppShell({ active, onNavigate, projectName, title, actions, chil
                   </p>
                 )}
                 <div className="space-y-0.5">
-                  {group.items.map((item) => (
+                  {group.items.filter((item) => !item.adminOnly || user?.role === 'admin').map((item) => (
                     <NavButton
                       key={item.id}
                       item={item}

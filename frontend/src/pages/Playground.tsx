@@ -103,7 +103,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { PlaygroundImportResult } from '@/lib/types'
+import { canDownload, type PlaygroundImportResult } from '@/lib/types'
 
 /**
  * The playground: a list of feature names to look at, reshape and then import
@@ -1728,7 +1728,8 @@ function ImportPanel({
             >
               <option value="">Choose a project…</option>
               <option value="new">+ New project</option>
-              {(projects.data?.items ?? []).map((project) => (
+              {/* Importing into a project is for its owner and publishers. */}
+              {(projects.data?.items ?? []).filter((project) => canDownload(project.my_role)).map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
                 </option>

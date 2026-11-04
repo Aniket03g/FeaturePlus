@@ -83,7 +83,11 @@ func TestSharingEndToEnd(t *testing.T) {
 	alice := newPerson(t, server.URL)
 	bob := newPerson(t, server.URL)
 	alice.want(201, "POST", "/api/v1/auth/signup", `{"name":"Alice","email":"alice@example.com","password":"password123"}`)
-	bob.want(201, "POST", "/api/v1/auth/signup", `{"name":"Bob","email":"bob@example.com","password":"password123"}`)
+	// Alice, the first account, is the admin; Bob signs up with a code from her.
+	invite := alice.want(201, "POST", "/api/v1/invites", `{"email":"bob@example.com"}`)
+	code, _ := invite["data"].(map[string]any)["code"].(string)
+	bob.want(422, "POST", "/api/v1/auth/signup", `{"name":"Bob","email":"bob@example.com","password":"password123"}`)
+	bob.want(201, "POST", "/api/v1/auth/signup", `{"name":"Bob","email":"bob@example.com","password":"password123","invite_code":"`+code+`"}`)
 
 	project := idOf(t, alice.want(201, "POST", "/api/v1/projects", `{"name":"Alice private"}`))
 	p := "/api/v1/projects/" + strconv.Itoa(project)
@@ -101,7 +105,9 @@ func TestSharingEndToEnd(t *testing.T) {
 	if role := out["data"].(map[string]any)["my_role"]; role != "viewer" {
 		t.Fatalf("my_role = %v, want viewer", role)
 	}
-	bob.want(403, "POST", p+"/features", `{"title":"From Bob"}`)
+	// He may add an idea, but not change it afterwards.
+	idea := idOf(t, bob.want(201, "POST", p+"/features", `{"title":"Idea from Bob","kind":"idea"}`))
+	bob.want(403, "PATCH", "/api/v1/features/"+strconv.Itoa(idea), `{"title":"Changed"}`)
 
 	// As an editor he can add work, but not delete or share it.
 	bobID := idOf(t, bob.want(200, "GET", "/api/v1/me", ""))

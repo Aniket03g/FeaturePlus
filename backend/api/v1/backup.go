@@ -81,6 +81,8 @@ type ProjectBackup struct {
 	Tags         []BackupTag        `json:"tags"`
 	Dependencies []BackupDependency `json:"dependencies"`
 	Comments     []BackupComment    `json:"comments"`
+	// Messages are the messages left on features.
+	Messages []BackupMessage `json:"messages,omitempty"`
 	Attachments  []BackupAttachment `json:"attachments"`
 	// FeatureAttachments are files attached to a feature rather than a task;
 	// their FeatureID is set and their TaskID is not.
@@ -95,6 +97,8 @@ type ProjectBackup struct {
 	Versions           []BackupVersion          `json:"versions"`
 	// Working is what the working version is based on, and its note.
 	Working *BackupWorking `json:"working,omitempty"`
+	// Settings are the project's conventions, colour meanings and architecture.
+	Settings *BackupSettings `json:"settings,omitempty"`
 	Copies             []BackupCopy             `json:"copies"`
 	Members            []BackupMember           `json:"members"`
 	FeatureAccess      []BackupFeatureAccess    `json:"feature_access"`
@@ -123,6 +127,7 @@ type BackupFeature struct {
 	Priority    string    `json:"priority"`
 	Assignee    string    `json:"assignee"`
 	Color       string    `json:"color,omitempty"`
+	Kind        string    `json:"kind,omitempty"`
 	Position    int       `json:"position"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -168,6 +173,16 @@ type BackupDependency struct {
 	Description string    `json:"description"`
 	CreatedBy   string    `json:"created_by"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+// BackupMessage is a message on a feature; FeatureID is the backup's id.
+type BackupMessage struct {
+	ID        uint      `json:"id"`
+	FeatureID uint      `json:"feature_id"`
+	Author    string    `json:"author"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type BackupComment struct {
@@ -282,6 +297,15 @@ type BackupVersion struct {
 	CreatedAt     time.Time       `json:"created_at"`
 }
 
+// BackupSettings is a project's settings as stored; see models.ProjectSettings.
+type BackupSettings struct {
+	VersionsConvention string          `json:"versions_convention,omitempty"`
+	PublishConvention  string          `json:"publish_convention,omitempty"`
+	Architecture       string          `json:"architecture,omitempty"`
+	ColorMeanings      json.RawMessage `json:"color_meanings,omitempty"`
+	Modules            string          `json:"modules,omitempty"`
+}
+
 // BackupWorking is the working version's base, by version Number, and note.
 type BackupWorking struct {
 	BaseNumber int    `json:"base_number,omitempty"`
@@ -359,7 +383,7 @@ func collectBackup(db *gorm.DB, files *sqlitefs.SQLiteFS, project *models.Projec
 	for _, f := range features {
 		row := BackupFeature{
 			ID: f.ID, Title: f.Title, Description: f.Description, Notes: f.Notes, Category: f.Category,
-			Status: string(f.Status), Priority: string(f.Priority), Assignee: people.ref(int(f.AssigneeID)), Color: f.Color,
+			Status: string(f.Status), Priority: string(f.Priority), Assignee: people.ref(int(f.AssigneeID)), Color: f.Color, Kind: f.Kind,
 			Position: f.Position, CreatedAt: f.CreatedAt, UpdatedAt: f.UpdatedAt,
 		}
 		// A parent or release outside the project is treated as none, as the
@@ -496,6 +520,15 @@ func collectBackup(db *gorm.DB, files *sqlitefs.SQLiteFS, project *models.Projec
 			row.AttachmentID = cm.AttachmentID
 		}
 		out.Comments = append(out.Comments, row)
+	}
+
+	var messages []models.FeatureMessage
+	if err := db.Where("project_id = ?", project.ID).Order("id").Find(&messages).Error; err != nil {
+		return out, nil, err
+	}
+	for _, m := range messages {
+		out.Messages = append(out.Messages, BackupMessage{ID: m.ID, FeatureID: m.FeatureID, Author: people.ref(m.UserID),
+			Content: m.Content, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt})
 	}
 
 	// A pull request belongs to the project through its feature or its task.
@@ -642,6 +675,20 @@ func collectBackup(db *gorm.DB, files *sqlitefs.SQLiteFS, project *models.Projec
 			w.BaseNumber = numberOf[*working.BaseVersionID]
 		}
 		out.Working = w
+	}
+
+	settings, err := loadProjectSettings(db, project.ID)
+	if err != nil {
+		return out, nil, err
+	}
+	if settings.UpdatedByID != 0 || settings.VersionsConvention != "" || settings.Architecture != "" {
+		bs := &BackupSettings{VersionsConvention: settings.VersionsConvention,
+			PublishConvention: settings.PublishConvention, Architecture: settings.Architecture}
+		if settings.ColorMeanings != "" {
+			bs.ColorMeanings = json.RawMessage(settings.ColorMeanings)
+		}
+		bs.Modules = modulesText(settings.Modules)
+		out.Settings = bs
 	}
 
 	var copies []models.FeatureCopy
@@ -957,8 +1004,8 @@ func (h *BackupsHandler) Download(c *gin.Context) {
 		api.Fail(c, err)
 		return
 	}
-	if role != models.RoleOwner {
-		api.Fail(c, api.Forbidden("Only the project's owner can download a backup"))
+	if role.Rank() < models.RolePublisher.Rank() {
+		api.Fail(c, api.Forbidden("Only the project's owner or a publisher can download a backup"))
 		return
 	}
 

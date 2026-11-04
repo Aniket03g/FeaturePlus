@@ -292,7 +292,7 @@ func TestCreateFeatureValidatesStatus(t *testing.T) {
 	}
 }
 
-func TestCreateFeatureForbiddenForNonOwner(t *testing.T) {
+func TestCreateFeatureByOutsidersAndViewers(t *testing.T) {
 	db := newTestDB(t)
 	_, other, project := seed(t, db)
 	r := featureRouter(t, db, other.ID, "developer")
@@ -303,11 +303,27 @@ func TestCreateFeatureForbiddenForNonOwner(t *testing.T) {
 		t.Fatalf("outsider status %d, want 404: %s", w.Code, w.Body.String())
 	}
 
+	// A viewer may add a feature, an idea or a bug, but not shape it: what
+	// they send for status or priority is ignored, and they cannot change it.
 	share(t, db, project.ID, other.ID, models.RoleViewer)
 	w = do(r, http.MethodPost, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/features",
-		`{"title":"Sneaky"}`)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status %d, want 403: %s", w.Code, w.Body.String())
+		`{"title":"An idea","kind":"idea","status":"done","priority":"high"}`)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("viewer adds: status %d, want 201: %s", w.Code, w.Body.String())
+	}
+	var made struct {
+		Data FeatureDTO `json:"data"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &made)
+	if made.Data.Kind != "idea" || made.Data.Status != "todo" || made.Data.Priority != "medium" {
+		t.Errorf("viewer's feature = kind %s, status %s, priority %s; want idea, todo, medium",
+			made.Data.Kind, made.Data.Status, made.Data.Priority)
+	}
+	if w := do(r, http.MethodPatch, "/api/v1/features/"+strconv.Itoa(int(made.Data.ID)), `{"title":"Changed"}`); w.Code != http.StatusForbidden {
+		t.Errorf("viewer changes it: status %d, want 403", w.Code)
+	}
+	if w := do(r, http.MethodPost, "/api/v1/projects/"+strconv.Itoa(project.ID)+"/features", `{"title":"X","kind":"chore"}`); w.Code != http.StatusUnprocessableEntity && w.Code != http.StatusBadRequest {
+		t.Errorf("unknown kind: status %d, want a validation failure", w.Code)
 	}
 }
 

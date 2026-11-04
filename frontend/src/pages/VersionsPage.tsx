@@ -31,7 +31,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { STATUS_LABEL, canPublish, type FeatureStatus } from '@/lib/types'
+import { STATUS_LABEL, canDownload, canEditPlan, canPublish, type FeatureStatus } from '@/lib/types'
 import { cn, plural } from '@/lib/utils'
 
 type Tab = 'versions' | 'copies'
@@ -93,6 +93,9 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
   const role = project.data?.my_role
   const canSave = role !== undefined && role !== 'viewer'
   const mayPublish = canPublish(role)
+  // Editors open versions as the working version; publishers download.
+  const mayOpen = canEditPlan(role)
+  const mayDownload = canDownload(role)
 
   const [saving, setSaving] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -124,7 +127,9 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
                     navigate({
                       name: 'compare',
                       projectId,
-                      from: String((working.published && working.published.id !== list[0].id ? working.published : list[1]).id),
+                      from: String(
+                        (working.published && working.published.id !== list[0].id ? working.published : list[1]).id,
+                      ),
                       to: String(list[0].id),
                     })
                   }
@@ -153,6 +158,8 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
           publishedOnly={publishedOnly}
           canSave={canSave}
           mayPublish={mayPublish}
+          mayOpen={mayOpen}
+          mayDownload={mayDownload}
           onSave={() => setSaving(true)}
         />
       ) : (
@@ -214,6 +221,8 @@ function VersionsTable({
   publishedOnly,
   canSave,
   mayPublish,
+  mayOpen,
+  mayDownload,
   onSave,
 }: {
   projectId: number
@@ -221,6 +230,10 @@ function VersionsTable({
   publishedOnly: boolean
   canSave: boolean
   mayPublish: boolean
+  /** Editor and up: open a version as the working version, or discard changes. */
+  mayOpen: boolean
+  /** Owner and publishers: download a version as .md. */
+  mayDownload: boolean
   onSave: () => void
 }) {
   const { navigate } = useRouter()
@@ -322,7 +335,7 @@ function VersionsTable({
                           text: `See the changes since ${base.label}`,
                           onClick: () => navigate({ name: 'compare', projectId, from: String(base.id), to: 'current' }),
                         },
-                        ...(mayPublish
+                        ...(mayOpen
                           ? [
                               {
                                 icon: <RotateCcw className="h-3.5 w-3.5" />,
@@ -359,11 +372,10 @@ function VersionsTable({
                 indent={!publishedOnly && v.publish_number === 0 && v.major > 0}
                 previewing={previewing === v.id}
                 onPreview={() => setPreviewing(previewing === v.id ? null : v.id)}
-                onView={
-                  base?.id === v.id ? goToWorking : mayPublish ? () => setOpening(v) : undefined
-                }
+                onView={base?.id === v.id ? goToWorking : mayOpen ? () => setOpening(v) : undefined}
                 onPublish={mayPublish && working.published?.id !== v.id ? () => setPublishing(v) : undefined}
                 onNote={canSave ? (notes) => setVersionNote.mutateAsync({ versionId: v.id, notes }) : undefined}
+                mayDownload={mayDownload}
               />
             ))}
           </tbody>
@@ -375,15 +387,17 @@ function VersionsTable({
             </div>
             <p className="text-sm font-medium text-ink">No versions yet</p>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted">
-              Save the working version to keep it as it is now. Saves count up as v0.1, v0.2… and publishing one
-              makes it v1, the list everyone reads.
+              Save the working version to keep it as it is now. Saves count up as v0.1, v0.2… and publishing one makes
+              it v1, the list everyone reads.
             </p>
           </div>
         )}
       </Card>
       <p className="text-xs text-faint">
         <span className="font-medium text-muted">Live</span> marks the version the working version is based on.{' '}
-        {mayPublish ? 'View opens a version as the working version.' : 'Only the owner or a publisher can open a version as the working version.'}
+        {mayOpen
+          ? 'View opens a version as the working version.'
+          : 'Editors and up can open a version as the working version.'}
       </p>
 
       {publishing && (
@@ -416,7 +430,10 @@ function VersionRow({
   onView,
   onPublish,
   onNote,
+  mayDownload,
 }: {
+  /** Owner and publishers may download the version as .md. */
+  mayDownload: boolean
   projectId: number
   version: FeatureVersion
   /** The working version is based on this one. */
@@ -469,7 +486,11 @@ function VersionRow({
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-muted">{when(version.published_at ?? version.created_at)}</td>
         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
-          {c ? <Counts c={c} /> : <span className="font-sans text-muted">{plural(version.feature_count, 'feature')}</span>}
+          {c ? (
+            <Counts c={c} />
+          ) : (
+            <span className="font-sans text-muted">{plural(version.feature_count, 'feature')}</span>
+          )}
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center justify-end gap-1.5">
@@ -502,11 +523,19 @@ function VersionRow({
                   text: previewing ? 'Hide the list' : 'Look at the list',
                   onClick: onPreview,
                 },
-                {
-                  icon: downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />,
-                  text: 'Download .md',
-                  onClick: download,
-                },
+                ...(mayDownload
+                  ? [
+                      {
+                        icon: downloading ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Download className="h-3.5 w-3.5" />
+                        ),
+                        text: 'Download .md',
+                        onClick: download,
+                      },
+                    ]
+                  : []),
               ]}
             />
           </div>
@@ -524,13 +553,7 @@ function VersionRow({
 }
 
 /** A "⋯" button with a short menu under it. */
-function RowMenu({
-  label,
-  items,
-}: {
-  label: string
-  items: { icon: ReactNode; text: string; onClick: () => void }[]
-}) {
+function RowMenu({ label, items }: { label: string; items: { icon: ReactNode; text: string; onClick: () => void }[] }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -646,16 +669,18 @@ function CopiesTab({
             size="sm"
             className="shrink-0 gap-1.5"
             disabled={!hasVersions}
-            title={hasVersions ? 'Download a version, or upload a file you have edited' : 'Save a version first; copies are made from versions'}
+            title={
+              hasVersions
+                ? 'Download a version, or upload a file you have edited'
+                : 'Save a version first; copies are made from versions'
+            }
             onClick={onStart}
           >
             <Upload className="h-3.5 w-3.5" />
             Start a copy or upload
           </Button>
         </div>
-        <p className="mt-2 text-xs text-faint">
-          Your copies are private to you.
-        </p>
+        <p className="mt-2 text-xs text-faint">Your copies are private to you.</p>
       </Card>
 
       {done && (
@@ -701,12 +726,17 @@ function CopiesTab({
         <Card>
           <ul className="divide-y divide-border">
             {shown.map((copy) => (
-              <CopyRow key={copy.id} projectId={projectId} copy={copy} isNew={copy.id === done?.id} canMerge={canMerge} />
+              <CopyRow
+                key={copy.id}
+                projectId={projectId}
+                copy={copy}
+                isNew={copy.id === done?.id}
+                canMerge={canMerge}
+              />
             ))}
           </ul>
         </Card>
       )}
-
     </div>
   )
 }
@@ -771,7 +801,17 @@ function CopiesEmpty({
 }
 
 /** A friendly empty state: a small picture, what this is, and the first thing to do. */
-function EmptyScreen({ picture, title, text, children }: { picture: ReactNode; title: string; text: string; children: ReactNode }) {
+function EmptyScreen({
+  picture,
+  title,
+  text,
+  children,
+}: {
+  picture: ReactNode
+  title: string
+  text: string
+  children: ReactNode
+}) {
   return (
     <Card className="flex flex-col items-center px-6 py-14 text-center">
       <div className="mb-6" aria-hidden>
@@ -804,7 +844,13 @@ function StackPicture() {
 /** Download, edit, upload: the copy loop. */
 function LoopPicture() {
   const circle = (cx: number, active: boolean) => (
-    <circle cx={cx} cy="34" r="20" className={active ? 'fill-accent-soft stroke-accent' : 'fill-raised stroke-border'} strokeWidth="1.5" />
+    <circle
+      cx={cx}
+      cy="34"
+      r="20"
+      className={active ? 'fill-accent-soft stroke-accent' : 'fill-raised stroke-border'}
+      strokeWidth="1.5"
+    />
   )
   return (
     <svg width="160" height="80" viewBox="0 0 160 80" fill="none">
@@ -813,9 +859,21 @@ function LoopPicture() {
       {circle(24, true)}
       {circle(80, false)}
       {circle(136, false)}
-      <path d="M24 25v16m-6-6 6 6 6-6" className="stroke-accent" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M24 25v16m-6-6 6 6 6-6"
+        className="stroke-accent"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <path d="M74 40l2-6 9-9 4 4-9 9-6 2z" className="stroke-muted" strokeWidth="1.8" strokeLinejoin="round" />
-      <path d="M136 43V27m-6 6 6-6 6 6" className="stroke-muted" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M136 43V27m-6 6 6-6 6 6"
+        className="stroke-muted"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }

@@ -30,10 +30,13 @@ export function TaskList({
   featureId,
   projectId,
   onOpenTask,
+  canAdd = true,
 }: {
   featureId: number
   projectId: number
   onOpenTask: (taskId: number) => void
+  /** Adding tasks is for editors and up. */
+  canAdd?: boolean
 }) {
   const [filters, setFilters] = useState<TaskFilters>({})
   const [adding, setAdding] = useState(false)
@@ -66,10 +69,12 @@ export function TaskList({
               ['true', 'Done'],
             ]}
           />
-          <Button size="sm" variant="ghost" onClick={() => setAdding((a) => !a)}>
-            <Plus className="h-3.5 w-3.5" />
-            Add
-          </Button>
+          {canAdd && (
+            <Button size="sm" variant="ghost" onClick={() => setAdding((a) => !a)}>
+              <Plus className="h-3.5 w-3.5" />
+              Add
+            </Button>
+          )}
         </div>
       </CardHeader>
 
@@ -109,7 +114,7 @@ export function TaskList({
             <p className="text-sm text-muted">
               {filters.done ? 'No tasks in this view' : 'No tasks yet'}
             </p>
-            {!filters.done && !adding && (
+            {canAdd && !filters.done && !adding && (
               <Button size="sm" variant="secondary" className="mt-3" onClick={() => setAdding(true)}>
                 <Plus className="h-3.5 w-3.5" />
                 Add the first task

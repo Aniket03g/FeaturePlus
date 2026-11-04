@@ -113,6 +113,9 @@ func openDatabase(cfg Config) (*database.Database, error) {
 		&models.ProjectMember{},   // Who each project is shared with
 		&models.FeatureVersion{},  // Saved copies of a project's feature list
 		&models.WorkingState{},    // What each project's working version is based on, and its note
+		&models.InviteCode{},      // Codes an admin shares offline so someone can sign up
+		&models.ProjectSettings{}, // Each project's conventions, colour meanings and architecture
+		&models.FeatureMessage{},  // Messages people leave on features
 		&models.FeatureCopy{},     // Each person's own edited copy of a version
 		&models.ProjectVisit{},    // When each person last opened a project's working list
 		&internalModels.ProjectConnection{},

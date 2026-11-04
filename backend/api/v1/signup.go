@@ -22,11 +22,15 @@ type SignupRequest struct {
 	Name     string `json:"name" binding:"required,max=100"`
 	Email    string `json:"email" binding:"required,email,max=254"`
 	Password string `json:"password" binding:"required,min=8,max=72"`
+	// InviteCode is the code an admin shared offline. Needed for every account
+	// but the server's first.
+	InviteCode string `json:"invite_code" binding:"max=40"`
 }
 
 // signupHandler creates an account and signs it in.
 //
-// The first account on an empty database becomes the admin; every later one
+// Every account needs an invite code from an admin (see invites.go), except
+// the first on an empty database, which becomes the admin; every later one
 // is a developer. Without that, a fresh server would have nobody able to
 // change a role, and so no way to ever get an admin.
 //
@@ -77,6 +81,10 @@ func signupHandler(db *gorm.DB) gin.HandlerFunc {
 			}
 			if err := tx.Create(&user).Error; err != nil {
 				return api.Internal(err)
+			}
+			// Refusing the code rolls the new account back.
+			if total > 0 {
+				return useInviteCode(tx, req.InviteCode, email, user.ID)
 			}
 			return nil
 		})

@@ -84,7 +84,7 @@ func TestAdminResetsSomeonesPassword(t *testing.T) {
 
 	w := do(r, http.MethodPost, "/api/v1/auth/signup", `{"name":"Admin","email":"admin@x.io","password":"admin-password"}`)
 	adminSession := decodeSession(t, w.Body.Bytes())
-	w = do(r, http.MethodPost, "/api/v1/auth/signup", `{"name":"B","email":"b@x.io","password":"forgotten-one"}`)
+	w = do(r, http.MethodPost, "/api/v1/auth/signup", `{"name":"B","email":"b@x.io","password":"forgotten-one","invite_code":"`+inviteFor(t, db, "")+`"}`)
 	other := decodeSession(t, w.Body.Bytes())
 	// The role is read from the database on every request, so the token
 	// issued at sign-up becomes an admin's straight away.
@@ -110,7 +110,7 @@ func TestResetPasswordRefusals(t *testing.T) {
 
 	w := do(r, http.MethodPost, "/api/v1/auth/signup", `{"name":"Admin","email":"admin@x.io","password":"admin-password"}`)
 	admin := decodeSession(t, w.Body.Bytes())
-	w = do(r, http.MethodPost, "/api/v1/auth/signup", `{"name":"B","email":"b@x.io","password":"b-password"}`)
+	w = do(r, http.MethodPost, "/api/v1/auth/signup", `{"name":"B","email":"b@x.io","password":"b-password","invite_code":"`+inviteFor(t, db, "")+`"}`)
 	other := decodeSession(t, w.Body.Bytes())
 	db.Model(&models.User{}).Where("id = ?", admin.User.ID).Update("role", "admin")
 

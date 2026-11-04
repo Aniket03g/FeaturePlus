@@ -479,7 +479,7 @@ type mergeInputs struct {
 
 func (h *VersionsHandler) loadMerge(db *gorm.DB, project *models.Project, copyID uint, userID int) (mergeInputs, error) {
 	var in mergeInputs
-	fc, err := findVisibleCopy(db, project.ID, copyID, userID)
+	fc, err := findVisibleCopy(db, project.ID, copyID, userID, false)
 	if err != nil {
 		return in, err
 	}

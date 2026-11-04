@@ -38,6 +38,9 @@ type Feature struct {
 	// palette's names (red, orange, …) or empty for none. It is a working aid,
 	// so it is left out of published versions and copies.
 	Color string `gorm:"type:varchar(20);not null;default:''" json:"color"`
+	// Kind is what the entry is: a feature, an idea or a bug. Anyone on the
+	// project may add one; only editors and up shape it afterwards.
+	Kind string `gorm:"type:varchar(10);not null;default:'feature'" json:"kind"`
 	// Position orders a feature among the others with the same parent, 1 first.
 	// Features saved before it existed share 0 and fall back to their id.
 	Position  int            `gorm:"not null;default:0;index" json:"position"`

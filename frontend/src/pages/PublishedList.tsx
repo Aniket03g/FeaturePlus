@@ -24,7 +24,7 @@ import { Markdown } from '@/components/Markdown'
 import { ShareDialog } from './ShareDialog'
 import { ProjectListTabs } from './VersionsPage'
 import { cn, plural } from '@/lib/utils'
-import { ROLE_LABEL, canManage, type FeaturePriority, type FeatureStatus } from '@/lib/types'
+import { ROLE_LABEL, canDownload, canManage, type FeaturePriority, type FeatureStatus } from '@/lib/types'
 
 type Row = FeatureVersionDetail['snapshot']['features'][number]
 
@@ -123,7 +123,7 @@ export function PublishedList({ projectId }: { projectId: number }) {
             <Network className="h-3.5 w-3.5" />
             Dependencies
           </Button>
-          {version && (
+          {version && canDownload(role) && (
             <Button variant="secondary" size="sm" onClick={download} disabled={downloading} title="Save the published list as a .md file">
               {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
               Download .md

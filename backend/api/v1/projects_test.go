@@ -30,7 +30,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 
 	if err := db.AutoMigrate(&models.User{}, &models.Project{}, &models.Feature{}, &models.Task{}, &models.PullRequest{}, &models.FeatureTag{}, &models.Comment{}, &models.TaskAttachment{}, &models.FeatureAttachment{}, &models.Dependency{}, &models.Release{}, &models.ApprovedPR{},
 		&models.FeatureFile{}, &models.FeatureCommit{}, &models.FeatureScope{},
-		&models.ContractArtifact{}, &models.ProjectGitHub{}, &models.ReleaseGitHub{}, &models.UserGitHub{}, &models.PlaygroundDraft{}, &models.ProjectMember{}, &models.FeatureVersion{}, &models.WorkingState{}, &models.FeatureCopy{}, &models.ProjectVisit{}); err != nil {
+		&models.ContractArtifact{}, &models.ProjectGitHub{}, &models.ReleaseGitHub{}, &models.UserGitHub{}, &models.PlaygroundDraft{}, &models.ProjectMember{}, &models.FeatureVersion{}, &models.WorkingState{}, &models.InviteCode{}, &models.ProjectSettings{}, &models.FeatureMessage{}, &models.FeatureCopy{}, &models.ProjectVisit{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
@@ -453,14 +453,20 @@ func TestManagerHasNoAccessToOthersProjects(t *testing.T) {
 	}
 }
 
-func TestEditorCanUpdateButNotDelete(t *testing.T) {
+// A project's name and description are the owner's, like its conventions;
+// editors and publishers change its contents, and only the owner deletes it.
+func TestOnlyTheOwnerRenamesOrDeletes(t *testing.T) {
 	db := newTestDB(t)
 	_, other, project := seed(t, db)
 	share(t, db, project.ID, other.ID, models.RoleEditor)
 	r := testRouter(t, db, other.ID, "developer")
 
-	if w := do(r, http.MethodPatch, "/api/v1/projects/"+itoa(project.ID), `{"name":"Renamed"}`); w.Code != http.StatusOK {
-		t.Fatalf("update status %d, want 200: %s", w.Code, w.Body.String())
+	if w := do(r, http.MethodPatch, "/api/v1/projects/"+itoa(project.ID), `{"name":"Renamed"}`); w.Code != http.StatusForbidden {
+		t.Fatalf("editor update status %d, want 403: %s", w.Code, w.Body.String())
+	}
+	db.Model(&models.ProjectMember{}).Where("user_id = ?", other.ID).Update("role", models.RolePublisher)
+	if w := do(r, http.MethodPatch, "/api/v1/projects/"+itoa(project.ID), `{"name":"Renamed"}`); w.Code != http.StatusForbidden {
+		t.Fatalf("publisher update status %d, want 403: %s", w.Code, w.Body.String())
 	}
 	if w := do(r, http.MethodDelete, "/api/v1/projects/"+itoa(project.ID), ""); w.Code != http.StatusForbidden {
 		t.Fatalf("delete status %d, want 403: %s", w.Code, w.Body.String())

@@ -44,6 +44,7 @@ func registerSessionRoutes(g *gin.RouterGroup, db *gorm.DB) {
 	auth := g.Group("/auth")
 	{
 		auth.POST("/login", loginHandler(db))
+		auth.GET("/signup", signupInfoHandler(db))
 		auth.POST("/signup", signupHandler(db))
 		auth.POST("/logout", logoutHandler())
 	}

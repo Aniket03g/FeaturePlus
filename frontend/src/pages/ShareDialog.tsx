@@ -7,17 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ROLE_LABEL, type ProjectRole } from '@/lib/types'
+import { ROLE_HINT, ROLE_LABEL, type ProjectRole } from '@/lib/types'
 
 const SHAREABLE: ProjectRole[] = ['publisher', 'editor', 'viewer']
 
-const ROLE_HINT: Record<ProjectRole, string> = {
-  owner: 'Can do everything, including sharing and deleting the project.',
-  publisher: 'Everything an editor can, and can publish a version or put an old one back as the Feature List.',
-  editor: 'Can change features, tasks, releases and save versions. Cannot publish, share or delete.',
-  viewer: 'Can see everything and comment. Cannot change anything.',
-  admin: 'Runs this server. Can do everything the owner can.',
-}
 
 const selectClass =
   'h-8 rounded-md border border-border bg-surface px-2 text-xs text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40'

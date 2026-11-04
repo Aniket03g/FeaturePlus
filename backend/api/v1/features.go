@@ -145,7 +145,11 @@ func (h *FeaturesHandler) Create(c *gin.Context) {
 		return
 	}
 
-	if _, err := requireProject(c, h.db, projectID, canEdit); err != nil {
+	// Anyone on the project may add a feature, an idea or a bug. Shaping it
+	// (status, priority, who works on it, tags) is for editors and up, so a
+	// viewer's new entry takes the defaults whatever was sent.
+	_, role, err := requireProjectRole(c, h.db, projectID, canView)
+	if err != nil {
 		api.Fail(c, err)
 		return
 	}
@@ -164,6 +168,11 @@ func (h *FeaturesHandler) Create(c *gin.Context) {
 		Category:    orDefault(req.Category, "general"),
 		Status:      models.FeatureStatus(orDefault(req.Status, string(models.StatusTodo))),
 		Priority:    models.FeaturePriority(orDefault(req.Priority, string(models.PriorityMedium))),
+		Kind:        orDefault(req.Kind, "feature"),
+	}
+	if role.Rank() < canEdit.Rank() {
+		feature.Status, feature.Priority, feature.Category = models.StatusTodo, models.PriorityMedium, "general"
+		req.AssigneeID, req.Tags = nil, nil
 	}
 	if req.ParentFeatureID != nil {
 		if err := h.checkParent(projectID, *req.ParentFeatureID); err != nil {
@@ -280,6 +289,10 @@ func (h *FeaturesHandler) Delete(c *gin.Context) {
 			Where("(parent_type = ? AND parent_id = ?) OR (child_type = ? AND child_id = ?)",
 				models.EntityTypeFeature, feature.ID, models.EntityTypeFeature, feature.ID).
 			Delete(&models.Dependency{}).Error; err != nil {
+			return err
+		}
+		// So do the messages left on it.
+		if err := tx.Where("feature_id = ?", feature.ID).Delete(&models.FeatureMessage{}).Error; err != nil {
 			return err
 		}
 		// Its attached files go too; nothing else can link to them.

@@ -31,6 +31,7 @@ import {
   useProjectTags,
   useProjectVisit,
   useSetWorkingNote,
+  useProjectSettings,
   useUpdateFeature,
 } from '@/lib/queries'
 import { gapTarget, intoTarget, MAX_DEPTH, type DropRow, type DropTarget } from '@/lib/tree-drop'
@@ -44,11 +45,23 @@ import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
 import { NewFeatureDialog } from './NewFeatureDialog'
-import { ColorDot } from '@/components/FeatureColor'
+import { ColorDot, FEATURE_COLORS } from '@/components/FeatureColor'
 import { ShareDialog } from './ShareDialog'
 import { PublishDialog, SaveVersionDialog } from './PublishDialog'
 import { cn, percent, plural } from '@/lib/utils'
-import { ROLE_LABEL, STATUS_LABEL, canManage, canPublish, type Feature, type FeatureStatus } from '@/lib/types'
+import {
+  KIND_LABEL,
+  ROLE_LABEL,
+  STATUS_LABEL,
+  canAdd,
+  canDownload,
+  canEditInfo,
+  canEditPlan,
+  canManage,
+  canPublish,
+  type Feature,
+  type FeatureStatus,
+} from '@/lib/types'
 import { buildDiffTree, type DiffNode } from '@/lib/compare-tree'
 import { NoteEditor } from '@/components/NoteEditor'
 import { useWorkingState } from '@/lib/working'
@@ -200,6 +213,8 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   // Where the list stands against its saved versions, and which version its
   // rows are marked against: the published one unless someone picks another.
   const working = useWorkingState(projectId)
+  const colorMeanings = useProjectSettings(projectId).data?.color_meanings ?? {}
+  const colorLegend = FEATURE_COLORS.filter((c) => colorMeanings[c.name])
   const setWorkingNote = useSetWorkingNote(projectId)
   const [pickedBase, setPickedBase] = useState<number | 'off' | null>(null)
   const baseId = pickedBase === 'off' ? null : (pickedBase ?? working.published?.id ?? working.latest?.id ?? null)
@@ -486,8 +501,10 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
 
   const stats = project.data?.stats
   const role = project.data?.my_role
-  // Until the role is known, show the editing buttons rather than flicker them in.
-  const canEdit = role !== 'viewer'
+  // Until the role is known, editing is not offered.
+  const canEdit = canEditPlan(role)
+  const mayAdd = canAdd(role)
+  const mayDownload = canDownload(role)
   const mayPublish = canPublish(role)
   // Publish shows once everything is saved, for a newest save not yet published.
   const latest = working.latest
@@ -689,6 +706,12 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             </>
           )}
 
+          {!arranging && colorLegend.length > 0 && (
+            <ColorLegend
+              colors={colorLegend.map((c) => ({ ...c, meaning: colorMeanings[c.name] }))}
+              onEdit={canEditInfo(role) ? () => navigate({ name: 'projectSettings', projectId }) : undefined}
+            />
+          )}
           {!arranging && working.versions.length > 0 && (
             <div
               className={cn(
@@ -759,8 +782,8 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
 
           {!arranging && (
             <>
-              <DownloadFileButton projectId={projectId} />
-              {canEdit && (
+              {mayDownload && <DownloadFileButton projectId={projectId} />}
+              {mayAdd && (
                 <Button size="sm" className="h-7" onClick={() => setCreating(true)}>
                   <Plus className="h-3 w-3" />
                   Add feature
@@ -840,7 +863,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                   Clear filters
                 </Button>
               ) : (
-                canEdit && (
+                mayAdd && (
                   <Button size="sm" className="mt-3" onClick={() => setCreating(true)}>
                     <Plus className="h-3.5 w-3.5" />
                     Add the first feature
@@ -873,6 +896,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
               {rows.map((node) => (
                 <div key={node.feature.id} className="divide-y divide-border">
                   <FeatureRow
+                    colorMeanings={colorMeanings}
                     diff={diffById.get(node.feature.id)}
                     base={base?.label ?? ''}
                     diffOpen={openDiffs.has(node.feature.id)}
@@ -907,7 +931,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                         : undefined
                     }
                     onAddInside={
-                      canEdit && !hasFilters && !arranging && node.depth < MAX_DEPTH
+                      mayAdd && !hasFilters && !arranging && node.depth < MAX_DEPTH
                         ? () => setAddingTo(addingTo === node.feature.id ? null : node.feature.id)
                         : undefined
                     }
@@ -944,7 +968,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                 />
               )}
 
-              {canEdit &&
+              {mayAdd &&
                 !hasFilters &&
                 !arranging &&
                 (addingTo === 'top' ? (
@@ -1093,7 +1117,10 @@ function FeatureRow({
   base,
   diffOpen,
   onToggleDiff,
+  colorMeanings,
 }: {
+  /** What each colour means in this project. */
+  colorMeanings: Record<string, string>
   /** How this feature differs from the version picked in "Changes since". */
   diff?: DiffNode
   /** That version's label, v2. */
@@ -1137,12 +1164,6 @@ function FeatureRow({
           moving && 'opacity-30',
         )}
       >
-        {marker && (
-          <span
-            aria-hidden
-            className={cn('absolute inset-y-0 left-0 w-[3px]', marker.tone === 'success' ? 'bg-success' : 'bg-warning')}
-          />
-        )}
         {arranging && (
           <button
             type="button"
@@ -1155,8 +1176,8 @@ function FeatureRow({
           </button>
         )}
 
-        <div className="absolute top-1/2 z-10 -translate-y-1/2" style={{ left: gutter + 8 }}>
-          <ColorDot color={feature.color} title={feature.title} onChange={onColor} quiet />
+        <div className="absolute top-1/2 z-10 -translate-y-1/2 [&:has([role=menu])]:z-50" style={{ left: gutter + 8 }}>
+          <ColorDot color={feature.color} title={feature.title} onChange={onColor} meanings={colorMeanings} quiet />
         </div>
 
         {/* One guide line per level above this one. */}
@@ -1216,6 +1237,11 @@ function FeatureRow({
               >
                 {feature.title}
               </button>
+              {feature.kind && feature.kind !== 'feature' && (
+                <Badge tone={feature.kind === 'bug' ? 'danger' : 'accent'} className="shrink-0">
+                  {KIND_LABEL[feature.kind]}
+                </Badge>
+              )}
               {marker && (
                 <>
                   {marker.canOpen ? (
@@ -1349,6 +1375,69 @@ function FeatureRow({
   )
 }
 
+/**
+ * What the colours mean in this project, as a small button that opens the
+ * list. Only colours with a meaning are shown.
+ */
+function ColorLegend({
+  colors,
+  onEdit,
+}: {
+  colors: { name: string; label: string; hex: string; meaning: string }[]
+  onEdit?: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false)
+    }
+    window.addEventListener('pointerdown', away)
+    return () => window.removeEventListener('pointerdown', away)
+  }, [open])
+
+  return (
+    <div ref={box} className="relative">
+      <Button
+        variant="secondary"
+        size="sm"
+        className="h-7"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        title="What the colours mean"
+      >
+        <span className="flex -space-x-0.5" aria-hidden>
+          {colors.slice(0, 4).map((c) => (
+            <span key={c.name} className="h-2.5 w-2.5 rounded-full ring-1 ring-surface" style={{ background: c.hex }} />
+          ))}
+        </span>
+        Colours
+      </Button>
+      {open && (
+        <div className="absolute left-0 top-8 z-30 w-64 rounded-md border border-border bg-surface py-1.5 shadow-card">
+          {colors.map((c) => (
+            <div key={c.name} className="flex items-center gap-2 px-3 py-1 text-xs">
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: c.hex }} aria-hidden />
+              <span className="w-14 shrink-0 text-muted">{c.label}</span>
+              <span className="min-w-0 truncate text-ink">{c.meaning}</span>
+            </div>
+          ))}
+          {onEdit && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="mt-1 w-full border-t border-border px-3 pt-1.5 text-left text-xs text-accent hover:underline"
+            >
+              Change the meanings
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** The marker on a row: one word, and a few words of what changed. */
 function describeDiff(
   node: DiffNode,
@@ -1375,7 +1464,6 @@ function describeDiff(
 function RemovedRow({ node, depth, base }: { node: DiffNode; depth: number; base: string }) {
   return (
     <div className="relative flex items-center bg-danger-soft/10" title={`In ${base}, removed since`}>
-      <span aria-hidden className="absolute inset-y-0 left-0 w-[3px] bg-danger" />
       {Array.from({ length: depth }).map((_, i) => (
         <span
           key={i}

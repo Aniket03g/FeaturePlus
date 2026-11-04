@@ -26,7 +26,8 @@ import (
 // allowed when every change to the list is saved as a version, so nothing
 // can be lost, and it is saved as a version itself afterwards.
 //
-// Both need the owner or a publisher.
+// Publishing needs the owner or a publisher; opening a version as the
+// working version, an editor.
 
 // PublishRequest is the accepted body for publishing. The note is optional.
 type PublishRequest struct {
@@ -284,7 +285,7 @@ func (in restoreInputs) ready() bool {
 //
 // GET /api/v1/projects/:id/versions/:versionId/restore
 func (h *VersionsHandler) PreviewRestore(c *gin.Context) {
-	project, versionID, _, ok := h.versionTarget(c, canPublish)
+	project, versionID, _, ok := h.versionTarget(c, canEdit)
 	if !ok {
 		return
 	}
@@ -315,7 +316,7 @@ func (h *VersionsHandler) PreviewRestore(c *gin.Context) {
 //
 // POST /api/v1/projects/:id/versions/:versionId/restore
 func (h *VersionsHandler) Restore(c *gin.Context) {
-	project, versionID, userID, ok := h.versionTarget(c, canPublish)
+	project, versionID, userID, ok := h.versionTarget(c, canEdit)
 	if !ok {
 		return
 	}

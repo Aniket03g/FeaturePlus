@@ -27,7 +27,10 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
  *   /app/projects/:id/versions/copies        the same page, on its Copies tab
  *   /app/projects/:id/copies/:copyId/merge   merging a published copy into the list
  *   /app/projects/:id/compare/:from/:to      two lists compared as a tree (a version id, c+copy id, or current)
- *   /app/team                                people and roles
+ *   /app/projects/:id/settings               project info: about, conventions, architecture
+ *   /app/projects/:id/team                   the project's members and their roles
+ *   /app/projects/:id/messages               the latest messages on the project's features
+ *   /app/team                                every account on the server (admins)
  *   /app/templates                           the template catalogue
  *   /app/imports                             saved analyses and GitHub import
  *   /app/backups                             back up a project, or restore one
@@ -58,6 +61,9 @@ export type Route =
   | { name: 'versions'; projectId: number; tab?: 'copies' }
   | { name: 'merge'; projectId: number; copyId: number }
   | { name: 'compare'; projectId: number; from: string; to: string }
+  | { name: 'projectSettings'; projectId: number }
+  | { name: 'projectTeam'; projectId: number }
+  | { name: 'projectMessages'; projectId: number }
   | { name: 'team' }
   | { name: 'templates' }
   | { name: 'imports' }
@@ -88,6 +94,9 @@ const PROJECT_SECTIONS: Record<string, Route['name']> = {
   contracts: 'contracts',
   briefing: 'briefing',
   versions: 'versions',
+  settings: 'projectSettings',
+  team: 'projectTeam',
+  messages: 'projectMessages',
 }
 
 /** Parse a pathname into a route, falling back to the dashboard. */
@@ -202,6 +211,12 @@ export function routeToPath(route: Route): string {
       return `${BASE}/projects/${route.projectId}/compare/${route.from}/${route.to}`
     case 'merge':
       return `${BASE}/projects/${route.projectId}/copies/${route.copyId}/merge`
+    case 'projectSettings':
+      return `${BASE}/projects/${route.projectId}/settings`
+    case 'projectTeam':
+      return `${BASE}/projects/${route.projectId}/team`
+    case 'projectMessages':
+      return `${BASE}/projects/${route.projectId}/messages`
     case 'team':
       return `${BASE}/team`
     case 'templates':

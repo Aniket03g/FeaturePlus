@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -22,8 +21,9 @@ export function colorHex(name: string | undefined) {
 }
 
 /**
- * A feature's colour as a circle. With onChange it opens a small palette to
- * pick another or remove it; without, it only shows the colour, if any.
+ * A feature's colour as a circle. With onChange, an empty circle opens a small
+ * palette to pick a colour, and a coloured one is a single click to take the
+ * colour off again. Without onChange it only shows the colour, if any.
  */
 export function ColorDot({
   color,
@@ -31,6 +31,7 @@ export function ColorDot({
   onChange,
   className,
   quiet = false,
+  meanings,
 }: {
   color: string
   /** The feature's name, for the labels. */
@@ -39,10 +40,17 @@ export function ColorDot({
   className?: string
   /** In a list row: an empty circle shows only while the row is hovered. */
   quiet?: boolean
+  /** What each colour means in this project (Project info › Conventions). */
+  meanings?: Record<string, string>
 }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   const hex = colorHex(color)
+  const meaning = meanings?.[color] ?? ''
+  const named = (name: string) => {
+    const label = FEATURE_COLORS.find((c) => c.name === name)?.label ?? name
+    return meanings?.[name] ? `${label} · ${meanings[name]}` : label
+  }
 
   // Closes on a click outside or Escape.
   useEffect(() => {
@@ -69,7 +77,7 @@ export function ColorDot({
 
   if (!onChange) {
     return hex ? (
-      <span className={cn('grid h-5 w-5 place-items-center', className)} title={`Colour: ${color}`}>
+      <span className={cn('grid h-5 w-5 place-items-center', className)} title={`Colour: ${named(color)}`}>
         {circle}
       </span>
     ) : (
@@ -86,11 +94,11 @@ export function ColorDot({
     <div ref={box} className={cn('relative', className)} onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="true"
-        aria-expanded={open}
-        aria-label={hex ? `Colour of ${title}: ${color}. Change it` : `Give ${title} a colour`}
-        title={hex ? `Colour: ${color}` : 'Add a colour'}
+        onClick={() => (hex ? onChange('') : setOpen((v) => !v))}
+        aria-haspopup={hex ? undefined : 'true'}
+        aria-expanded={hex ? undefined : open}
+        aria-label={hex ? `Colour of ${title}: ${meaning || color}. Remove it` : `Give ${title} a colour`}
+        title={hex ? `${named(color)} — click to remove` : 'Add a colour'}
         className={cn(
           'grid h-5 w-5 place-items-center rounded-full transition hover:bg-border',
           // An empty circle only shows on hover with a mouse, so the column stays quiet.
@@ -114,8 +122,8 @@ export function ColorDot({
               role="menuitemradio"
               aria-checked={c.name === color}
               onClick={() => pick(c.name)}
-              title={c.label}
-              aria-label={c.label}
+              title={named(c.name)}
+              aria-label={named(c.name)}
               className={cn(
                 'grid h-6 w-6 place-items-center rounded-full',
                 c.name === color && 'ring-2 ring-accent ring-offset-1 ring-offset-surface',
@@ -124,18 +132,6 @@ export function ColorDot({
               <span className="block h-4 w-4 rounded-full" style={{ backgroundColor: c.hex }} />
             </button>
           ))}
-          <span className="mx-0.5 h-5 w-px bg-border" />
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={!hex}
-            onClick={() => pick('')}
-            title="No colour"
-            aria-label="No colour"
-            className="grid h-6 w-6 place-items-center rounded-full text-muted hover:bg-raised hover:text-ink"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
         </div>
       )}
     </div>

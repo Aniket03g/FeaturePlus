@@ -16,7 +16,7 @@ interface AuthValue {
   user: User | null
   isLoading: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (name: string, email: string, password: string) => Promise<void>
+  signUp: (name: string, email: string, password: string, inviteCode: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Signing up also signs in: the server sets the session cookie and returns
   // the same shape as login.
   const signUpMutation = useMutation({
-    mutationFn: (vars: { name: string; email: string; password: string }) =>
+    mutationFn: (vars: { name: string; email: string; password: string; invite_code: string }) =>
       api.post<Session>('/auth/signup', vars),
     onSuccess: (session) => {
       queryClient.setQueryData(['me'], session.user)
@@ -71,8 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signUp = useCallback(
-    async (name: string, email: string, password: string) => {
-      await signUpMutation.mutateAsync({ name, email, password })
+    async (name: string, email: string, password: string, inviteCode: string) => {
+      await signUpMutation.mutateAsync({ name, email, password, invite_code: inviteCode })
     },
     [signUpMutation],
   )

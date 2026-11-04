@@ -553,6 +553,9 @@ func creditAll(b *ProjectBackup, p *restorePeople) {
 	for _, c := range b.Comments {
 		p.author(c.Author)
 	}
+	for _, m := range b.Messages {
+		p.author(m.Author)
+	}
 	for _, v := range b.Versions {
 		p.author(v.SavedBy)
 	}
@@ -597,7 +600,7 @@ func restoreBackup(tx *gorm.DB, opened *openedBackup, people *restorePeople, wit
 	for _, f := range b.Features {
 		row := models.Feature{
 			ProjectID: project.ID, Title: f.Title, Description: f.Description, Notes: f.Notes, Category: f.Category,
-			Status: models.FeatureStatus(f.Status), Priority: models.FeaturePriority(f.Priority), Color: f.Color,
+			Status: models.FeatureStatus(f.Status), Priority: models.FeaturePriority(f.Priority), Color: f.Color, Kind: orDefault(f.Kind, "feature"),
 			AssigneeID: uint(people.found(f.Assignee)), Position: f.Position, CreatedAt: f.CreatedAt, UpdatedAt: f.UpdatedAt,
 		}
 		if row.Category == "" {
@@ -710,6 +713,17 @@ func restoreBackup(tx *gorm.DB, opened *openedBackup, people *restorePeople, wit
 			attachments[a.ID] = row.ID
 		}
 	}
+	for _, m := range b.Messages {
+		featureID := features[m.FeatureID]
+		if featureID == 0 {
+			continue
+		}
+		row := models.FeatureMessage{ProjectID: project.ID, FeatureID: featureID, UserID: people.author(m.Author),
+			Content: m.Content, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt}
+		if err := omit().Create(&row).Error; err != nil {
+			return nil, err
+		}
+	}
 	for _, c := range b.Comments {
 		row := models.Comment{TaskID: tasks[c.TaskID], UserID: uint(people.author(c.Author)), Content: c.Content,
 			CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
@@ -784,6 +798,14 @@ func restoreBackup(tx *gorm.DB, opened *openedBackup, people *restorePeople, wit
 		}
 		versions[v.ID] = row.ID
 		byNumber[v.Number] = row.ID
+	}
+	if b.Settings != nil {
+		row := models.ProjectSettings{ProjectID: project.ID, VersionsConvention: b.Settings.VersionsConvention,
+			PublishConvention: b.Settings.PublishConvention, Architecture: b.Settings.Architecture,
+			ColorMeanings: string(b.Settings.ColorMeanings), Modules: b.Settings.Modules, UpdatedAt: time.Now()}
+		if err := tx.Create(&row).Error; err != nil {
+			return nil, err
+		}
 	}
 	if b.Working != nil {
 		state := models.WorkingState{ProjectID: project.ID, Note: b.Working.Note, UpdatedAt: time.Now()}

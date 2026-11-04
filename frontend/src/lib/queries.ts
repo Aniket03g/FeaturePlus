@@ -138,10 +138,50 @@ export function useUpdateProject(id: number) {
   return useMutation({
     mutationFn: (body: Partial<Pick<Project, 'name' | 'description' | 'brief'>>) =>
       api.patch<Project>(`/projects/${id}`, body),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(keys.project(id), updated)
+    // Fetched again rather than set from the answer: an update's answer has
+    // no my_role or stats, and caching it would hide the caller's buttons.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.project(id) })
       queryClient.invalidateQueries({ queryKey: ['projects'] })
     },
+  })
+}
+
+// ---------- project settings ----------
+
+/** How a project's team works and how its code is laid out. */
+export interface ProjectSettings {
+  versions_convention: string
+  /** The convention was never written; this is the built-in starting text. */
+  versions_default: boolean
+  publish_convention: string
+  publish_default: boolean
+  /** Colour name to what it means, e.g. red: "Blocked". */
+  color_meanings: Record<string, string>
+  architecture: string
+  /** Markdown: the parts of the code, their folders and what each does. */
+  modules: string
+  updated_by: string
+  updated_at: string | null
+}
+
+export function useProjectSettings(projectId: number) {
+  return useQuery({
+    queryKey: ['project-settings', projectId] as const,
+    queryFn: () => api.get<ProjectSettings>(`/projects/${projectId}/settings`),
+    enabled: projectId > 0,
+  })
+}
+
+export function useUpdateProjectSettings(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (
+      body: Partial<
+        Pick<ProjectSettings, 'versions_convention' | 'publish_convention' | 'color_meanings' | 'architecture' | 'modules'>
+      >,
+    ) => api.patch<ProjectSettings>(`/projects/${projectId}/settings`, body),
+    onSuccess: (saved) => queryClient.setQueryData(['project-settings', projectId], saved),
   })
 }
 
@@ -1793,4 +1833,113 @@ export function useMergeCopy(projectId: number) {
     // A merge changes the project's features, its versions and the copy.
     onSuccess: () => queryClient.invalidateQueries(),
   })
+}
+
+/** An invite code, without the code itself. */
+export interface Invite {
+  id: number
+  /** The code's last four characters. */
+  hint: string
+  email: string
+  note: string
+  status: 'active' | 'used' | 'expired' | 'cancelled'
+  created_by: string
+  created_at: string
+  expires_at: string
+  used_at: string | null
+  used_by: string
+}
+
+/** A new code, the one time it is shown whole. */
+export interface CreatedInvite extends Invite {
+  code: string
+}
+
+export function useInvites(enabled = true) {
+  return useQuery({
+    queryKey: ['invites'] as const,
+    queryFn: () => api.get<Invite[]>('/invites'),
+    enabled,
+  })
+}
+
+export function useCreateInvite() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { email: string; note: string }) => api.post<CreatedInvite>('/invites', body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invites'] }),
+  })
+}
+
+export function useCancelInvite() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => api.del(`/invites/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invites'] }),
+  })
+}
+
+// ---------- messages on features ----------
+
+export interface FeatureMessage {
+  id: number
+  feature_id: number
+  feature_title: string
+  content: string
+  author: { id: number; name: string }
+  /** You wrote it, so you may edit or remove it. */
+  mine: boolean
+  edited: boolean
+  created_at: string
+  updated_at: string
+}
+
+const messageKeys = {
+  feature: (featureId: number) => ['messages', 'feature', featureId] as const,
+  project: (projectId: number) => ['messages', 'project', projectId] as const,
+}
+
+export function useFeatureMessages(featureId: number) {
+  return useQuery({
+    queryKey: messageKeys.feature(featureId),
+    queryFn: () => api.get<FeatureMessage[]>(`/features/${featureId}/messages`),
+    enabled: featureId > 0,
+    ...SHARED_LIVE,
+  })
+}
+
+export function useProjectMessages(projectId: number) {
+  return useQuery({
+    queryKey: messageKeys.project(projectId),
+    queryFn: () => api.get<FeatureMessage[]>(`/projects/${projectId}/messages`, { query: { limit: 100 } }),
+    enabled: projectId > 0,
+    ...SHARED_LIVE,
+  })
+}
+
+function useMessageChange<T>(projectId: number, featureId: number, fn: (vars: T) => Promise<unknown>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: messageKeys.feature(featureId) })
+      queryClient.invalidateQueries({ queryKey: messageKeys.project(projectId) })
+    },
+  })
+}
+
+export function usePostMessage(projectId: number, featureId: number) {
+  return useMessageChange(projectId, featureId, (content: string) =>
+    api.post<FeatureMessage>(`/features/${featureId}/messages`, { content }),
+  )
+}
+
+export function useUpdateMessage(projectId: number, featureId: number) {
+  return useMessageChange(projectId, featureId, ({ id, content }: { id: number; content: string }) =>
+    api.patch<FeatureMessage>(`/messages/${id}`, { content }),
+  )
+}
+
+export function useDeleteMessage(projectId: number, featureId: number) {
+  return useMessageChange(projectId, featureId, (id: number) => api.del(`/messages/${id}`))
 }

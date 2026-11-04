@@ -9,20 +9,20 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { RestoreBackupDialog } from './RestoreBackupDialog'
 import { cn } from '@/lib/utils'
-import type { Project } from '@/lib/types'
+import { canDownload, type Project } from '@/lib/types'
 
 const when = (iso: string) => new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' })
 
 /**
  * Tools › Backup & Restore: take a backup of any project you own, or restore
- * one as a new project. Only owners can take a backup, so only their projects
+ * one as a new project. Only owners and publishers can take a backup, so only their projects
  * are listed; anyone can restore, as the result is a new project of their own.
  */
 export function Backups() {
   const { navigate } = useRouter()
   const projects = useProjects({ per_page: 200 })
   const [restoring, setRestoring] = useState(false)
-  const owned = (projects.data?.items ?? []).filter((p) => p.my_role === 'owner')
+  const owned = (projects.data?.items ?? []).filter((p) => canDownload(p.my_role))
 
   return (
     <div className="space-y-4">
@@ -67,7 +67,7 @@ export function Backups() {
           </CardBody>
         ) : owned.length === 0 ? (
           <CardBody className="text-sm text-muted">
-            You don't own any projects. Only a project's owner can take a backup of it.
+            You are not the owner or a publisher of any project. Only they can take a backup of it.
           </CardBody>
         ) : (
           <ul className="divide-y divide-border">
