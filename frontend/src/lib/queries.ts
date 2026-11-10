@@ -31,6 +31,7 @@ import type {
   Release,
   ReleaseStatus,
   Scope,
+  StatusDef,
   TagCount,
   Task,
   Template,
@@ -161,6 +162,10 @@ export interface ProjectSettings {
   architecture: string
   /** Markdown: the parts of the code, their folders and what each does. */
   modules: string
+  /** The feature statuses this project offers and the parameters each carries. */
+  statuses: StatusDef[]
+  /** The project has configured no statuses; `statuses` is the built-in default set. */
+  statuses_default: boolean
   updated_by: string
   updated_at: string | null
 }
@@ -178,11 +183,21 @@ export function useUpdateProjectSettings(projectId: number) {
   return useMutation({
     mutationFn: (
       body: Partial<
-        Pick<ProjectSettings, 'versions_convention' | 'publish_convention' | 'color_meanings' | 'architecture' | 'modules'>
+        Pick<ProjectSettings, 'versions_convention' | 'publish_convention' | 'color_meanings' | 'architecture' | 'modules' | 'statuses'>
       >,
     ) => api.patch<ProjectSettings>(`/projects/${projectId}/settings`, body),
     onSuccess: (saved) => queryClient.setQueryData(['project-settings', projectId], saved),
   })
+}
+
+/**
+ * The feature statuses a project offers. Reads the project's settings and
+ * returns the configured list (or the defaults when none are set), so the
+ * filters, pills and status editors all speak the same set.
+ */
+export function useProjectStatuses(projectId: number) {
+  const settings = useProjectSettings(projectId)
+  return settings.data?.statuses ?? []
 }
 
 // ---------- sharing ----------

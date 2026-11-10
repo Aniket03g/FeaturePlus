@@ -118,8 +118,42 @@ export interface FeatureTaskCounts {
   completed: number
 }
 
-export type FeatureStatus = 'todo' | 'in_progress' | 'done'
+/**
+ * A feature's status. Projects configure their own set in settings, so this is
+ * an open string, not a fixed union. STATUS_LABEL covers the built-in defaults;
+ * anything else is shown as its configured or raw name.
+ */
+export type FeatureStatus = string
 export type FeaturePriority = 'low' | 'medium' | 'high'
+
+/** The value type a status parameter accepts. */
+export type StatusParamType = 'string' | 'integer'
+
+/** One parameter a status carries: how it reads, its JSON key, and its type. */
+export interface StatusParamDef {
+  ui_name: string
+  key: string
+  type: StatusParamType
+}
+
+/** A status a project offers, with its parameter definitions. */
+export interface StatusDef {
+  name: string
+  params: StatusParamDef[]
+}
+
+/** Per-feature values for the current status's parameters, keyed by param key. */
+export type StatusParams = Record<string, string | number>
+
+/** A status name read for display: the configured name, title-cased as a fallback. */
+export function statusLabel(name: string): string {
+  if (name in STATUS_LABEL) return STATUS_LABEL[name]
+  return name
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
 
 export interface Feature {
   id: number
@@ -132,6 +166,8 @@ export interface Feature {
   notes: string
   category: string
   status: FeatureStatus
+  /** Per-feature values for the current status's parameters. */
+  status_params?: StatusParams
   priority: FeaturePriority
   /** A palette name the team marked it with in the working list, or empty. */
   color: string
@@ -152,8 +188,11 @@ export interface TagCount {
   count: number
 }
 
-/** The labels and tones used wherever a status or priority is displayed. */
-export const STATUS_LABEL: Record<FeatureStatus, string> = {
+/**
+ * Labels for the built-in default statuses. Projects may define their own
+ * statuses; for those, statusLabel() title-cases the name.
+ */
+export const STATUS_LABEL: Record<string, string> = {
   todo: 'To do',
   in_progress: 'In progress',
   done: 'Done',

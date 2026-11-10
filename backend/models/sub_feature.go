@@ -10,6 +10,9 @@ type SubFeature struct {
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
 	Status      string    `json:"status"`
+	// StatusParams: per-sub-feature values for the current status's parameters,
+	// a JSON object keyed by param key (see Feature.StatusParams).
+	StatusParams string   `gorm:"type:text;not null;default:''" json:"status_params"`
 	Priority    string    `json:"priority"`
 	AssigneeID  int       `json:"assignee_id"`
 	CreatedAt   time.Time `json:"created_at"`

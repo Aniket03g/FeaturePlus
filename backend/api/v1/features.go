@@ -160,19 +160,28 @@ func (h *FeaturesHandler) Create(c *gin.Context) {
 		return
 	}
 
+	defs := h.projectStatuses(projectID)
+	defaultStatus := defaultStatusName(defs)
+
 	feature := models.Feature{
 		ProjectID:   projectID,
 		Title:       req.Title,
 		Description: req.Description,
 		Notes:       req.Notes,
 		Category:    orDefault(req.Category, "general"),
-		Status:      models.FeatureStatus(orDefault(req.Status, string(models.StatusTodo))),
 		Priority:    models.FeaturePriority(orDefault(req.Priority, string(models.PriorityMedium))),
 		Kind:        orDefault(req.Kind, "feature"),
 	}
+
+	statusInput, rawParams := orDefault(req.Status, defaultStatus), req.StatusParams
 	if role.Rank() < canEdit.Rank() {
-		feature.Status, feature.Priority, feature.Category = models.StatusTodo, models.PriorityMedium, "general"
+		feature.Priority, feature.Category = models.PriorityMedium, "general"
+		statusInput, rawParams = defaultStatus, nil
 		req.AssigneeID, req.Tags = nil, nil
+	}
+	if err := h.applyStatus(defs, &feature, statusInput, rawParams); err != nil {
+		api.Fail(c, err)
+		return
 	}
 	if req.ParentFeatureID != nil {
 		if err := h.checkParent(projectID, *req.ParentFeatureID); err != nil {
@@ -226,6 +235,24 @@ func (h *FeaturesHandler) Update(c *gin.Context) {
 
 	if req.ParentFeatureID != nil && *req.ParentFeatureID != 0 {
 		if err := h.checkParent(feature.ProjectID, *req.ParentFeatureID); err != nil {
+			api.Fail(c, err)
+			return
+		}
+	}
+
+	// Status and its parameters are validated against the project's configured
+	// statuses. A status change prunes parameter values to the new status.
+	if req.Status != nil || req.StatusParams != nil {
+		defs := h.projectStatuses(feature.ProjectID)
+		statusInput := string(feature.Status)
+		if req.Status != nil {
+			statusInput = *req.Status
+		}
+		var rawParams map[string]any
+		if req.StatusParams != nil {
+			rawParams = *req.StatusParams
+		}
+		if err := h.applyStatus(defs, feature, statusInput, rawParams); err != nil {
 			api.Fail(c, err)
 			return
 		}
@@ -498,6 +525,43 @@ func (h *FeaturesHandler) taskCountsByFeature(ids []uint) map[uint]*FeatureTaskC
 		result[r.FeatureID] = &FeatureTaskCounts{Total: r.Total, Completed: r.Completed}
 	}
 	return result
+}
+
+// projectStatuses returns the feature statuses a project offers, falling back
+// to the defaults when it has configured none.
+func (h *FeaturesHandler) projectStatuses(projectID int) []models.StatusDef {
+	var s models.ProjectSettings
+	h.db.Where("project_id = ?", projectID).Limit(1).Find(&s)
+	return models.ParseStatuses(s.Statuses)
+}
+
+// defaultStatusName is the status a new feature takes when none is given: the
+// first the project defines.
+func defaultStatusName(defs []models.StatusDef) string {
+	if len(defs) > 0 {
+		return defs[0].Name
+	}
+	return string(models.StatusTodo)
+}
+
+// applyStatus validates a status against the project's configured list and
+// stores it on the feature together with the coerced, pruned parameter values.
+func (h *FeaturesHandler) applyStatus(defs []models.StatusDef, feature *models.Feature, status string, raw map[string]any) error {
+	def, ok := models.FindStatus(defs, status)
+	if !ok {
+		return api.Validation("Unknown status").WithField("status", "Choose a status this project offers")
+	}
+	values, err := models.CoerceParamValues(def, raw)
+	if err != nil {
+		return api.Validation(err.Error()).WithField("status_params", err.Error())
+	}
+	encoded, err := models.MarshalStatusParams(values)
+	if err != nil {
+		return api.Internal(err)
+	}
+	feature.Status = models.FeatureStatus(def.Name)
+	feature.StatusParams = encoded
+	return nil
 }
 
 // featureFilters is the parsed query string for a feature list.

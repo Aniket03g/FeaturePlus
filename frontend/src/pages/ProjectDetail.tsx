@@ -32,6 +32,7 @@ import {
   useProjectVisit,
   useSetWorkingNote,
   useProjectSettings,
+  useProjectStatuses,
   useUpdateFeature,
 } from '@/lib/queries'
 import { gapTarget, intoTarget, MAX_DEPTH, type DropRow, type DropTarget } from '@/lib/tree-drop'
@@ -43,7 +44,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import { StatusPill, PriorityPill, TagList } from '@/components/FeatureBits'
+import { StatusCell, PriorityPill, TagList } from '@/components/FeatureBits'
 import { NewFeatureDialog } from './NewFeatureDialog'
 import { ColorDot, FEATURE_COLORS } from '@/components/FeatureColor'
 import { ShareDialog } from './ShareDialog'
@@ -52,7 +53,7 @@ import { cn, percent, plural } from '@/lib/utils'
 import {
   KIND_LABEL,
   ROLE_LABEL,
-  STATUS_LABEL,
+  statusLabel,
   canAdd,
   canDownload,
   canEditInfo,
@@ -61,12 +62,11 @@ import {
   canPublish,
   type Feature,
   type FeatureStatus,
+  type StatusDef,
 } from '@/lib/types'
 import { buildDiffTree, type DiffNode } from '@/lib/compare-tree'
 import { NoteEditor } from '@/components/NoteEditor'
 import { useWorkingState } from '@/lib/working'
-
-const STATUSES: FeatureStatus[] = ['todo', 'in_progress', 'done']
 
 const NO_FILTERS = { status: [], tag: '', q: '' }
 
@@ -214,6 +214,8 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   // rows are marked against: the published one unless someone picks another.
   const working = useWorkingState(projectId)
   const colorMeanings = useProjectSettings(projectId).data?.color_meanings ?? {}
+  // The statuses this project offers drive the filter chips below.
+  const statusDefs = useProjectStatuses(projectId)
   const colorLegend = FEATURE_COLORS.filter((c) => colorMeanings[c.name])
   const setWorkingNote = useSetWorkingNote(projectId)
   const [pickedBase, setPickedBase] = useState<number | 'off' | null>(null)
@@ -623,9 +625,9 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
               />
 
               <div className="flex gap-1">
-                {STATUSES.map((status) => (
-                  <FilterChip key={status} active={statuses.includes(status)} onClick={() => toggleStatus(status)}>
-                    {STATUS_LABEL[status]}
+                {statusDefs.map((def) => (
+                  <FilterChip key={def.name} active={statuses.includes(def.name)} onClick={() => toggleStatus(def.name)}>
+                    {statusLabel(def.name)}
                   </FilterChip>
                 ))}
               </div>
@@ -897,6 +899,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                 <div key={node.feature.id} className="divide-y divide-border">
                   <FeatureRow
                     colorMeanings={colorMeanings}
+                    statusDefs={statusDefs}
                     diff={diffById.get(node.feature.id)}
                     base={base?.label ?? ''}
                     diffOpen={openDiffs.has(node.feature.id)}
@@ -1118,9 +1121,12 @@ function FeatureRow({
   diffOpen,
   onToggleDiff,
   colorMeanings,
+  statusDefs,
 }: {
   /** What each colour means in this project. */
   colorMeanings: Record<string, string>
+  /** The project's statuses, for naming a status's parameters in the hover box. */
+  statusDefs: StatusDef[]
   /** How this feature differs from the version picked in "Changes since". */
   diff?: DiffNode
   /** That version's label, v2. */
@@ -1321,7 +1327,11 @@ function FeatureRow({
           </div>
 
           <div className="hidden w-28 shrink-0 sm:block">
-            <StatusPill status={feature.status} />
+            <StatusCell
+              status={feature.status}
+              params={feature.status_params}
+              defs={statusDefs.find((d) => d.name === feature.status)?.params}
+            />
           </div>
 
           <div className="hidden w-24 shrink-0 lg:block">

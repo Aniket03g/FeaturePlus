@@ -180,6 +180,9 @@ type FeatureDTO struct {
 	Notes           string `json:"notes"`
 	Category        string `json:"category"`
 	Status          string `json:"status"`
+	// StatusParams are the per-feature values for the current status's
+	// parameters, keyed by param key, e.g. {"assignee":"Vinod"}.
+	StatusParams    map[string]any `json:"status_params"`
 	Priority        string `json:"priority"`
 	AssigneeID      uint   `json:"assignee_id"`
 	// Color is a palette name, or empty for none.
@@ -213,6 +216,7 @@ func NewFeatureDTO(f models.Feature, tags []string, tasks *FeatureTaskCounts) Fe
 		Notes:           f.Notes,
 		Category:        f.Category,
 		Status:          string(f.Status),
+		StatusParams:    models.ParseStatusParams(f.StatusParams),
 		Priority:        string(f.Priority),
 		AssigneeID:      f.AssigneeID,
 		Color:           f.Color,
@@ -245,7 +249,10 @@ type CreateFeatureRequest struct {
 	Description     string   `json:"description" binding:"max=20000"`
 	Notes           string   `json:"notes" binding:"max=20000"`
 	Category        string   `json:"category" binding:"max=50"`
-	Status          string   `json:"status" binding:"omitempty,oneof=todo in_progress done"`
+	// Status is validated against the project's configured statuses in the
+	// handler, not here, since the allowed set is per-project.
+	Status          string         `json:"status" binding:"omitempty,max=40"`
+	StatusParams    map[string]any `json:"status_params"`
 	Priority        string   `json:"priority" binding:"omitempty,oneof=low medium high"`
 	ParentFeatureID *uint    `json:"parent_feature_id"`
 	AssigneeID      *uint    `json:"assignee_id"`
@@ -262,7 +269,10 @@ type UpdateFeatureRequest struct {
 	Description     *string `json:"description" binding:"omitempty,max=20000"`
 	Notes           *string `json:"notes" binding:"omitempty,max=20000"`
 	Category        *string `json:"category" binding:"omitempty,max=50"`
-	Status          *string `json:"status" binding:"omitempty,oneof=todo in_progress done"`
+	// Status (and StatusParams) are validated against the project's configured
+	// statuses in the handler; Apply deliberately leaves them alone.
+	Status          *string         `json:"status" binding:"omitempty,max=40"`
+	StatusParams    *map[string]any `json:"status_params"`
 	Priority        *string `json:"priority" binding:"omitempty,oneof=low medium high"`
 	ParentFeatureID *uint   `json:"parent_feature_id"`
 	AssigneeID      *uint   `json:"assignee_id"`
@@ -285,9 +295,8 @@ func (r UpdateFeatureRequest) Apply(f *models.Feature) {
 	if r.Category != nil {
 		f.Category = *r.Category
 	}
-	if r.Status != nil {
-		f.Status = models.FeatureStatus(*r.Status)
-	}
+	// Status and StatusParams are handled in the Update handler, which has the
+	// project's configured statuses to validate against and to prune params to.
 	if r.Priority != nil {
 		f.Priority = models.FeaturePriority(*r.Priority)
 	}

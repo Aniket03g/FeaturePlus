@@ -365,7 +365,7 @@ func (h *FeatureHandler) UpdateFeature(c *gin.Context) {
 	feature.Status = models.FeatureStatus(feature.Status)
 	feature.Priority = models.FeaturePriority(feature.Priority)
 
-	if !isValidStatus(feature.Status) || !isValidPriority(feature.Priority) {
+	if !h.statusAllowed(feature.ProjectID, feature.Status) || !isValidPriority(feature.Priority) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status or priority"})
 		return
 	}
@@ -514,7 +514,7 @@ func (h *FeatureHandler) UpdateFeatureField(c *gin.Context) {
 	case "status":
 		if status, ok := updateData.Value.(string); ok {
 			newStatus := models.FeatureStatus(status)
-			if !isValidStatus(newStatus) {
+			if !h.statusAllowed(existingFeature.ProjectID, newStatus) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status value"})
 				return
 			}
@@ -692,6 +692,17 @@ func (h *FeatureHandler) CreateFeatureForProject(c *gin.Context) {
 }
 
 // Helper functions
+// statusAllowed reports whether a status is one the project offers. The set is
+// configured per project in its settings; an empty configuration falls back to
+// the defaults via models.ParseStatuses.
+func (h *FeatureHandler) statusAllowed(projectID int, status models.FeatureStatus) bool {
+	var s models.ProjectSettings
+	h.DB.Where("project_id = ?", projectID).Limit(1).Find(&s)
+	return models.StatusAllowed(models.ParseStatuses(s.Statuses), string(status))
+}
+
+// isValidStatus is the old fixed check, kept for the few callers that have no
+// project to hand.
 func isValidStatus(status models.FeatureStatus) bool {
 	switch status {
 	case models.StatusTodo, models.StatusInProgress, models.StatusDone:

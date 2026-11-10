@@ -20,6 +20,11 @@ type ProjectSettings struct {
 	// Modules is markdown: the parts of the code, their folders and what each
 	// does. (Before it was text it was briefly a JSON list; see modulesText.)
 	Modules     string `gorm:"type:text"`
+	// Statuses is JSON: the feature statuses this project offers and the
+	// parameters each carries, e.g.
+	// [{"name":"in_progress","params":[{"ui_name":"Assignee","key":"assignee","type":"string"}]}].
+	// Empty means the project uses models.DefaultStatuses().
+	Statuses    string `gorm:"type:text"`
 	UpdatedByID int
 	UpdatedAt   time.Time
 }

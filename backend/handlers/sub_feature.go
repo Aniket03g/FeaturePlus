@@ -10,6 +10,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// subFeatureStatusAllowed reports whether a status is one the project offers.
+func subFeatureStatusAllowed(db *gorm.DB, projectID int, status string) bool {
+	var s models.ProjectSettings
+	db.Where("project_id = ?", projectID).Limit(1).Find(&s)
+	return models.StatusAllowed(models.ParseStatuses(s.Statuses), status)
+}
+
 func CreateSubFeature(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var subFeature models.SubFeature
@@ -36,6 +43,12 @@ func CreateSubFeature(db *gorm.DB) gin.HandlerFunc {
 				return
 			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify feature"})
+			return
+		}
+
+		// A status, when given, must be one the parent feature's project offers.
+		if subFeature.Status != "" && !subFeatureStatusAllowed(db, feature.ProjectID, subFeature.Status) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status value"})
 			return
 		}
 

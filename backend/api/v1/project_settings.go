@@ -62,24 +62,29 @@ func modulesText(stored string) string {
 // ProjectSettingsDTO is a project's settings. A convention never written
 // comes back as starting text, with its Default flag set.
 type ProjectSettingsDTO struct {
-	VersionsConvention string            `json:"versions_convention"`
-	VersionsDefault    bool              `json:"versions_default"`
-	PublishConvention  string            `json:"publish_convention"`
-	PublishDefault     bool              `json:"publish_default"`
-	ColorMeanings      map[string]string `json:"color_meanings"`
-	Architecture       string            `json:"architecture"`
-	Modules            string            `json:"modules"`
-	UpdatedBy          string            `json:"updated_by"`
-	UpdatedAt          *time.Time        `json:"updated_at"`
+	VersionsConvention string             `json:"versions_convention"`
+	VersionsDefault    bool               `json:"versions_default"`
+	PublishConvention  string             `json:"publish_convention"`
+	PublishDefault     bool               `json:"publish_default"`
+	ColorMeanings      map[string]string  `json:"color_meanings"`
+	Architecture       string             `json:"architecture"`
+	Modules            string             `json:"modules"`
+	// Statuses are the feature statuses this project offers. When the project
+	// has configured none, the defaults are returned with StatusesDefault set.
+	Statuses        []models.StatusDef `json:"statuses"`
+	StatusesDefault bool               `json:"statuses_default"`
+	UpdatedBy          string             `json:"updated_by"`
+	UpdatedAt          *time.Time         `json:"updated_at"`
 }
 
 // UpdateProjectSettingsRequest changes the fields present.
 type UpdateProjectSettingsRequest struct {
-	VersionsConvention *string            `json:"versions_convention"`
-	PublishConvention  *string            `json:"publish_convention"`
-	ColorMeanings      *map[string]string `json:"color_meanings"`
-	Architecture       *string            `json:"architecture"`
-	Modules            *string            `json:"modules"`
+	VersionsConvention *string             `json:"versions_convention"`
+	PublishConvention  *string             `json:"publish_convention"`
+	ColorMeanings      *map[string]string  `json:"color_meanings"`
+	Architecture       *string             `json:"architecture"`
+	Modules            *string             `json:"modules"`
+	Statuses           *[]models.StatusDef `json:"statuses"`
 }
 
 func registerProjectSettingsRoutes(g *gin.RouterGroup, db *gorm.DB) {
@@ -98,6 +103,7 @@ func projectSettingsDTO(db *gorm.DB, s models.ProjectSettings) ProjectSettingsDT
 	out := ProjectSettingsDTO{
 		VersionsConvention: s.VersionsConvention, PublishConvention: s.PublishConvention,
 		Architecture: s.Architecture, ColorMeanings: map[string]string{}, Modules: modulesText(s.Modules),
+		Statuses: models.ParseStatuses(s.Statuses), StatusesDefault: strings.TrimSpace(s.Statuses) == "",
 	}
 	if out.VersionsConvention == "" {
 		out.VersionsConvention, out.VersionsDefault = defaultVersions, true
@@ -216,6 +222,19 @@ func updateProjectSettingsHandler(db *gorm.DB) gin.HandlerFunc {
 			}
 			raw, _ := json.Marshal(meanings)
 			s.ColorMeanings = string(raw)
+		}
+
+		if req.Statuses != nil {
+			cleaned, err := models.NormalizeAndValidateStatuses(*req.Statuses)
+			if err != nil {
+				invalid = invalid.WithField("statuses", err.Error())
+				bad = true
+			} else if encoded, err := models.MarshalStatuses(cleaned); err != nil {
+				invalid = invalid.WithField("statuses", "Could not save statuses")
+				bad = true
+			} else {
+				s.Statuses = encoded
+			}
 		}
 
 		if bad {

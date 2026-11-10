@@ -32,6 +32,10 @@ type Feature struct {
 	Notes      string          `gorm:"type:text;not null;default:''" json:"notes"`
 	Category   string          `gorm:"type:varchar(50);not null;default:'general'" json:"category"`
 	Status     FeatureStatus   `gorm:"type:varchar(50);not null;default:'todo'" json:"status"`
+	// StatusParams holds the per-feature values for the parameters a project
+	// defines on the current status, as a JSON object keyed by param key, e.g.
+	// {"assignee":"Vinod"}. Empty when the status has no parameters.
+	StatusParams string          `gorm:"type:text;not null;default:''" json:"status_params"`
 	Priority   FeaturePriority `gorm:"type:varchar(50);not null;default:'medium'" json:"priority"`
 	AssigneeID uint            `gorm:"default:0" json:"assignee_id"`
 	// Color marks a feature for the team in the working list: one of the

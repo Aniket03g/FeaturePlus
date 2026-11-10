@@ -8,7 +8,8 @@ import {
   type ProjectSettings as Settings,
 } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
-import { canEditInfo } from '@/lib/types'
+import { canEditInfo, statusLabel, type StatusDef, type StatusParamType } from '@/lib/types'
+import { StatusPill } from '@/components/FeatureBits'
 import { Card, CardBody } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +23,7 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyl
 const SECTIONS = [
   ['about', 'About'],
   ['conventions', 'Conventions'],
+  ['statuses', 'Statuses'],
   ['architecture', 'Architecture'],
 ] as const
 
@@ -76,6 +78,7 @@ export function ProjectSettings({ projectId }: { projectId: number }) {
 
       <AboutSection projectId={projectId} mayEdit={mayEdit} />
       <ConventionsSection projectId={projectId} settings={s} mayEdit={mayEdit} />
+      <StatusesSection projectId={projectId} settings={s} mayEdit={mayEdit} />
       <ArchitectureSection projectId={projectId} settings={s} mayEdit={mayEdit} />
 
       {s.updated_at && (
@@ -306,6 +309,199 @@ function ConventionsSection({ projectId, settings, mayEdit }: { projectId: numbe
       <ColorMeanings editing={editing} saved={settings.color_meanings} colors={colors} setColors={setColors} />
 
       {editing && <EditActions saving={update.isPending} error={error} onCancel={() => setEditing(false)} onSave={save} />}
+    </Section>
+  )
+}
+
+// ---------- Statuses ----------
+
+const MAX_STATUSES = 12
+const MAX_STATUS_PARAMS = 3
+
+type EditParam = { ui_name: string; type: StatusParamType }
+type EditStatus = { name: string; params: EditParam[] }
+
+/** Turn a UI name into the JSON key the value is stored under, matching the server. */
+function keyOf(uiName: string) {
+  return uiName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+/**
+ * The feature statuses this project offers, and the parameters each one
+ * carries. A parameter is a named field (its UI name) of a given type; its
+ * value is filled in per feature when the feature takes that status.
+ */
+function StatusesSection({ projectId, settings, mayEdit }: { projectId: number; settings: Settings; mayEdit: boolean }) {
+  const update = useUpdateProjectSettings(projectId)
+  const [editing, setEditing] = useState(false)
+  const [rows, setRows] = useState<EditStatus[]>([])
+  const [error, setError] = useState('')
+
+  function start() {
+    setRows(
+      settings.statuses.map((d) => ({
+        name: d.name,
+        params: d.params.map((p) => ({ ui_name: p.ui_name, type: p.type })),
+      })),
+    )
+    setError('')
+    setEditing(true)
+  }
+
+  function addStatus() {
+    setRows((r) => (r.length >= MAX_STATUSES ? r : [...r, { name: '', params: [] }]))
+  }
+  function removeStatus(i: number) {
+    setRows((r) => r.filter((_, idx) => idx !== i))
+  }
+  function setStatusName(i: number, name: string) {
+    setRows((r) => r.map((row, idx) => (idx === i ? { ...row, name } : row)))
+  }
+  function addParam(i: number) {
+    setRows((r) =>
+      r.map((row, idx) =>
+        idx === i && row.params.length < MAX_STATUS_PARAMS
+          ? { ...row, params: [...row.params, { ui_name: '', type: 'string' }] }
+          : row,
+      ),
+    )
+  }
+  function removeParam(i: number, j: number) {
+    setRows((r) => r.map((row, idx) => (idx === i ? { ...row, params: row.params.filter((_, k) => k !== j) } : row)))
+  }
+  function setParam(i: number, j: number, patch: Partial<EditParam>) {
+    setRows((r) =>
+      r.map((row, idx) =>
+        idx === i
+          ? { ...row, params: row.params.map((p, k) => (k === j ? { ...p, ...patch } : p)) }
+          : row,
+      ),
+    )
+  }
+
+  async function save() {
+    setError('')
+    const statuses: StatusDef[] = rows
+      .filter((r) => r.name.trim() !== '')
+      .map((r) => ({
+        name: r.name.trim(),
+        params: r.params
+          .filter((p) => p.ui_name.trim() !== '')
+          .map((p) => ({ ui_name: p.ui_name.trim(), key: keyOf(p.ui_name), type: p.type })),
+      }))
+    if (statuses.length === 0) {
+      setError('Define at least one status')
+      return
+    }
+    try {
+      await update.mutateAsync({ statuses })
+      setEditing(false)
+    } catch (err) {
+      setError(errorText(err))
+    }
+  }
+
+  return (
+    <Section
+      id="statuses"
+      title="Statuses"
+      hint="The statuses a feature can take, and the details each one records. Values are filled in per feature."
+      editing={editing}
+      onEdit={mayEdit ? start : undefined}
+    >
+      {editing ? (
+        <div className="space-y-3">
+          {rows.map((row, i) => (
+            <div key={i} className="rounded-md border border-border p-3">
+              <div className="flex items-center gap-2">
+                <Input
+                  value={row.name}
+                  maxLength={40}
+                  placeholder="Status name, e.g. In progress"
+                  onChange={(e) => setStatusName(i, e.target.value)}
+                  className="flex-1"
+                />
+                <Button variant="ghost" size="sm" onClick={() => removeStatus(i)} aria-label="Remove status">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <div className="mt-2 space-y-1.5 pl-3">
+                {row.params.map((p, j) => (
+                  <div key={j} className="flex items-center gap-2">
+                    <Input
+                      value={p.ui_name}
+                      maxLength={40}
+                      placeholder="Parameter, e.g. Assignee"
+                      onChange={(e) => setParam(i, j, { ui_name: e.target.value })}
+                      className="flex-1"
+                    />
+                    <select
+                      value={p.type}
+                      onChange={(e) => setParam(i, j, { type: e.target.value as StatusParamType })}
+                      className="h-8 rounded-md border border-border bg-surface px-2 text-xs text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
+                    >
+                      <option value="string">Text</option>
+                      <option value="integer">Number</option>
+                    </select>
+                    <Button variant="ghost" size="sm" onClick={() => removeParam(i, j)} aria-label="Remove parameter">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                {row.params.length < MAX_STATUS_PARAMS && (
+                  <Button variant="ghost" size="sm" onClick={() => addParam(i)}>
+                    <Plus className="h-3.5 w-3.5" />
+                    Add parameter
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+          {rows.length < MAX_STATUSES && (
+            <Button variant="secondary" size="sm" onClick={addStatus}>
+              <Plus className="h-3.5 w-3.5" />
+              Add status
+            </Button>
+          )}
+          <div className="rounded-md bg-raised p-2">
+            <p className="mb-1 text-2xs uppercase tracking-wide text-faint">Preview</p>
+            <div className="flex flex-wrap items-center gap-3">
+              {rows.filter((r) => r.name.trim()).map((r, i) => (
+                <span key={i} className="inline-flex items-center gap-1">
+                  <StatusPill status={r.name.trim()} />
+                  {r.params.filter((p) => p.ui_name.trim()).length > 0 && (
+                    <span className="text-2xs text-faint">
+                      ({r.params.filter((p) => p.ui_name.trim()).map((p) => p.ui_name.trim()).join(', ')})
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+          <EditActions saving={update.isPending} error={error} onCancel={() => setEditing(false)} onSave={save} />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {settings.statuses_default && (
+            <p className="text-2xs text-faint">Default statuses. Edit to define your own.</p>
+          )}
+          <ul className="space-y-1.5 text-sm">
+            {settings.statuses.map((d) => (
+              <li key={d.name} className="flex flex-wrap items-center gap-2">
+                <StatusPill status={d.name} label={statusLabel(d.name)} />
+                {d.params.length > 0 && (
+                  <span className="text-xs text-muted">
+                    {d.params.map((p) => `${p.ui_name} (${p.type === 'integer' ? 'number' : 'text'})`).join(', ')}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Section>
   )
 }

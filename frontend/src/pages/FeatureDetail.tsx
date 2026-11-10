@@ -7,6 +7,7 @@ import { useProjectSettings,
   useFeatureAttachments,
   useFeatures,
   useProject,
+  useProjectStatuses,
   useReplaceTags,
   useUpdateFeature,
 } from '@/lib/queries'
@@ -31,9 +32,9 @@ import {
   KIND_LABEL,
   canAdd,
   canEditPlan,
+  statusLabel,
   type FeatureKind,
   PRIORITY_LABEL,
-  STATUS_LABEL,
   type FeaturePriority,
   type Feature,
   type FeatureStatus,
@@ -154,6 +155,8 @@ export function FeatureDetail({
   // The same query as the project's feature list, so it is usually cached.
   const allFeatures = useFeatures(projectId, ALL_FEATURES)
   const update = useUpdateFeature(projectId)
+  // The statuses this project offers, and the parameters each one carries.
+  const statusDefs = useProjectStatuses(projectId)
   const replaceTags = useReplaceTags(projectId)
   const remove = useDeleteFeature(projectId)
   const attachmentList = useFeatureAttachments(featureId)
@@ -168,6 +171,16 @@ export function FeatureDetail({
   const [error, setError] = useState('')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [openTaskId, setOpenTaskId] = useState(0)
+  // Draft values for the current status's parameters, as text while editing.
+  const [statusParams, setStatusParams] = useState<Record<string, string>>({})
+  const storedParams = JSON.stringify(feature.data?.status_params ?? {})
+  useEffect(() => {
+    const stored = (feature.data?.status_params ?? {}) as Record<string, string | number>
+    const asText: Record<string, string> = {}
+    for (const [k, v] of Object.entries(stored)) asText[k] = String(v)
+    setStatusParams(asText)
+    // storedParams captures the object's contents so the sync runs when they change.
+  }, [feature.data?.id, storedParams])
   // The feature the add box is open under: this one, one in the tree, or none.
   const [addingUnder, setAddingUnder] = useState<number | null>(null)
 
@@ -269,9 +282,27 @@ export function FeatureDetail({
   async function setStatus(status: FeatureStatus) {
     setError('')
     try {
+      // Changing status drops values for the old status's parameters; the
+      // server prunes them to the new status's set.
       await update.mutateAsync({ id: featureId, status })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not change status')
+    }
+  }
+
+  async function saveStatusParams() {
+    setError('')
+    const current = statusDefs.find((d) => d.name === feature.data?.status)
+    const values: Record<string, string | number> = {}
+    for (const p of current?.params ?? []) {
+      const raw = (statusParams[p.key] ?? '').trim()
+      if (raw === '') continue
+      values[p.key] = p.type === 'integer' ? Number(raw) : raw
+    }
+    try {
+      await update.mutateAsync({ id: featureId, status: feature.data?.status, status_params: values })
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save status details')
     }
   }
 
@@ -650,16 +681,43 @@ export function FeatureDetail({
               <CardTitle>Status</CardTitle>
             </CardHeader>
             <CardBody className="space-y-1">
-              {(Object.keys(STATUS_LABEL) as FeatureStatus[]).map((status) => (
+              {statusDefs.map((def) => (
                 <QuickSet
-                  key={status}
-                  active={data.status === status}
+                  key={def.name}
+                  active={data.status === def.name}
                   disabled={!canEdit}
-                  onClick={() => setStatus(status)}
+                  onClick={() => setStatus(def.name)}
                 >
-                  {STATUS_LABEL[status]}
+                  {statusLabel(def.name)}
                 </QuickSet>
               ))}
+              {(() => {
+                const params = statusDefs.find((d) => d.name === data.status)?.params ?? []
+                if (params.length === 0) return null
+                return (
+                  <div className="mt-2 space-y-2 border-t border-border pt-2">
+                    {params.map((p) => (
+                      <label key={p.key} className="block text-xs">
+                        <span className="mb-0.5 block text-muted">{p.ui_name}</span>
+                        <Input
+                          type={p.type === 'integer' ? 'number' : 'text'}
+                          value={statusParams[p.key] ?? ''}
+                          disabled={!canEdit}
+                          onChange={(e) =>
+                            setStatusParams((s) => ({ ...s, [p.key]: e.target.value }))
+                          }
+                          placeholder={p.type === 'integer' ? 'A number' : ''}
+                        />
+                      </label>
+                    ))}
+                    {canEdit && (
+                      <Button size="sm" variant="secondary" loading={update.isPending} onClick={saveStatusParams}>
+                        Save details
+                      </Button>
+                    )}
+                  </div>
+                )
+              })()}
             </CardBody>
           </Card>
 
