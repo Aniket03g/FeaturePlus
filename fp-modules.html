@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FeaturePlus — Feature → Plan → Code Map</title>
+<style>
+  :root {
+    --bg: #0f1218;
+    --panel: #171b24;
+    --panel-alt: #1c2029;
+    --border: #2a303c;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #6ea8fe;
+    --accent2: #5ad19a;
+    --code-bg: #10141c;
+    --head: #222838;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 {
+    font-size: 20px; margin: 42px 0 12px;
+    padding-bottom: 6px; border-bottom: 2px solid var(--border);
+    scroll-margin-top: 16px;
+  }
+  h3 { font-size: 16px; color: var(--accent2); margin: 28px 0 10px; }
+  p { color: var(--text); }
+  .lead { color: var(--muted); max-width: 820px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 5px; font-size: 12.5px;
+    font-family: "SF Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+    color: #cbd5e6; white-space: nowrap;
+  }
+  td code { white-space: normal; }
+  table {
+    border-collapse: collapse; width: 100%; margin: 8px 0 4px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
+  }
+  thead th {
+    background: var(--head); text-align: left; font-weight: 600;
+    padding: 10px 12px; font-size: 13px; letter-spacing: .3px;
+    text-transform: uppercase; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 10px 12px; border-top: 1px solid var(--border); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--panel-alt); }
+  tbody tr:hover { background: #20283a; }
+  td:nth-child(1) { width: 32%; }
+  td:nth-child(2) { width: 20%; white-space: nowrap; }
+  .plan {
+    display: inline-block; background: #1b2740; color: var(--accent);
+    border: 1px solid #2d4066; border-radius: 4px;
+    padding: 1px 7px; font-size: 12px; font-weight: 600;
+    font-family: "SF Mono", ui-monospace, Consolas, monospace;
+  }
+  .plan.db { background:#1c2a1f; color:#7fd99a; border-color:#2f4d38; }
+  .plan.ui { background:#2a2033; color:#c99af0; border-color:#45335a; }
+  .plan.fn { background:#2a2616; color:#e0c877; border-color:#4d4524; }
+  .plan.api{ background:#162a2a; color:#6fd6d6; border-color:#255050; }
+  .crumb { color: var(--muted); }
+  .crumb b { color: var(--text); font-weight: 600; }
+  .toc {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 20px; margin: 20px 0 8px;
+    columns: 2; column-gap: 32px;
+  }
+  .toc a { display: block; padding: 3px 0; break-inside: avoid; }
+  .toc .num { color: var(--muted); display: inline-block; width: 22px; }
+  .note {
+    background: #141b14; border: 1px solid #27401f; border-left: 3px solid var(--accent2);
+    border-radius: 6px; padding: 14px 18px; margin: 20px 0;
+  }
+  .note h3 { margin-top: 0; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 13px; }
+  ol { color: var(--text); }
+  @media (max-width: 760px) {
+    .toc { columns: 1; }
+    td:nth-child(1), td:nth-child(2) { width: auto; }
+    table { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>FeaturePlus — Feature → Plan → Code Map</h1>
+<p class="lead">
+  Maps <b>features / subfeatures</b> (up to 4 nesting levels) to a reusable <b>plan</b>
+  (the high-level intent used while building), and records the <b>concrete code artifacts</b>
+  that implement it. Source of truth = actual code (Go backend, React frontend, CLI, Python <code>tools/map</code>).
+</p>
+<p class="lead">
+  Use it two ways — (1) <b>reverse map</b>: what exists and where it lives; and
+  (2) <b>forward template</b>: when adding a feature, pick a plan verb then fill column 3
+  with the table/column, component, module, or function you will touch.
+</p>
+
+<div class="toc">
+  <a href="#plans"><span class="num">§</span> Plan vocabulary</a>
+  <a href="#s1"><span class="num">1.</span> Authentication &amp; Users</a>
+  <a href="#s2"><span class="num">2.</span> Projects</a>
+  <a href="#s3"><span class="num">3.</span> Features &amp; Sub-features</a>
+  <a href="#s4"><span class="num">4.</span> Tasks</a>
+  <a href="#s5"><span class="num">5.</span> Pull Requests</a>
+  <a href="#s6"><span class="num">6.</span> Releases</a>
+  <a href="#s7"><span class="num">7.</span> Versions, Copies &amp; Publishing</a>
+  <a href="#s8"><span class="num">8.</span> Dependencies</a>
+  <a href="#s9"><span class="num">9.</span> Templates &amp; Guidance</a>
+  <a href="#s10"><span class="num">10.</span> Import</a>
+  <a href="#s11"><span class="num">11.</span> GitHub Integration &amp; MCP</a>
+  <a href="#s12"><span class="num">12.</span> Contracts, Briefing &amp; Drift</a>
+  <a href="#s13"><span class="num">13.</span> Backup &amp; Restore</a>
+  <a href="#s14"><span class="num">14.</span> Playground &amp; LLM</a>
+  <a href="#s15"><span class="num">15.</span> Shared UI &amp; Client</a>
+  <a href="#s16"><span class="num">16.</span> CLI</a>
+  <a href="#s17"><span class="num">17.</span> Code-Mapping Tool</a>
+</div>
+
+<h2 id="plans">Plan vocabulary (reusable intent verbs)</h2>
+<table>
+<thead><tr><th>Plan</th><th>Meaning</th><th>Column-3 should name</th></tr></thead>
+<tbody>
+<tr><td><span class="plan db">ADD_DB_TABLE</span></td><td>New persistent model / table</td><td>model file + table + key columns</td></tr>
+<tr><td><span class="plan db">ADD_DB_COLUMN</span></td><td>New column(s) on an existing table</td><td>table + column + type</td></tr>
+<tr><td><span class="plan db">ADD_MIGRATION</span></td><td>SQL migration for schema change</td><td>migration file</td></tr>
+<tr><td><span class="plan">ADD_MODULE</span></td><td>New backend module (handler / service / repository)</td><td>package + file</td></tr>
+<tr><td><span class="plan">CHANGE_MODULE</span></td><td>Modify an existing backend module</td><td>package + file</td></tr>
+<tr><td><span class="plan fn">ADD_FUNCTION</span></td><td>New function / handler method</td><td>module path + func name</td></tr>
+<tr><td><span class="plan fn">CHANGE_FUNCTION</span></td><td>Modify an existing function</td><td>module path + func name</td></tr>
+<tr><td><span class="plan api">ADD_API_ENDPOINT</span></td><td>New HTTP route</td><td>method + path + handler</td></tr>
+<tr><td><span class="plan api">CHANGE_API_ENDPOINT</span></td><td>Alter route behavior/shape</td><td>method + path + handler</td></tr>
+<tr><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td>New reusable React component</td><td>component file</td></tr>
+<tr><td><span class="plan ui">ADD_UI_PAGE</span></td><td>New React page / route</td><td>page file</td></tr>
+<tr><td><span class="plan ui">CHANGE_UI_COMPONENT</span></td><td>Modify existing React component/page</td><td>file + element/prop</td></tr>
+<tr><td><span class="plan ui">ADD_UI_CLIENT_FN</span></td><td>New frontend lib/api/query helper</td><td>lib file + function</td></tr>
+</tbody>
+</table>
+<p class="lead">Feature column uses a dotted hierarchy: <span class="crumb"><b>Domain</b> › <b>Feature</b> › Subfeature › UI/field detail</span>.</p>
+
+<h2 id="s1">1. Authentication &amp; Users</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Auth</b> › User identity</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>backend/models/user.go</code> → <code>users</code> (email, username, password hash, role, name, space_seen_at)</td></tr>
+<tr><td class="crumb"><b>Auth</b> › Login › credential check</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/auth_handler.go:Login</code>; JWT in <code>middleware/auth.go</code></td></tr>
+<tr><td class="crumb"><b>Auth</b> › Login › UI</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>frontend/src/pages/Login.tsx</code>; client <code>lib/auth.tsx</code>, <code>lib/api.ts</code></td></tr>
+<tr><td class="crumb"><b>Auth</b> › Signup › invite-code gated</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>auth_handler.go:Signup</code>; route <code>GET/POST /api/v1/auth/signup</code></td></tr>
+<tr><td class="crumb"><b>Auth</b> › Invite codes › model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/invite_code.go</code> → <code>invite_codes</code> (code_hash, hint, email, note, created_by_id)</td></tr>
+<tr><td class="crumb"><b>Auth</b> › Invite codes › issue/list UI</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/InviteCodes.tsx</code>; route <code>GET /api/v1/invites</code></td></tr>
+<tr><td class="crumb"><b>Auth</b> › Change password</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>pages/ChangePasswordDialog.tsx</code>; <code>user_handler.go:UpdateUser</code></td></tr>
+<tr><td class="crumb"><b>Users</b> › CRUD</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>user_handler.go:{GetAllUsers,GetUser,CreateUser,UpdateUser,DeleteUser}</code>; routes <code>/api/v1/users</code></td></tr>
+<tr><td class="crumb"><b>Users</b> › Role-based access</td><td><span class="plan">ADD_MODULE</span></td><td><code>middleware/role.go</code>, <code>middleware/scope.go</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s2">2. Projects</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Projects</b> › Project entity</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/project.go</code> → <code>projects</code> (name, description, brief, owner_id, config JSONB)</td></tr>
+<tr><td class="crumb"><b>Projects</b> › CRUD API</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/project_handler.go:{GetAllProjects,GetProject,DeleteProject}</code>; repo <code>project_repository.go</code></td></tr>
+<tr><td class="crumb"><b>Projects</b> › Create › modal + form</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>pages/NewProjectDialog.tsx</code>; <code>project_handler.go:{ShowProjectCreateModal,CreateProjectFromForm}</code></td></tr>
+<tr><td class="crumb"><b>Projects</b> › List page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/Projects.tsx</code>; route <code>GET /api/v1/projects</code></td></tr>
+<tr><td class="crumb"><b>Projects</b> › Dashboard</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/ProjectDashboard.tsx</code>, <code>ProjectDetail.tsx</code></td></tr>
+<tr><td class="crumb"><b>Projects</b> › Progress stats</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>project_handler.go:{GetProjectProgress,getProjectProgressStats,GetFeaturesProgressFragment}</code></td></tr>
+<tr><td class="crumb"><b>Projects</b> › Settings › model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/project_settings.go</code> → <code>project_settings</code> (versions_convention, publish_convention, architecture, color_meanings, modules)</td></tr>
+<tr><td class="crumb"><b>Projects</b> › Settings › editor</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/ProjectSettings.tsx</code>; <code>project_handler.go:{GetProjectSettingsModal,UpdateProjectSettings}</code></td></tr>
+<tr><td class="crumb"><b>Projects</b> › Members › model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/project_member.go</code> → <code>project_members</code> (project_id, user_id, role, added_by)</td></tr>
+<tr><td class="crumb"><b>Projects</b> › Team page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/ProjectTeam.tsx</code>, <code>Team.tsx</code>; route <code>GET /api/v1/projects/:id/members</code></td></tr>
+<tr><td class="crumb"><b>Projects</b> › Messages › model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/feature_message.go</code> (project+feature scoped)</td></tr>
+<tr><td class="crumb"><b>Projects</b> › Messages page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/ProjectMessages.tsx</code>; route <code>GET /api/v1/projects/:id/messages</code></td></tr>
+<tr><td class="crumb"><b>Projects</b> › Recent-visit tracking</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/project_visit.go</code> → <code>project_visits</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s3">3. Features &amp; Sub-features</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Features</b> › Feature entity</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/features.go</code> → <code>features</code> (project_id, parent_feature_id, release_id, title, notes, category, status, priority, assignee_id, kind, position)</td></tr>
+<tr><td class="crumb"><b>Features</b> › Hierarchy (parent/child)</td><td><span class="plan db">ADD_DB_COLUMN</span></td><td><code>features.parent_feature_id *uint</code> + self FK <code>ParentFeature</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Sub-feature entity</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/sub_feature.go</code> → <code>sub_features</code>; migration <code>migrations/000004_create_sub_features_table.up.sql</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › CRUD API</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/feature_handler.go:{CreateFeature,GetFeature,UpdateFeature,DeleteFeature}</code>; repo <code>feature_repository.go</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Inline edit</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>feature_handler.go:{EditFeatureInline,UpdateFeatureInline,UpdateFeatureField}</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Detail page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/FeatureDetail.tsx</code>; <code>components/FeatureBits.tsx</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Create dialog</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>pages/NewFeatureDialog.tsx</code>; <code>feature_fragments.go:{NewFeatureForm,NewFeatureFragment}</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Colour › field</td><td><span class="plan db">ADD_DB_COLUMN</span></td><td><code>features.color varchar(20)</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Colour › picker UI</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>components/FeatureColor.tsx</code>; meanings in <code>project_settings.color_meanings</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Kind flag</td><td><span class="plan db">ADD_DB_COLUMN</span></td><td><code>features.kind varchar(10)</code> (feature vs other)</td></tr>
+<tr><td class="crumb"><b>Features</b> › Tags › model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/tag.go</code> → <code>feature_tags</code> (tag_name, feature_id)</td></tr>
+<tr><td class="crumb"><b>Features</b> › Tags › edit/autocomplete</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/tags_handler.go:{UpdateFeatureTags,TagAutocomplete,GetFeatureTags,GetFeaturesByTag}</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Messages thread</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>components/FeatureMessages.tsx</code>; route <code>GET /api/v1/features/:featureId/messages</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Scope / access › model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/feature_scope.go</code> → <code>feature_scopes</code> (feature_id, user_id, access_level, granted_by_id)</td></tr>
+<tr><td class="crumb"><b>Features</b> › Scope › grant/revoke</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>feature_handler.go:{CreateFeatureScope,GetFeatureScopes,DeleteFeatureScope,renderScopes}</code>; service <code>services/access_service.go</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Scope › access UI</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>components/FeatureAccess.tsx</code></td></tr>
+<tr><td class="crumb"><b>Features</b> › Assignment to release</td><td><span class="plan db">ADD_DB_COLUMN</span></td><td><code>features.release_id *uint</code>; <code>feature_handler.go:CreateFeatureUnderRelease</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s4">4. Tasks</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Tasks</b> › Task entity</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/task.go</code> → <code>tasks</code> (task_type, task_name, description, feature_id, sub_feature_id, created_by_user)</td></tr>
+<tr><td class="crumb"><b>Tasks</b> › CRUD (feature &amp; sub-feature)</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/task_handler.go:{CreateTaskForFeature,CreateTaskForSubFeature,UpdateTaskForFeature,DeleteTaskForFeature,UpdateTaskInline}</code></td></tr>
+<tr><td class="crumb"><b>Tasks</b> › List UI</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>components/TaskList.tsx</code>; <code>pages/TaskPanel.tsx</code></td></tr>
+<tr><td class="crumb"><b>Tasks</b> › Inline forms (fragments)</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/task_fragments.go:{NewTaskForm,EditTaskForm,CancelTaskForm,ViewTaskCard}</code></td></tr>
+<tr><td class="crumb"><b>Tasks</b> › Comments › model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/comment.go</code> → <code>comments</code></td></tr>
+<tr><td class="crumb"><b>Tasks</b> › Comments › API</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/comment_handler.go:{CreateComment,UpdateComment,DeleteComment,GetTaskComments}</code></td></tr>
+<tr><td class="crumb"><b>Tasks</b> › Attachments › model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/task_attachment.go</code> → <code>task_attachments</code></td></tr>
+<tr><td class="crumb"><b>Tasks</b> › Attachments › upload/serve</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/task_attachment_handler.go:{UploadAttachment,DownloadAttachment,ServeAttachment,DeleteAttachment}</code></td></tr>
+<tr><td class="crumb"><b>Tasks</b> › Attachments › UI</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>components/Attachments.tsx</code></td></tr>
+<tr><td class="crumb"><b>Tasks</b> › Guidance enrichment</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/guidance_handler.go:{GetTaskGuidance,enrichTasksWithGuidance,AddGuidance,ReloadGuidance}</code>; repo <code>guidance_repository.go</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s5">5. Pull Requests</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>PR</b> › PR entity</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/pr.go</code> → <code>pull_requests</code> (task_id, feature_id, url, title, branch, status, tested, version)</td></tr>
+<tr><td class="crumb"><b>PR</b> › Link PR to task/feature</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/pr_handler.go:{AddPullRequest,AddTaskPR}</code>; repo <code>pr_repository.go</code></td></tr>
+<tr><td class="crumb"><b>PR</b> › New PR modal</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>pages/PullRequestPanel.tsx</code>; <code>pr_handler.go:{NewPullRequestModal,GetPRForm}</code></td></tr>
+<tr><td class="crumb"><b>PR</b> › List page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/PullRequests.tsx</code>; route <code>GET /api/v1/projects/:id/pull-requests</code></td></tr>
+<tr><td class="crumb"><b>PR</b> › Mark as tested</td><td><span class="plan db">ADD_DB_COLUMN</span> + <span class="plan fn">ADD_FUNCTION</span></td><td><code>pull_requests.tested bool</code>; <code>pr_handler.go:MarkAsTested</code></td></tr>
+<tr><td class="crumb"><b>PR</b> › Approve › model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/approved_pr.go</code> → <code>approved_prs</code> (pull_request_id, user_id, approved_at, version)</td></tr>
+<tr><td class="crumb"><b>PR</b> › Approve / review</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/pr_review_handler.go:{ApprovePR,ReviewPR}</code>; repo <code>approved_pr_repository.go</code></td></tr>
+<tr><td class="crumb"><b>PR</b> › Version stamp</td><td><span class="plan db">ADD_DB_COLUMN</span></td><td><code>pull_requests.version</code></td></tr>
+<tr><td class="crumb"><b>PR</b> › PR dependencies</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/pr_dependency_handler.go:GetPRDependencyPanel</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s6">6. Releases (Release-First Workflow)</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Releases</b> › Release entity</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/release.go</code> → <code>releases</code> (project_id, tag, status, notes) + <code>release_prs</code> join; migration <code>database/migrations/20240813130000_create_release_tables.up.sql</code></td></tr>
+<tr><td class="crumb"><b>Releases</b> › Create release</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/release_handler.go:CreateRelease</code>; dialog <code>pages/NewReleaseDialog.tsx</code></td></tr>
+<tr><td class="crumb"><b>Releases</b> › Create release modal</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>release_handler.go:NewReleaseModal</code>; <code>pages/Releases.tsx</code></td></tr>
+<tr><td class="crumb"><b>Releases</b> › Assign features to release</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>release_handler.go:{AddFeaturesToRelease,UnassignFeatureFromRelease,AssignFeaturesFragment}</code></td></tr>
+<tr><td class="crumb"><b>Releases</b> › Create feature under release</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>feature_handler.go:CreateFeatureUnderRelease</code></td></tr>
+<tr><td class="crumb"><b>Releases</b> › Draft actions (HTMX dynamic)</td><td><span class="plan">CHANGE_MODULE</span></td><td><code>handlers/web_release_handler.go:{RenderReleasesList,RenderReleaseDetail,RenderReleaseRow,*Fragment}</code> (see <code>HTMX_DYNAMIC_UPDATES_IMPLEMENTATION.md</code>, <code>RELEASE_DRAFT_ACTIONS_*.md</code>)</td></tr>
+<tr><td class="crumb"><b>Releases</b> › Dependency gate before release</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/release_dependency_handler.go:CheckDependenciesForRelease</code>; service <code>services/merge_gate.go</code>, <code>release_validator.go</code></td></tr>
+<tr><td class="crumb"><b>Releases</b> › Finalize</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>release_handler.go:FinalizeRelease</code></td></tr>
+<tr><td class="crumb"><b>Releases</b> › Notes edit</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>release_handler.go:UpdateReleaseNotes</code></td></tr>
+<tr><td class="crumb"><b>Releases</b> › Detail page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/ReleaseDetail.tsx</code>, <code>Releases.tsx</code></td></tr>
+<tr><td class="crumb"><b>Releases</b> › GitHub release link</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/project_github.go</code> → <code>ReleaseGitHub</code> (<code>release_github</code>)</td></tr>
+<tr><td class="crumb"><b>Releases</b> › project_id fix</td><td><span class="plan fn">CHANGE_FUNCTION</span></td><td><code>release_handler.go:CreateRelease</code> form binding (see <code>PROJECT_ID_FIX_SUMMARY.md</code>)</td></tr>
+</tbody>
+</table>
+
+<h2 id="s7">7. Versions, Copies &amp; Publishing</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Versions</b> › Snapshot model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/feature_version.go</code> → <code>feature_versions</code> (project_id, number, tag, notes, major/minor, publish_number, feature_count, snapshot)</td></tr>
+<tr><td class="crumb"><b>Versions</b> › Save then publish</td><td><span class="plan fn">ADD_FUNCTION</span></td><td>version save/publish flow; <code>feature_versions.publish_number</code>, <code>major/minor</code></td></tr>
+<tr><td class="crumb"><b>Versions</b> › Semantic numbering (v2.3)</td><td><span class="plan db">ADD_DB_COLUMN</span></td><td><code>feature_versions.{major,minor}</code></td></tr>
+<tr><td class="crumb"><b>Versions</b> › View / restore a version</td><td><span class="plan api">ADD_API_ENDPOINT</span></td><td><code>GET /api/v1/projects/:id/versions/:versionId</code>, <code>.../restore</code></td></tr>
+<tr><td class="crumb"><b>Versions</b> › Page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/VersionsPage.tsx</code>; client <code>lib/working.ts</code></td></tr>
+<tr><td class="crumb"><b>Versions</b> › Working state</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/working_state.go</code> → <code>working_states</code> (project_id, base_version_id, note)</td></tr>
+<tr><td class="crumb"><b>My Space</b> › Copy model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/feature_copy.go</code> → <code>feature_copies</code> (base_version_id, owner_id, revision, name, source, snapshot)</td></tr>
+<tr><td class="crumb"><b>My Space</b> › Start a copy</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>pages/StartCopyDialog.tsx</code>; route <code>GET /api/v1/projects/:id/copies</code></td></tr>
+<tr><td class="crumb"><b>My Space</b> › Dashboard</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/MySpaceDashboard.tsx</code>, <code>MyWorking.tsx</code>; <code>GET /api/v1/me/space</code>, <code>/me/copies</code></td></tr>
+<tr><td class="crumb"><b>Compare</b> › Version diff</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/ComparePage.tsx</code>; client <code>lib/compare-tree.ts</code>; <code>GET /api/v1/projects/:id/versions/compare</code></td></tr>
+<tr><td class="crumb"><b>Merge</b> › Copy back to project</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/MergePage.tsx</code>; client <code>lib/copy-tree.ts</code>; <code>GET /api/v1/projects/:id/copies/:copyId/merge</code></td></tr>
+<tr><td class="crumb"><b>Publish</b> › Published list</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/PublishedList.tsx</code>, <code>PublishDialog.tsx</code>; <code>GET /api/v1/projects/:id/published</code></td></tr>
+<tr><td class="crumb"><b>Diff</b> › Rendering</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>components/DiffTree.tsx</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s8">8. Dependencies</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Deps</b> › Dependency model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/dependency.go</code> → <code>dependencies</code> (parent_id/type, child_id/type, description)</td></tr>
+<tr><td class="crumb"><b>Deps</b> › CRUD</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/dependency_handler.go:{CreateDependency,ListDependencies,DeleteDependency,GetDependenciesListFragment}</code>; repo <code>dependency_repo.go</code></td></tr>
+<tr><td class="crumb"><b>Deps</b> › Type selector / modal</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>dependency_handler.go:{ShowDependencyModal,ShowDependencyTypeSelector,GetDependencyPanels}</code></td></tr>
+<tr><td class="crumb"><b>Deps</b> › Name enrichment</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>dependency_handler.go:enhanceDependenciesWithNames</code>; service <code>services/dependency_service.go</code></td></tr>
+<tr><td class="crumb"><b>Deps</b> › Graph API</td><td><span class="plan api">ADD_API_ENDPOINT</span></td><td><code>GET /api/v1/projects/:id/dependency-graph</code></td></tr>
+<tr><td class="crumb"><b>Deps</b> › Canvas UI</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/DependencyCanvas.tsx</code>; client <code>lib/dependency-layout.ts</code></td></tr>
+<tr><td class="crumb"><b>Deps</b> › Markdown export</td><td><span class="plan ui">ADD_UI_CLIENT_FN</span></td><td><code>lib/dependency-markdown.ts</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s9">9. Templates &amp; Guidance</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Templates</b> › CRUD</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/template_handler.go:{GetAllTemplates,GetTemplateByID,AddTemplate,DeleteTemplate,ReloadTemplates}</code>; repo <code>template_repository.go</code></td></tr>
+<tr><td class="crumb"><b>Templates</b> › Stacks</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>template_handler.go:{GetAvailableStacks,GetTemplateByStack,GetGuidancesByStack}</code></td></tr>
+<tr><td class="crumb"><b>Templates</b> › Apply to project</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/apply_template.go:{ApplyTemplate,applyImportedTemplate}</code>; UI <code>pages/ApplyTemplateDialog.tsx</code></td></tr>
+<tr><td class="crumb"><b>Templates</b> › Page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/Templates.tsx</code></td></tr>
+<tr><td class="crumb"><b>Guidance</b> › Import templates</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>template_handler.go:{SaveImportTemplate,DeleteImportTemplate}</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s10">10. Import</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Import</b> › From GitHub</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/import_handler.go:{ImportFromGitHub,ShowGitHubImportModal}</code>; repo <code>import_repository.go</code> (see <code>IMPORT_FEATURE_SUMMARY.md</code>)</td></tr>
+<tr><td class="crumb"><b>Import</b> › Project import</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>import_handler.go:{ImportProject,ShowProjectImportModal,ListAvailableImports}</code></td></tr>
+<tr><td class="crumb"><b>Import</b> › UI</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/Imports.tsx</code> (see <code>IMPORT_UI_IMPLEMENTATION.md</code>); route <code>GET /api/v1/imports</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s11">11. GitHub Integration &amp; MCP</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>GitHub</b> › Project link model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/project_github.go</code> → <code>project_github</code> (owner, repo, branch, last_synced_at, last_commit_sha)</td></tr>
+<tr><td class="crumb"><b>GitHub</b> › User OAuth model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>project_github.go</code> → <code>UserGitHub</code> (login, access_token, refresh_token)</td></tr>
+<tr><td class="crumb"><b>GitHub</b> › Connect / callback</td><td><span class="plan api">ADD_API_ENDPOINT</span></td><td><code>GET /api/v1/github/{connect,callback,account,repos}</code>; service <code>services/github_app.go</code>, <code>github_client.go</code></td></tr>
+<tr><td class="crumb"><b>GitHub</b> › Panel UI</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/GitHubPanel.tsx</code></td></tr>
+<tr><td class="crumb"><b>GitHub</b> › Feature data sync</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/project_connection_handler.go:SyncFeatureData</code></td></tr>
+<tr><td class="crumb"><b>MCP</b> › Bridge service</td><td><span class="plan">ADD_MODULE</span></td><td><code>cmd/mcp-bridge/main.go</code>, <code>internal/mcpbridge</code>, <code>services/github_mcp_service.go</code> (see <code>MCP_BRIDGE_SETUP.md</code>, <code>GITHUB_MCP_INTEGRATION.md</code>)</td></tr>
+<tr><td class="crumb"><b>Linked Code</b> › files model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/feature_files.go</code> → <code>feature_files</code></td></tr>
+<tr><td class="crumb"><b>Linked Code</b> › view</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/LinkedCode.tsx</code>; <code>feature_handler.go:GetLinkedCode</code>; client <code>lib/feature-file.ts</code> (see <code>LINKED_CODE_*.md</code>)</td></tr>
+<tr><td class="crumb"><b>Linked Code</b> › commits</td><td><span class="plan api">ADD_API_ENDPOINT</span></td><td><code>GET /api/v1/features/:featureId/commits</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s12">12. Contracts, Briefing &amp; Drift</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Contracts</b> › Artifact model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/contract_artifact.go</code> → <code>contract_artifacts</code> (feature_id, file_path, commit_hash, language, contract, behavior_note)</td></tr>
+<tr><td class="crumb"><b>Contracts</b> › Extract</td><td><span class="plan">ADD_MODULE</span></td><td><code>backend/contracts/</code> (extractor), service <code>services/contract_service.go</code>; <code>handlers/contract_handler.go:GetContractView</code></td></tr>
+<tr><td class="crumb"><b>Contracts</b> › Behavior notes</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>services/behavior_note_service.go</code></td></tr>
+<tr><td class="crumb"><b>Contracts</b> › Page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/Contracts.tsx</code>; route <code>GET /api/v1/projects/:id/contracts</code></td></tr>
+<tr><td class="crumb"><b>Briefing</b> › Generate</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/briefing_handler.go:{GetBriefing,GetBriefingView}</code>; service <code>services/briefing_service.go</code></td></tr>
+<tr><td class="crumb"><b>Briefing</b> › Page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/BriefingPage.tsx</code>; route <code>GET /api/v1/projects/:id/briefing</code></td></tr>
+<tr><td class="crumb"><b>Drift</b> › Detection</td><td><span class="plan">ADD_MODULE</span></td><td><code>services/drift_service.go</code></td></tr>
+<tr><td class="crumb"><b>Integration</b> › Runner/checks</td><td><span class="plan db">ADD_DB_TABLE</span> + <span class="plan">ADD_MODULE</span></td><td><code>models/integration_check.go</code>; <code>services/integration_runner.go</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s13">13. Backup &amp; Restore</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Backup</b> › Export</td><td><span class="plan api">ADD_API_ENDPOINT</span></td><td><code>GET /api/v1/projects/:id/backup</code>; <code>cmd/backup/main.go</code>; client <code>lib/backup.ts</code></td></tr>
+<tr><td class="crumb"><b>Backup</b> › UI</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/Backups.tsx</code></td></tr>
+<tr><td class="crumb"><b>Restore</b> › Dialog</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>pages/RestoreBackupDialog.tsx</code> (see <code>BACKUP_TESTING.md</code>)</td></tr>
+</tbody>
+</table>
+
+<h2 id="s14">14. Playground &amp; LLM Suggestions</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Playground</b> › Draft model</td><td><span class="plan db">ADD_DB_TABLE</span></td><td><code>models/playground_draft.go</code> → <code>playground_drafts</code> (user_id, data)</td></tr>
+<tr><td class="crumb"><b>Playground</b> › Page</td><td><span class="plan ui">ADD_UI_PAGE</span></td><td><code>pages/Playground.tsx</code>; client <code>lib/playground.ts</code>; routes <code>GET /api/v1/playground/{ai,saved}</code></td></tr>
+<tr><td class="crumb"><b>LLM</b> › Suggest features</td><td><span class="plan fn">ADD_FUNCTION</span></td><td><code>handlers/llm_suggest.go:{SuggestFeatures,SuggestFeaturesWeb}</code>; service <code>services/llm_service.go</code>, <code>claude_drafter.go</code></td></tr>
+<tr><td class="crumb"><b>LLM</b> › Redaction</td><td><span class="plan">ADD_MODULE</span></td><td><code>services/redaction.go</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s15">15. Shared UI &amp; Client Infrastructure</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>UI</b> › App shell / layout</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>layouts/AppShell.tsx</code></td></tr>
+<tr><td class="crumb"><b>UI</b> › Side panel redesign</td><td><span class="plan ui">CHANGE_UI_COMPONENT</span></td><td><code>AppShell.tsx</code> navigation (see <code>UI-REDESIGN-CHANGES.md</code>, <code>RELEASE_FIRST_UI_CHANGES.md</code>)</td></tr>
+<tr><td class="crumb"><b>UI</b> › Markdown editor/viewer</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>components/{MarkdownEditor,Markdown,NoteEditor}.tsx</code></td></tr>
+<tr><td class="crumb"><b>UI</b> › Dialog / primitives</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>components/Dialog.tsx</code>, <code>components/ui/</code></td></tr>
+<tr><td class="crumb"><b>UI</b> › Share dialog</td><td><span class="plan ui">ADD_UI_COMPONENT</span></td><td><code>pages/ShareDialog.tsx</code></td></tr>
+<tr><td class="crumb"><b>Client</b> › API layer</td><td><span class="plan ui">ADD_UI_CLIENT_FN</span></td><td><code>lib/api.ts</code>, <code>queries.ts</code>, <code>types.ts</code></td></tr>
+<tr><td class="crumb"><b>Client</b> › Router</td><td><span class="plan ui">ADD_UI_CLIENT_FN</span></td><td><code>lib/router.tsx</code></td></tr>
+<tr><td class="crumb"><b>Client</b> › Theme</td><td><span class="plan ui">ADD_UI_CLIENT_FN</span></td><td><code>lib/theme.tsx</code></td></tr>
+<tr><td class="crumb"><b>Client</b> › AI instructions helper</td><td><span class="plan ui">ADD_UI_CLIENT_FN</span></td><td><code>lib/ai-instructions.ts</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s16">16. CLI (<code>featureplus-pr</code>)</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>CLI</b> › Auth</td><td><span class="plan">ADD_MODULE</span></td><td><code>pkg/featureplus/auth.go</code></td></tr>
+<tr><td class="crumb"><b>CLI</b> › Link PR to feature/task</td><td><span class="plan">ADD_MODULE</span></td><td><code>pkg/featureplus/pr.go</code>, <code>pr_test.go</code></td></tr>
+<tr><td class="crumb"><b>CLI</b> › Release commands</td><td><span class="plan">ADD_MODULE</span></td><td><code>pkg/featureplus/release.go</code>, <code>release_test.go</code></td></tr>
+<tr><td class="crumb"><b>CLI</b> › Feature / project / task</td><td><span class="plan">ADD_MODULE</span></td><td><code>pkg/featureplus/{feature,project,task}.go</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="s17">17. Code-Mapping Tool (<code>tools/map</code>, Python)</h2>
+<table>
+<thead><tr><th>Feature / Subfeature</th><th>Plan</th><th>Parameters / code affected</th></tr></thead>
+<tbody>
+<tr><td class="crumb"><b>Map</b> › Pipeline orchestration</td><td><span class="plan">ADD_MODULE</span></td><td><code>tools/map/pipeline.py</code>, <code>map.py</code>, <code>repo.py</code></td></tr>
+<tr><td class="crumb"><b>Map</b> › Classification</td><td><span class="plan">ADD_MODULE</span></td><td><code>tools/map/classify.py</code>, <code>vocab.py</code></td></tr>
+<tr><td class="crumb"><b>Map</b> › Scoring</td><td><span class="plan">ADD_MODULE</span></td><td><code>tools/map/{scoring,score}.py</code></td></tr>
+<tr><td class="crumb"><b>Map</b> › Layout / canvas / spread</td><td><span class="plan">ADD_MODULE</span></td><td><code>tools/map/{layout,canvas,spread}.py</code></td></tr>
+<tr><td class="crumb"><b>Map</b> › Signals</td><td><span class="plan">ADD_MODULE</span></td><td><code>tools/map/signals/{cochange,names,commits,schema,independence}.py</code></td></tr>
+<tr><td class="crumb"><b>Map</b> › Reproduce / answer keys</td><td><span class="plan">ADD_MODULE</span></td><td><code>tools/map/reproduce.py</code>, <code>answer_keys/*.csv</code></td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<h3>How to extend this map (forward use)</h3>
+<ol>
+  <li>Name the feature path <span class="crumb"><b>Domain</b> › <b>Feature</b> › Subfeature › detail</span> (1–4 levels).</li>
+  <li>Pick a plan verb from the vocabulary table.</li>
+  <li>In column 3, write the <b>exact</b> table+column, component file, module path, or <code>path:Function</code> you added or changed — mirroring the existing rows.</li>
+  <li>One feature may span several rows (e.g. <span class="plan db">ADD_DB_COLUMN</span> + <span class="plan fn">ADD_FUNCTION</span> + <span class="plan ui">CHANGE_UI_COMPONENT</span>).</li>
+</ol>
+</div>
+
+<footer>
+  Generated from code inspection of the FeaturePlus repository · companion to <code>fp-modules.md</code>.
+</footer>
+
+</div>
+</body>
+</html>
