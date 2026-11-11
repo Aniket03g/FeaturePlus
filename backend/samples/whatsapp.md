@@ -1,0 +1,95 @@
+# WhatsApp
+
+- Onboarding
+  - Phone Verification
+  - Permission Requests
+  - Restore Prompt
+- User Profile > needs: Onboarding
+  - Profile Photo
+  - Display Name
+  - About Status
+- Contacts > needs: Onboarding
+  - Contact Sync
+  - Invite Friends
+  - Blocked List
+- Chats > needs: User Profile, Contacts
+  - Text Messaging
+    - Typing Indicator
+    - Delivery Receipts
+  - Emoji and Stickers
+  - Voice Messages
+  - Message Reactions
+  - Reply and Quote
+  - Message Forwarding
+  - Starred Messages
+  - Disappearing Messages
+  - Chat Search
+- Group Chats > needs: Chats
+  - Create Group
+  - Group Admins
+    - Admin Controls
+    - Remove Members
+  - Group Invite Links
+  - Group Description
+  - Mentions
+- Media Sharing > needs: Chats
+  - Photo Sharing
+    - Image Editing
+    - Photo Captions
+  - Video Sharing
+    - Video Trimming
+  - Document Sharing
+  - Location Sharing
+  - Contact Sharing
+  - Camera Capture
+  - View Once Media
+- Voice and Video Calls > needs: Contacts
+  - One to One Calls
+  - Group Calls
+    - Screen Sharing
+    - Call Grid View
+  - Call History
+  - Call Links
+- Status Updates > needs: Contacts
+  - Photo Status
+  - Text Status
+  - Status Privacy
+  - Status Replies
+- Notifications > needs: Chats
+  - Message Alerts
+  - Custom Tones
+  - Mute Conversations
+- Privacy and Security > needs: User Profile
+  - End to End Encryption
+  - Two Step Verification
+  - Last Seen Controls
+  - Read Receipts
+  - Fingerprint Lock
+- Settings
+  - Theme Selection
+  - Chat Wallpaper
+  - Storage Usage
+  - Data Usage
+  - Language Selection
+- Backup and Restore > needs: Chats
+  - Cloud Backup
+  - Local Backup
+  - Chat Export
+- WhatsApp Web > needs: Chats
+  - Qr Linking
+  - Linked Devices
+  - Desktop App
+- Communities > needs: Group Chats
+  - Community Creation
+  - Announcement Groups
+  - Member Management
+- Payments > needs: Contacts
+  - Send Money
+  - Payment History
+  - Bank Linking
+- Business Tools > needs: User Profile
+  - Business Profile
+  - Away Messages
+  - Quick Replies
+  - Product Catalog
+  - Labels

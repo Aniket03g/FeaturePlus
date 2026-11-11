@@ -84,6 +84,7 @@ import {
 } from '@/lib/playground'
 import {
   fetchProjectForPlayground,
+  fetchSample,
   fetchSavedPlayground,
   savePlayground,
   usePlaygroundAi,
@@ -91,6 +92,7 @@ import {
   usePlaygroundImport,
   usePlaygroundPreview,
   useProjects,
+  useSamples,
   type PlaygroundImportBody,
 } from '@/lib/queries'
 import { useQuery } from '@tanstack/react-query'
@@ -430,6 +432,7 @@ function PlaygroundEditor({ initial, takeOver, offline }: { initial: Saved; take
 
         <div className="flex flex-wrap items-center gap-2">
           <OpenProjectPicker busy={opening} onOpen={openProject} />
+          <SamplesButton onLoad={(md) => loadText(md, 'replace')} />
           <FileButton onFile={openFile} />
           <CopyInstructionsButton />
           <Button variant="secondary" size="sm" onClick={() => setPasting(true)}>
@@ -2107,6 +2110,88 @@ function CopyInstructionsButton() {
       {state === 'copied' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       {state === 'copied' ? 'Copied' : state === 'failed' ? 'Could not copy' : 'Copy AI instructions'}
     </Button>
+  )
+}
+
+/**
+ * A dropdown of the sample feature maps the server ships (WhatsApp, Uber…).
+ * Picking one loads its markdown into the playground, ready to import as a
+ * test project.
+ */
+function SamplesButton({ onLoad }: { onLoad: (markdown: string) => void }) {
+  const samples = useSamples()
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState<string | null>(null)
+  const box = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: Event) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
+    }
+    const esc = (e: Event) => {
+      if ((e as globalThis.KeyboardEvent).key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [open])
+
+  const list = samples.data ?? []
+
+  async function pick(id: string) {
+    setLoading(id)
+    try {
+      const sample = await fetchSample(id)
+      onLoad(sample.markdown)
+      setOpen(false)
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  return (
+    <div ref={box} className="relative">
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        <Sparkles className="h-3.5 w-3.5" />
+        Samples
+      </Button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 z-30 mt-1 w-56 overflow-hidden rounded-md border border-border bg-surface py-1 shadow-pop"
+        >
+          {list.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-muted">
+              {samples.isLoading ? 'Loading…' : 'No samples available.'}
+            </p>
+          ) : (
+            list.map((s) => (
+              <button
+                key={s.id}
+                role="menuitem"
+                type="button"
+                disabled={loading !== null}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-ink hover:bg-raised disabled:opacity-60"
+                onClick={() => pick(s.id)}
+              >
+                {s.name}
+                {loading === s.id && <Loader2 className="h-3 w-3 animate-spin" />}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

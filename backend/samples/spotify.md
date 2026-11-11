@@ -1,0 +1,51 @@
+# Spotify
+
+- Onboarding
+  - Email Signup
+  - Social Login
+  - Taste Setup
+- Account > needs: Onboarding
+  - Profile
+  - Subscription Plans
+  - Payment Methods
+- Music Library > needs: Account
+  - Liked Songs
+  - Saved Albums
+  - Followed Artists
+  - Playlists
+    - Create Playlist
+    - Collaborative Playlist
+    - Playlist Folders
+- Playback > needs: Music Library
+  - Play Controls
+  - Queue Management
+  - Crossfade
+  - Gapless Playback
+  - Offline Mode
+  - Audio Quality
+- Discovery > needs: Music Library
+  - Search
+  - Browse Genres
+  - Daily Mixes
+  - Release Radar
+  - Recommendations
+- Podcasts > needs: Account
+  - Podcast Search
+  - Episode Downloads
+  - Playback Speed
+  - Show Subscriptions
+- Social > needs: Account
+  - Friend Activity
+  - Share Tracks
+  - Listening Sessions
+- Connected Devices > needs: Playback
+  - Speaker Casting
+  - Device Switching
+- Lyrics > needs: Playback
+  - Synced Lyrics
+  - Lyrics Sharing
+- Settings
+  - Theme Options
+  - Data Saver
+  - Equalizer
+  - Language Preference

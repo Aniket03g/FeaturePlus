@@ -1503,6 +1503,26 @@ export function useUndeleteVersion(projectId: number) {
   })
 }
 
+/** A ready-made feature map the server ships, for importing a test project. */
+export interface Sample {
+  id: string
+  name: string
+}
+
+/** The sample feature maps bundled with the server. */
+export function useSamples() {
+  return useQuery({
+    queryKey: ['samples'] as const,
+    queryFn: () => api.get<Sample[]>('/samples'),
+    staleTime: 60 * 60 * 1000,
+  })
+}
+
+/** One sample map's markdown, to load into the playground. */
+export function fetchSample(id: string) {
+  return api.get<{ id: string; name: string; markdown: string }>(`/samples/${id}`)
+}
+
 /** Remove a deleted version for good. */
 export function usePermanentDeleteVersion(projectId: number) {
   const queryClient = useQueryClient()

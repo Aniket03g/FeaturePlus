@@ -55,6 +55,8 @@ Method: GET, Path: /api/v1/me/space
 Method: GET, Path: /api/v1/attachments/:attachmentId
 Method: GET, Path: /api/v1/attachments/:attachmentId/content
 Method: GET, Path: /api/v1/auth/signup
+Method: GET, Path: /api/v1/samples
+Method: GET, Path: /api/v1/samples/:id
 Method: GET, Path: /api/v1/users
 Method: GET, Path: /api/v1/users/:userId
 Method: GET, Path: /api/v1/invites

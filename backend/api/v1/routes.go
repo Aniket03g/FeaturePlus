@@ -64,6 +64,7 @@ func Register(router *gin.Engine, db *gorm.DB, deps Deps) {
 	authed.POST("/me/password", changePasswordHandler(db))
 	authed.POST("/users/:userId/password", resetPasswordHandler(db))
 	registerInviteRoutes(authed, db)
+	registerSampleRoutes(authed)
 	registerProjectSettingsRoutes(authed, db)
 	registerMessageRoutes(authed, db)
 

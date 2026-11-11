@@ -1,0 +1,54 @@
+# Uber
+
+- Onboarding
+  - Phone Signup
+  - Profile Setup
+  - Payment Setup
+- Rider App > needs: Onboarding
+  - Request Ride
+    - Pickup Location
+    - Destination Search
+    - Ride Confirmation
+  - Fare Estimate
+  - Live Tracking
+  - Driver Details
+  - In Ride Chat
+  - Trip History
+  - Rate Driver
+- Driver App > needs: Onboarding
+  - Driver Signup
+  - Document Upload
+  - Go Online
+  - Accept Requests
+  - Turn By Turn Navigation
+  - Earnings Dashboard
+  - Trip Queue
+- Ride Types > needs: Rider App
+  - Economy Rides
+  - Premium Rides
+  - Shared Rides
+  - Reserved Rides
+- Payments > needs: Rider App
+  - Card Payments
+  - Wallet Balance
+  - Ride Receipts
+  - Promo Codes
+  - Split Fare
+- Maps and Routing > needs: Rider App
+  - Route Planning
+  - Traffic Updates
+  - Surge Pricing
+- Safety > needs: Rider App
+  - Share Trip
+  - Emergency Button
+  - Trusted Contacts
+- Notifications > needs: Rider App
+  - Ride Alerts
+  - Promo Alerts
+- Support > needs: Rider App
+  - Help Center
+  - Report Issue
+  - Lost Items
+- Business Profiles > needs: Payments
+  - Work Trips
+  - Expense Reports
