@@ -1,21 +1,28 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ChevronRight,
   Download,
+  Eye,
   GitCompare,
   ListTree,
   Loader2,
   MoreHorizontal,
+  Pencil,
   RotateCcw,
   Save,
   Send,
+  Trash2,
   Upload,
 } from 'lucide-react'
 import {
   useCopies,
+  useDeletedVersions,
+  useDeleteVersion,
+  usePermanentDeleteVersion,
   useProject,
   useSetVersionNote,
-  useSetWorkingNote,
+  useUndeleteVersion,
   useVersion,
   useVersionsWithChanges,
   type FeatureCopy,
@@ -26,6 +33,8 @@ import { useWorkingState, versionNote } from '@/lib/working'
 import { StartCopyDialog } from '@/pages/StartCopyDialog'
 import { PublishDialog, RestoreDialog, SaveVersionDialog } from '@/pages/PublishDialog'
 import { useRouter } from '@/lib/router'
+import { ApiError } from '@/lib/api'
+import { Dialog } from '@/components/Dialog'
 import { NoteEditor } from '@/components/NoteEditor'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -34,7 +43,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { STATUS_LABEL, canDownload, canEditPlan, canPublish, type FeatureStatus } from '@/lib/types'
 import { cn, plural } from '@/lib/utils'
 
-type Tab = 'versions' | 'copies'
+type Tab = 'versions' | 'copies' | 'deleted'
 
 /** The tabs along the top of the Versions screens: the saved versions, and the published list. */
 export function ProjectListTabs({
@@ -43,7 +52,7 @@ export function ProjectListTabs({
   versionCount,
 }: {
   projectId: number
-  active: 'versions' | 'published' | 'copies'
+  active: 'versions' | 'published' | 'copies' | 'deleted'
   versionCount?: number
 }) {
   const { navigate } = useRouter()
@@ -55,6 +64,7 @@ export function ProjectListTabs({
       versionCount !== undefined ? <span className="text-faint">{versionCount}</span> : null,
     ],
     ['published', 'Published', () => navigate({ name: 'project', projectId }), null],
+    ['deleted', 'Deleted', () => navigate({ name: 'versions', projectId, tab: 'deleted' }), null],
   ]
   return (
     <div role="tablist" aria-label="Versions and published list" className="flex gap-1 border-b border-border">
@@ -66,7 +76,14 @@ export function ProjectListTabs({
           onClick={go}
           className={cn(
             '-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 pb-2 pt-1 text-sm font-medium transition-colors',
-            active === id ? 'border-accent text-ink' : 'border-transparent text-muted hover:text-ink',
+            // The Deleted tab is kept subdued, since it is a side bin, not a main view.
+            id === 'deleted'
+              ? active === id
+                ? 'border-faint text-muted'
+                : 'border-transparent text-faint hover:text-muted'
+              : active === id
+                ? 'border-accent text-ink'
+                : 'border-transparent text-muted hover:text-ink',
           )}
         >
           {label}
@@ -100,46 +117,68 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
   const [saving, setSaving] = useState(false)
   const [starting, setStarting] = useState(false)
   const [justUploaded, setJustUploaded] = useState<{ id: number; message: string } | null>(null)
-  const [publishedOnly, setPublishedOnly] = useState(false)
   const tab = initialTab
 
   const list = versions.data ?? []
   const working = useWorkingState(projectId)
+  const unsaved = working.unsaved ?? 0
+  const base = working.latest
+  const changed = unsaved > 0 || working.neverSaved
+  const goToWorking = () => navigate({ name: 'inProgress', projectId })
+  const [publishAfterSave, setPublishAfterSave] = useState(false)
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-base font-semibold text-ink">{project.data?.name ?? ' '}</h2>
+          {/* The working version, just below the project name: what it is based on,
+              whether it has changed, and the ways to act on it. */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-medium text-ink">Current version is</span>
+            <span className="text-muted">
+              Based on: <span className="font-mono font-semibold text-ink">{base ? base.label : '—'}</span>
+            </span>
+            <span className="text-faint">·</span>
+            {working.neverSaved ? (
+              <span className="font-medium text-warning">Not saved yet</span>
+            ) : changed ? (
+              <span className="flex items-center gap-1.5">
+                <span className="font-medium text-warning">Changed</span>
+                {working.unsavedCounts && <Counts c={working.unsavedCounts} />}
+              </span>
+            ) : (
+              <span className="font-medium text-success">Unchanged</span>
+            )}
+            <Button variant="secondary" size="sm" className="h-7" onClick={goToWorking}>
+              <ListTree className="h-3.5 w-3.5" />
+              Go to working version
+            </Button>
+            {canSave && changed && (
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                {mayPublish && (
+                  <label
+                    className="flex cursor-pointer items-center gap-1.5 text-muted"
+                    title={`Publish ${working.nextSave} as ${working.nextPublish} right after saving`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={publishAfterSave}
+                      onChange={(e) => setPublishAfterSave(e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-border accent-accent"
+                    />
+                    Publish
+                  </label>
+                )}
+                <Button size="sm" className="h-7" onClick={() => setSaving(true)}>
+                  <Save className="h-3.5 w-3.5" />
+                  Save as <span className="font-mono">{working.nextSave}</span>
+                </Button>
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {tab === 'versions' && (
-            <>
-              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted">
-                <input type="checkbox" checked={publishedOnly} onChange={(e) => setPublishedOnly(e.target.checked)} />
-                Published only
-              </label>
-              {list.length >= 2 && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() =>
-                    navigate({
-                      name: 'compare',
-                      projectId,
-                      from: String(
-                        (working.published && working.published.id !== list[0].id ? working.published : list[1]).id,
-                      ),
-                      to: String(list[0].id),
-                    })
-                  }
-                >
-                  <GitCompare className="h-3.5 w-3.5" />
-                  Compare two versions…
-                </Button>
-              )}
-            </>
-          )}
           {tab === 'copies' && list.length > 0 && (
             <Button size="sm" variant="secondary" className="gap-1.5" onClick={() => setStarting(true)}>
               <Download className="h-3.5 w-3.5" />
@@ -155,13 +194,14 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
         <VersionsTable
           projectId={projectId}
           versions={versions}
-          publishedOnly={publishedOnly}
+          publishedOnly={false}
           canSave={canSave}
           mayPublish={mayPublish}
           mayOpen={mayOpen}
           mayDownload={mayDownload}
-          onSave={() => setSaving(true)}
         />
+      ) : tab === 'deleted' ? (
+        <DeletedTable projectId={projectId} canSave={canSave} />
       ) : (
         <CopiesTab
           projectId={projectId}
@@ -194,7 +234,13 @@ export function VersionsPage({ projectId, initialTab = 'versions' }: { projectId
         />
       )}
 
-      {saving && <SaveVersionDialog projectId={projectId} onClose={() => setSaving(false)} />}
+      {saving && (
+        <SaveVersionDialog
+          projectId={projectId}
+          publishAfter={publishAfterSave && mayPublish}
+          onClose={() => setSaving(false)}
+        />
+      )}
     </div>
   )
 }
@@ -215,7 +261,131 @@ function Counts({ c }: { c: { added: number; removed: number; changed: number } 
   )
 }
 
-function VersionsTable({
+// ---------- deleted tab ----------
+
+/**
+ * The versions marked as deleted. A side bin, drawn subdued: each row can be
+ * brought back (Undo delete) or removed for good (Delete permanently).
+ */
+function DeletedTable({ projectId, canSave }: { projectId: number; canSave: boolean }) {
+  const deleted = useDeletedVersions(projectId)
+  const undelete = useUndeleteVersion(projectId)
+  const permaDelete = usePermanentDeleteVersion(projectId)
+  const [confirming, setConfirming] = useState<FeatureVersion | null>(null)
+  const [error, setError] = useState('')
+
+  async function confirmPermanent() {
+    if (!confirming) return
+    setError('')
+    try {
+      await permaDelete.mutateAsync(confirming.id)
+      setConfirming(null)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not remove the version')
+    }
+  }
+
+  if (deleted.isLoading) {
+    return (
+      <Card className="space-y-2 p-4">
+        <Skeleton className="h-10 w-full" />
+      </Card>
+    )
+  }
+  if (deleted.isError) {
+    return (
+      <Card className="flex items-center gap-2 px-4 py-6 text-sm text-danger">
+        Could not load the deleted versions.
+        <Button variant="secondary" size="sm" onClick={() => deleted.refetch()}>
+          Try again
+        </Button>
+      </Card>
+    )
+  }
+
+  const rows = deleted.data ?? []
+
+  return (
+    <div className="space-y-3">
+      <Card className="overflow-x-auto bg-raised/30">
+        <table className="w-full min-w-[800px] text-sm text-muted">
+          <thead>
+            <tr className="whitespace-nowrap border-b border-border text-left text-2xs font-semibold uppercase tracking-wider text-faint">
+              <th className="px-4 py-2.5 font-semibold">Version</th>
+              <th className="px-4 py-2.5 font-semibold">Based on</th>
+              <th className="px-4 py-2.5 font-semibold">Actions</th>
+              <th className="px-4 py-2.5 font-semibold">Saved by</th>
+              <th className="px-4 py-2.5 font-semibold">When</th>
+              <th className="px-4 py-2.5 font-semibold">Notes</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((v) => (
+              <tr key={v.id} className="text-faint">
+                <td className="whitespace-nowrap px-4 py-3 font-mono line-through">{v.label}</td>
+                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
+                  {v.based_on ? v.based_on.label : '—'}
+                </td>
+                <td className="px-4 py-3">
+                  {canSave ? (
+                    <RowMenu
+                      label={`Actions for ${v.label}`}
+                      items={[
+                        {
+                          icon: <RotateCcw className="h-3.5 w-3.5" />,
+                          text: 'Undo delete',
+                          onClick: () => undelete.mutate(v.id),
+                        },
+                        {
+                          icon: <Trash2 className="h-3.5 w-3.5" />,
+                          text: 'Delete permanently',
+                          onClick: () => setConfirming(v),
+                        },
+                      ]}
+                    />
+                  ) : (
+                    <span className="text-faint">—</span>
+                  )}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">{v.saved_by.name || '—'}</td>
+                <td className="whitespace-nowrap px-4 py-3">{when(v.published_at ?? v.created_at)}</td>
+                <td className="min-w-[14rem] max-w-sm px-4 py-3">
+                  {versionNote(v) || <span className="text-faint">—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length === 0 && (
+          <div className="px-4 py-10 text-center text-sm text-muted">No deleted versions.</div>
+        )}
+      </Card>
+
+      {confirming && (
+        <Dialog title={`Delete ${confirming.label} for good?`} onClose={() => setConfirming(null)}>
+          <div className="space-y-2 p-4 text-sm text-muted">
+            <p>
+              <span className="font-mono text-ink">{confirming.label}</span> is removed for good and cannot be brought
+              back.
+            </p>
+            {error && <p className="text-xs text-danger">{error}</p>}
+          </div>
+          <div className="flex justify-end gap-2 border-t border-border p-4">
+            <Button variant="ghost" onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={permaDelete.isPending} onClick={confirmPermanent}>
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete permanently
+            </Button>
+          </div>
+        </Dialog>
+      )}
+    </div>
+  )
+}
+
+export function VersionsTable({
   projectId,
   versions,
   publishedOnly,
@@ -223,7 +393,6 @@ function VersionsTable({
   mayPublish,
   mayOpen,
   mayDownload,
-  onSave,
 }: {
   projectId: number
   versions: ReturnType<typeof useVersionsWithChanges>
@@ -234,16 +403,29 @@ function VersionsTable({
   mayOpen: boolean
   /** Owner and publishers: download a version as .md. */
   mayDownload: boolean
-  onSave: () => void
 }) {
   const { navigate } = useRouter()
   const working = useWorkingState(projectId)
-  const setWorkingNote = useSetWorkingNote(projectId)
-  const setVersionNote = useSetVersionNote(projectId)
+  const deleteVersion = useDeleteVersion(projectId)
   const [previewing, setPreviewing] = useState<number | null>(null)
   const [publishing, setPublishing] = useState<FeatureVersion | null>(null)
   const [opening, setOpening] = useState<FeatureVersion | null>(null)
+  const [noting, setNoting] = useState<FeatureVersion | null>(null)
+  const [deleting, setDeleting] = useState<FeatureVersion | null>(null)
+  const [deleteError, setDeleteError] = useState('')
   const [message, setMessage] = useState('')
+
+  async function confirmDelete() {
+    if (!deleting) return
+    setDeleteError('')
+    try {
+      await deleteVersion.mutateAsync(deleting.id)
+      setMessage(`${deleting.label} was marked as deleted.`)
+      setDeleting(null)
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : 'Could not delete the version')
+    }
+  }
 
   if (versions.isLoading) {
     return (
@@ -266,9 +448,8 @@ function VersionsTable({
 
   const all = versions.data ?? []
   const shown = publishedOnly ? all.filter((v) => v.publish_number > 0) : all
-  const unsaved = working.unsaved ?? 0
   const base = working.latest
-  const changed = unsaved > 0 || working.neverSaved
+  const changed = (working.unsaved ?? 0) > 0 || working.neverSaved
   const goToWorking = () => navigate({ name: 'inProgress', projectId })
 
   return (
@@ -278,91 +459,27 @@ function VersionsTable({
           {message}
         </p>
       )}
+      {!publishedOnly && changed && (
+        <p className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning-soft/30 px-3 py-2 text-xs text-ink">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" aria-hidden />
+          The working version has unsaved changes{base ? <> since <span className="font-mono">{base.label}</span></> : ''}.
+          Save them as a version or discard them before you make another version the working version.
+        </p>
+      )}
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[1000px] text-sm">
           <thead>
             <tr className="whitespace-nowrap border-b border-border text-left text-2xs font-semibold uppercase tracking-wider text-faint">
               <th className="px-4 py-2.5 font-semibold">Version</th>
               <th className="px-4 py-2.5 font-semibold">Based on</th>
-              <th className="px-4 py-2.5 font-semibold">Note</th>
+              <th className="px-4 py-2.5 font-semibold">Actions</th>
+              <th className="px-4 py-2.5 font-semibold">Changes</th>
               <th className="px-4 py-2.5 font-semibold">Saved by</th>
               <th className="px-4 py-2.5 font-semibold">When</th>
-              <th className="px-4 py-2.5 font-semibold">Changes</th>
-              <th className="px-4 py-2.5 text-right font-semibold">Actions</th>
+              <th className="px-4 py-2.5 font-semibold">Notes</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {/* The working version, on top: what it is based on, and whether it changed since. */}
-            <tr className={cn(changed ? 'bg-warning-soft/20' : 'bg-accent-soft/10')}>
-              <td className="whitespace-nowrap px-4 py-3">
-                <span className="flex items-center gap-2 text-ink">
-                  <span className={cn('h-2 w-2 rounded-full', changed ? 'bg-warning' : 'bg-success')} aria-hidden />
-                  Working version
-                </span>
-              </td>
-              <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted">{base ? base.label : '—'}</td>
-              <td className="min-w-[16rem] max-w-sm px-4 py-3">
-                <NoteEditor
-                  note={working.note}
-                  empty={canSave ? 'Add a note' : 'No note'}
-                  title={working.note && working.noteBy ? `Note by ${working.noteBy}` : undefined}
-                  onSave={canSave ? (note) => setWorkingNote.mutateAsync(note) : undefined}
-                />
-              </td>
-              <td className="px-4 py-3 text-muted">—</td>
-              <td className="px-4 py-3 text-muted">now</td>
-              <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
-                {working.neverSaved ? (
-                  <span className="font-sans text-warning">Not saved yet</span>
-                ) : working.unsavedCounts ? (
-                  <Counts c={working.unsavedCounts} />
-                ) : (
-                  <span className="text-faint">…</span>
-                )}
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center justify-end gap-2">
-                  <Button variant="secondary" size="sm" className="whitespace-nowrap" onClick={goToWorking}>
-                    <ListTree className="h-3.5 w-3.5" />
-                    Go to working version
-                  </Button>
-                  {base && unsaved > 0 && (
-                    <RowMenu
-                      label="More for the working version"
-                      items={[
-                        {
-                          icon: <GitCompare className="h-3.5 w-3.5" />,
-                          text: `See the changes since ${base.label}`,
-                          onClick: () => navigate({ name: 'compare', projectId, from: String(base.id), to: 'current' }),
-                        },
-                        ...(mayOpen
-                          ? [
-                              {
-                                icon: <RotateCcw className="h-3.5 w-3.5" />,
-                                text: 'Discard the changes',
-                                onClick: () => setOpening(base),
-                              },
-                            ]
-                          : []),
-                      ]}
-                    />
-                  )}
-                  {canSave && changed && (
-                    <Button size="sm" className="whitespace-nowrap" onClick={onSave}>
-                      <Save className="h-3.5 w-3.5" />
-                      Save as <span className="font-mono">{working.nextSave}</span>
-                    </Button>
-                  )}
-                  {mayPublish && base && unsaved === 0 && base.publish_number === 0 && (
-                    <Button size="sm" className="whitespace-nowrap" onClick={() => setPublishing(base)}>
-                      <Send className="h-3.5 w-3.5" />
-                      Publish <span className="font-mono">{base.label}</span>
-                    </Button>
-                  )}
-                </div>
-              </td>
-            </tr>
-
             {shown.map((v) => (
               <VersionRow
                 key={v.id}
@@ -374,21 +491,23 @@ function VersionsTable({
                 onPreview={() => setPreviewing(previewing === v.id ? null : v.id)}
                 onView={base?.id === v.id ? goToWorking : mayOpen ? () => setOpening(v) : undefined}
                 onPublish={mayPublish && working.published?.id !== v.id ? () => setPublishing(v) : undefined}
-                onNote={canSave ? (notes) => setVersionNote.mutateAsync({ versionId: v.id, notes }) : undefined}
+                onAddNote={canSave ? () => setNoting(v) : undefined}
+                onDelete={canSave && v.publish_number === 0 && base?.id !== v.id ? () => setDeleting(v) : undefined}
                 mayDownload={mayDownload}
               />
             ))}
           </tbody>
         </table>
-        {all.length === 0 && (
+        {shown.length === 0 && (
           <div className="px-4 py-10 text-center">
             <div className="mx-auto mb-3 w-fit text-faint">
               <StackPicture />
             </div>
-            <p className="text-sm font-medium text-ink">No versions yet</p>
+            <p className="text-sm font-medium text-ink">{publishedOnly ? 'Nothing published yet' : 'No versions yet'}</p>
             <p className="mx-auto mt-1 max-w-md text-xs text-muted">
-              Save the working version to keep it as it is now. Saves count up as v0.1, v0.2… and publishing one makes
-              it v1, the list everyone reads.
+              {publishedOnly
+                ? 'Publishing a saved version makes it v1, v2… — the list everyone reads.'
+                : 'Save the working version to keep it as it is now. Saves count up as v0.1, v0.2… and publishing one makes it v1, the list everyone reads.'}
             </p>
           </div>
         )}
@@ -416,7 +535,78 @@ function VersionsTable({
           onDone={() => navigate({ name: 'inProgress', projectId })}
         />
       )}
+      {noting && <VersionNoteDialog projectId={projectId} version={noting} onClose={() => setNoting(null)} />}
+      {deleting && (
+        <Dialog title={`Mark ${deleting.label} as deleted?`} onClose={() => setDeleting(null)}>
+          <div className="space-y-2 p-4 text-sm text-muted">
+            <p>
+              <span className="font-mono text-ink">{deleting.label}</span> is hidden from the versions list. Its number
+              is kept, so later saves do not reuse it.
+            </p>
+            {deleteError && <p className="text-xs text-danger">{deleteError}</p>}
+          </div>
+          <div className="flex justify-end gap-2 border-t border-border p-4">
+            <Button variant="ghost" onClick={() => setDeleting(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" loading={deleteVersion.isPending} onClick={confirmDelete}>
+              <Trash2 className="h-3.5 w-3.5" />
+              Mark as deleted
+            </Button>
+          </div>
+        </Dialog>
+      )}
     </div>
+  )
+}
+
+/** A dialog to add or edit a saved version's note. */
+function VersionNoteDialog({
+  projectId,
+  version,
+  onClose,
+}: {
+  projectId: number
+  version: FeatureVersion
+  onClose: () => void
+}) {
+  const setNote = useSetVersionNote(projectId)
+  const [text, setText] = useState(versionNote(version))
+  const [error, setError] = useState('')
+
+  async function save() {
+    setError('')
+    try {
+      await setNote.mutateAsync({ versionId: version.id, notes: text.trim() })
+      onClose()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not reach the server')
+    }
+  }
+
+  return (
+    <Dialog title={`Notes for ${version.label}`} onClose={onClose}>
+      <div className="space-y-3 p-4">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={4}
+          maxLength={2000}
+          autoFocus
+          placeholder="What this version is for, e.g. Ready for client review"
+          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40"
+        />
+        {error && <p className="text-xs text-danger">{error}</p>}
+      </div>
+      <div className="flex justify-end gap-2 border-t border-border p-4">
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button loading={setNote.isPending} onClick={save}>
+          Save notes
+        </Button>
+      </div>
+    </Dialog>
   )
 }
 
@@ -429,7 +619,8 @@ function VersionRow({
   onPreview,
   onView,
   onPublish,
-  onNote,
+  onAddNote,
+  onDelete,
   mayDownload,
 }: {
   /** Owner and publishers may download the version as .md. */
@@ -444,7 +635,10 @@ function VersionRow({
   /** Opens it as the working version; missing without the right to. */
   onView?: () => void
   onPublish?: () => void
-  onNote?: (notes: string) => Promise<unknown>
+  /** Opens the note dialog for this version; missing without the right to edit. */
+  onAddNote?: () => void
+  /** Marks this version as deleted; missing when it cannot be deleted. */
+  onDelete?: () => void
 }) {
   const { navigate } = useRouter()
   const published = version.publish_number > 0
@@ -478,13 +672,60 @@ function VersionRow({
         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted">
           {version.based_on ? version.based_on.label : '—'}
         </td>
-        <td className="min-w-[16rem] max-w-sm px-4 py-3">
-          <NoteEditor note={versionNote(version)} strong={published} onSave={onNote} />
+        <td className="px-4 py-3">
+          <RowMenu
+            label={`Actions for ${version.label}`}
+            items={[
+              ...(onView
+                ? [
+                    {
+                      icon: <Eye className="h-3.5 w-3.5" />,
+                      text: live ? 'Go to the working version' : 'Make this the working version',
+                      onClick: onView,
+                    },
+                  ]
+                : []),
+              {
+                icon: <GitCompare className="h-3.5 w-3.5" />,
+                text: 'Compare with the working version',
+                onClick: () => navigate({ name: 'compare', projectId, from: String(version.id), to: 'current' }),
+              },
+              ...(onAddNote
+                ? [
+                    {
+                      icon: <Pencil className="h-3.5 w-3.5" />,
+                      text: versionNote(version) ? 'Edit notes' : 'Add notes',
+                      onClick: onAddNote,
+                    },
+                  ]
+                : []),
+              ...(onDelete
+                ? [{ icon: <Trash2 className="h-3.5 w-3.5" />, text: 'Mark as deleted', onClick: onDelete }]
+                : []),
+              ...(onPublish
+                ? [{ icon: <Send className="h-3.5 w-3.5" />, text: `Publish ${version.label}`, onClick: onPublish }]
+                : []),
+              {
+                icon: <ListTree className="h-3.5 w-3.5" />,
+                text: previewing ? 'Hide the list' : 'Look at the list',
+                onClick: onPreview,
+              },
+              ...(mayDownload
+                ? [
+                    {
+                      icon: downloading ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Download className="h-3.5 w-3.5" />
+                      ),
+                      text: 'Download .md',
+                      onClick: download,
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </td>
-        <td className={cn('whitespace-nowrap px-4 py-3', published ? 'font-semibold text-ink' : 'text-muted')}>
-          {version.saved_by.name || 'someone since removed'}
-        </td>
-        <td className="whitespace-nowrap px-4 py-3 text-muted">{when(version.published_at ?? version.created_at)}</td>
         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
           {c ? (
             <Counts c={c} />
@@ -492,53 +733,12 @@ function VersionRow({
             <span className="font-sans text-muted">{plural(version.feature_count, 'feature')}</span>
           )}
         </td>
-        <td className="px-4 py-3">
-          <div className="flex items-center justify-end gap-1.5">
-            {onView && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onView}
-                title={live ? 'Go to the working version' : `Open ${version.label} as the working version`}
-              >
-                View
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => navigate({ name: 'compare', projectId, from: String(version.id), to: 'current' })}
-              title={`What changed from ${version.label} to the working version`}
-            >
-              Compare
-            </Button>
-            <RowMenu
-              label={`More for ${version.label}`}
-              items={[
-                ...(onPublish
-                  ? [{ icon: <Send className="h-3.5 w-3.5" />, text: `Publish ${version.label}`, onClick: onPublish }]
-                  : []),
-                {
-                  icon: <ListTree className="h-3.5 w-3.5" />,
-                  text: previewing ? 'Hide the list' : 'Look at the list',
-                  onClick: onPreview,
-                },
-                ...(mayDownload
-                  ? [
-                      {
-                        icon: downloading ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Download className="h-3.5 w-3.5" />
-                        ),
-                        text: 'Download .md',
-                        onClick: download,
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-          </div>
+        <td className={cn('whitespace-nowrap px-4 py-3', published ? 'font-semibold text-ink' : 'text-muted')}>
+          {version.saved_by.name || 'someone since removed'}
+        </td>
+        <td className="whitespace-nowrap px-4 py-3 text-muted">{when(version.published_at ?? version.created_at)}</td>
+        <td className="min-w-[16rem] max-w-sm px-4 py-3">
+          <NoteEditor note={versionNote(version)} strong={published} />
         </td>
       </tr>
       {previewing && (
@@ -553,25 +753,48 @@ function VersionRow({
 }
 
 /** A "⋯" button with a short menu under it. */
+const ROW_MENU_WIDTH = 224 // matches the w-56 the menu used to have
+
+// The menu is drawn in a portal with fixed positioning, so it escapes the
+// table's overflow box (overflow-x-auto clips it otherwise) and is never cut
+// off at a row's edge.
 function RowMenu({ label, items }: { label: string; items: { icon: ReactNode; text: string; onClick: () => void }[] }) {
   const [open, setOpen] = useState(false)
-  const box = useRef<HTMLDivElement>(null)
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
+  const trigger = useRef<HTMLSpanElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
+
+  function place() {
+    const el = trigger.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    setCoords({ top: r.bottom + 4, left: Math.max(8, r.right - ROW_MENU_WIDTH) })
+  }
+
   useEffect(() => {
     if (!open) return
-    const close = (event: MouseEvent) => {
-      if (box.current && !box.current.contains(event.target as Node)) setOpen(false)
+    const onDown = (event: MouseEvent) => {
+      const t = event.target as Node
+      if (trigger.current?.contains(t) || menu.current?.contains(t)) return
+      setOpen(false)
     }
-    const escape = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false)
-    document.addEventListener('mousedown', close)
-    document.addEventListener('keydown', escape)
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false)
+    const dismiss = () => setOpen(false)
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('resize', dismiss)
+    // Any ancestor scrolling (the table box included) would move the trigger.
+    window.addEventListener('scroll', dismiss, true)
     return () => {
-      document.removeEventListener('mousedown', close)
-      document.removeEventListener('keydown', escape)
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', dismiss)
+      window.removeEventListener('scroll', dismiss, true)
     }
   }, [open])
 
   return (
-    <div ref={box} className="relative">
+    <span ref={trigger} className="inline-flex">
       <Button
         variant="ghost"
         size="sm"
@@ -579,33 +802,41 @@ function RowMenu({ label, items }: { label: string; items: { icon: ReactNode; te
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!open) place()
+          setOpen((v) => !v)
+        }}
       >
         <MoreHorizontal className="h-4 w-4" />
       </Button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 z-30 mt-1 w-56 overflow-hidden rounded-md border border-border bg-surface py-1 shadow-pop"
-        >
-          {items.map((item) => (
-            <button
-              key={item.text}
-              role="menuitem"
-              type="button"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink hover:bg-raised"
-              onClick={() => {
-                setOpen(false)
-                item.onClick()
-              }}
-            >
-              <span className="text-muted">{item.icon}</span>
-              {item.text}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      {open &&
+        coords &&
+        createPortal(
+          <div
+            ref={menu}
+            role="menu"
+            style={{ top: coords.top, left: coords.left, width: ROW_MENU_WIDTH }}
+            className="fixed z-50 overflow-hidden rounded-md border border-border bg-surface py-1 shadow-pop"
+          >
+            {items.map((item) => (
+              <button
+                key={item.text}
+                role="menuitem"
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-ink hover:bg-raised"
+                onClick={() => {
+                  setOpen(false)
+                  item.onClick()
+                }}
+              >
+                <span className="text-muted">{item.icon}</span>
+                {item.text}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </span>
   )
 }
 

@@ -58,7 +58,7 @@ export type Route =
   | { name: 'code'; projectId: number }
   | { name: 'contracts'; projectId: number }
   | { name: 'briefing'; projectId: number }
-  | { name: 'versions'; projectId: number; tab?: 'copies' }
+  | { name: 'versions'; projectId: number; tab?: 'copies' | 'deleted' }
   | { name: 'merge'; projectId: number; copyId: number }
   | { name: 'compare'; projectId: number; from: string; to: string }
   | { name: 'projectSettings'; projectId: number }
@@ -125,6 +125,7 @@ export function parseRoute(pathname: string): Route {
   if (!Number.isFinite(projectId) || projectId <= 0) return { name: 'projects' }
 
   if (parts[2] === 'versions' && parts[3] === 'copies') return { name: 'versions', projectId, tab: 'copies' }
+  if (parts[2] === 'versions' && parts[3] === 'deleted') return { name: 'versions', projectId, tab: 'deleted' }
 
   if (parts[2] === 'compare' && parts[3] && parts[4]) return { name: 'compare', projectId, from: parts[3], to: parts[4] }
 
@@ -206,7 +207,7 @@ export function routeToPath(route: Route): string {
     case 'briefing':
       return `${BASE}/projects/${route.projectId}/briefing`
     case 'versions':
-      return `${BASE}/projects/${route.projectId}/versions${route.tab === 'copies' ? '/copies' : ''}`
+      return `${BASE}/projects/${route.projectId}/versions${route.tab === 'copies' ? '/copies' : route.tab === 'deleted' ? '/deleted' : ''}`
     case 'compare':
       return `${BASE}/projects/${route.projectId}/compare/${route.from}/${route.to}`
     case 'merge':

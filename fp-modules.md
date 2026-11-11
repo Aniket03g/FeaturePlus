@@ -292,6 +292,28 @@ Use it two ways:
 
 ---
 
+## 19. Feature List & Versions UI rework (implemented)
+
+> A layout pass over the feature list header and the Versions page: a compact
+> working-version summary, a save-then-publish checkbox, and a cleaner split of
+> filters vs. list. All frontend; the save→publish checkbox reuses existing
+> version/publish APIs.
+
+| Feature / Subfeature | Plan | Parameters / code affected |
+|----------------------|------|----------------------------|
+| Feature list › Remove Versions & Share buttons | `CHANGE_UI_COMPONENT` | `pages/ProjectDetail.tsx` header (dropped `ShareDialog` use, `sharing` state, `History`/`Users`/`canManage` imports) |
+| Feature list › Remove mini dashboard | `CHANGE_UI_COMPONENT` | `pages/ProjectDetail.tsx` (dropped `MiniStat` tiles + component, `stats`, `percent` import) |
+| Feature list › Working pill "Based on / Changes" | `CHANGE_UI_COMPONENT` | `pages/ProjectDetail.tsx:WorkingBadge` → "Based on: ⟨v⟩ · Changes: None/N" |
+| Feature list › Publish-after-save checkbox | `CHANGE_UI_COMPONENT` | `pages/ProjectDetail.tsx` checkbox + Save-as before the Note row; `publishAfterSave` state |
+| Feature list › Save then publish | `CHANGE_FUNCTION` | `pages/PublishDialog.tsx:SaveVersionDialog` `publishAfter` prop → `useSaveVersion` then `usePublishVersion` |
+| Feature list › Filters light box | `CHANGE_UI_COMPONENT` | `pages/ProjectDetail.tsx` search/filters in own `Card bg-raised/50`, list in separate card |
+| Feature list › "Feature List" heading + action pills | `CHANGE_UI_COMPONENT` | `pages/ProjectDetail.tsx` background `<h3>` with Arrange / Add feature / Refresh beside it |
+| Versions › Working-version summary moved to header | `CHANGE_UI_COMPONENT` | `pages/VersionsPage.tsx` line below project name: "Current version is  Based on: ⟨v⟩ · Unchanged/Changed (+`Counts` diffs)" + Go to working version pill |
+| Versions › Save + grouped Publish checkbox | `CHANGE_UI_COMPONENT` | `pages/VersionsPage.tsx` Save-as + Publish checkbox grouped (non-wrapping); `publishAfter` → `SaveVersionDialog` |
+| Versions › Drop working row from table | `CHANGE_UI_COMPONENT` | `pages/VersionsPage.tsx:VersionsTable` (removed working `<tr>`, `onSave` prop, `setWorkingNote`/`RotateCcw`/`useSetWorkingNote`) |
+
+---
+
 ### How to extend this map (forward use)
 
 1. Name the feature path `Domain › Feature › Subfeature › detail` (1–4 levels).

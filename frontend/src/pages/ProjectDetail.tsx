@@ -10,7 +10,6 @@ import {
   Clock,
   Download,
   GripVertical,
-  History,
   ListChecks,
   Loader2,
   Palette,
@@ -18,7 +17,6 @@ import {
   Save,
   Send,
   Plus,
-  Users,
   X,
 } from 'lucide-react'
 import {
@@ -47,9 +45,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatusCell, PriorityPill, TagList } from '@/components/FeatureBits'
 import { NewFeatureDialog } from './NewFeatureDialog'
 import { ColorDot, FEATURE_COLORS } from '@/components/FeatureColor'
-import { ShareDialog } from './ShareDialog'
 import { PublishDialog, SaveVersionDialog } from './PublishDialog'
-import { cn, percent, plural } from '@/lib/utils'
+import { cn, plural } from '@/lib/utils'
 import {
   KIND_LABEL,
   ROLE_LABEL,
@@ -58,7 +55,6 @@ import {
   canDownload,
   canEditInfo,
   canEditPlan,
-  canManage,
   canPublish,
   type Feature,
   type FeatureStatus,
@@ -205,9 +201,10 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
   const [tag, setTag] = useState('')
   const [search, setSearch] = useState('')
   const [creating, setCreating] = useState(false)
-  const [sharing, setSharing] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [savingVersion, setSavingVersion] = useState(false)
+  // When set, saving a version publishes it straight after.
+  const [publishAfterSave, setPublishAfterSave] = useState(false)
   const [recentOnly, setRecentOnly] = useState(false)
 
   // Where the list stands against its saved versions, and which version its
@@ -501,7 +498,7 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
     )
   }
 
-  const stats = project.data?.stats
+
   const role = project.data?.my_role
   // Until the role is known, editing is not offered.
   const canEdit = canEditPlan(role)
@@ -551,6 +548,31 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
                 )}
               </div>
               {project.data?.description && <p className="mt-0.5 text-sm text-muted">{project.data.description}</p>}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {mayDownload && <DownloadFileButton projectId={projectId} />}
+                {canEdit && needsSave && (
+                  <div className="ml-auto flex items-center gap-2">
+                    {mayPublish && (
+                      <label
+                        className="flex items-center gap-1.5 text-xs text-muted"
+                        title={`Publish ${working.nextSave} as ${working.nextPublish} right after saving`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={publishAfterSave}
+                          onChange={(e) => setPublishAfterSave(e.target.checked)}
+                          className="h-3.5 w-3.5 rounded border-border accent-accent"
+                        />
+                        Publish
+                      </label>
+                    )}
+                    <Button size="sm" onClick={() => setSavingVersion(true)} title="Keep the list as it is now as a version">
+                      <Save className="h-3.5 w-3.5" />
+                      Save as <span className="font-mono">{working.nextSave}</span>
+                    </Button>
+                  </div>
+                )}
+              </div>
               {(working.note || canEdit) && !working.isLoading && (
                 <div className="mt-1.5 flex max-w-xl items-center gap-2 text-xs">
                   <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-faint">
@@ -570,26 +592,6 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          {working.published && (
-            <span className="text-xs text-muted">
-              Last published <span className="font-mono font-semibold text-ink">{working.published.label}</span>
-            </span>
-          )}
-          <RefreshButton />
-          <Button variant="secondary" size="sm" onClick={() => navigate({ name: 'versions', projectId })}>
-            <History className="h-3.5 w-3.5" />
-            Versions
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => setSharing(true)}>
-            <Users className="h-3.5 w-3.5" />
-            Share
-          </Button>
-          {canEdit && needsSave && (
-            <Button size="sm" onClick={() => setSavingVersion(true)} title="Keep the list as it is now as a version">
-              <Save className="h-3.5 w-3.5" />
-              Save as <span className="font-mono">{working.nextSave}</span>
-            </Button>
-          )}
           {mayPublish && publishable && latest && (
             <Button
               size="sm"
@@ -603,17 +605,8 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
         </div>
       </div>
 
-      {stats && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MiniStat label="Features" value={stats.feature_count} />
-          <MiniStat label="Done" value={stats.completed_features} tone="success" />
-          <MiniStat label="Tasks" value={stats.task_count} />
-          <MiniStat label="Progress" value={`${percent(stats.completed_features, stats.feature_count)}%`} />
-        </div>
-      )}
-
-      <Card>
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
+      <Card className="bg-raised/50">
+        <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
           {!arranging && (
             <>
               <input
@@ -757,47 +750,11 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             </div>
           )}
 
-          {canEdit && items.length > 0 && (
-            <Button
-              variant={arranging ? 'primary' : 'secondary'}
-              size="sm"
-              className="h-7"
-              disabled={hasFilters && !arranging}
-              onClick={() => {
-                setArranging((v) => !v)
-                setAddingTo(null)
-                setMoveError('')
-              }}
-              aria-pressed={arranging}
-              title={
-                hasFilters && !arranging
-                  ? 'Clear the filters to arrange the whole list'
-                  : arranging
-                    ? 'Stop arranging'
-                    : 'Drag features to reorder them or move them between levels'
-              }
-            >
-              {arranging ? <Check className="h-3 w-3" /> : <GripVertical className="h-3 w-3" />}
-              {arranging ? 'Done arranging' : 'Arrange'}
+          {!arranging && hasFilters && (
+            <Button variant="ghost" size="sm" className="h-7" onClick={clearFilters}>
+              <X className="h-3 w-3" />
+              Clear
             </Button>
-          )}
-
-          {!arranging && (
-            <>
-              {mayDownload && <DownloadFileButton projectId={projectId} />}
-              {mayAdd && (
-                <Button size="sm" className="h-7" onClick={() => setCreating(true)}>
-                  <Plus className="h-3 w-3" />
-                  Add feature
-                </Button>
-              )}
-              {hasFilters && (
-                <Button variant="ghost" size="sm" className="h-7" onClick={clearFilters}>
-                  <X className="h-3 w-3" />
-                  Clear
-                </Button>
-              )}
-            </>
           )}
 
           {hasNesting && !hasFilters && (
@@ -825,7 +782,46 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
             </div>
           )}
         </div>
+      </Card>
 
+      <div className="mb-2 mt-4 flex items-center gap-2 px-1">
+        <h3 className="text-sm font-semibold text-ink">Feature List</h3>
+        <div className="ml-auto flex items-center gap-2">
+          {canEdit && items.length > 0 && (
+            <Button
+              variant={arranging ? 'primary' : 'secondary'}
+              size="sm"
+              className="h-7"
+              disabled={hasFilters && !arranging}
+              onClick={() => {
+                setArranging((v) => !v)
+                setAddingTo(null)
+                setMoveError('')
+              }}
+              aria-pressed={arranging}
+              title={
+                hasFilters && !arranging
+                  ? 'Clear the filters to arrange the whole list'
+                  : arranging
+                    ? 'Stop arranging'
+                    : 'Drag features to reorder them or move them between levels'
+              }
+            >
+              {arranging ? <Check className="h-3 w-3" /> : <GripVertical className="h-3 w-3" />}
+              {arranging ? 'Done arranging' : 'Arrange'}
+            </Button>
+          )}
+          {mayAdd && (
+            <Button size="sm" className="h-7" onClick={() => setCreating(true)}>
+              <Plus className="h-3 w-3" />
+              Add feature
+            </Button>
+          )}
+          <RefreshButton />
+        </div>
+      </div>
+
+      <Card>
         <CardBody className="p-0">
           {features.isLoading ? (
             <div className="divide-y divide-border">
@@ -1022,35 +1018,17 @@ export function ProjectDetail({ projectId }: { projectId: number }) {
 
       {creating && <NewFeatureDialog projectId={projectId} onClose={() => setCreating(false)} />}
 
-      {sharing && project.data && (
-        <ShareDialog
+      {savingVersion && (
+        <SaveVersionDialog
           projectId={projectId}
-          projectName={project.data.name}
-          canManage={canManage(role)}
-          onClose={() => setSharing(false)}
-          onLeft={() => navigate({ name: 'projects' })}
+          publishAfter={publishAfterSave && mayPublish}
+          onClose={() => setSavingVersion(false)}
         />
       )}
-      {savingVersion && <SaveVersionDialog projectId={projectId} onClose={() => setSavingVersion(false)} />}
       {publishing && latest && (
         <PublishDialog projectId={projectId} version={latest} onClose={() => setPublishing(false)} />
       )}
     </div>
-  )
-}
-
-function MiniStat({ label, value, tone }: { label: string; value: number | string; tone?: 'success' }) {
-  return (
-    <Card>
-      <CardBody className="px-3 py-2.5">
-        <p className="text-2xs font-medium uppercase tracking-wider text-faint">{label}</p>
-        <p
-          className={cn('mt-0.5 text-lg font-semibold tabular-nums', tone === 'success' ? 'text-success' : 'text-ink')}
-        >
-          {value}
-        </p>
-      </CardBody>
-    </Card>
   )
 }
 
@@ -1517,22 +1495,28 @@ function WorkingBadge({ working }: { working: ReturnType<typeof useWorkingState>
     )
   }
   if (!working.latest || working.unsaved === null) return null
-  if (working.unsaved > 0) {
-    return (
-      <span
-        className={cn(pill, 'border-warning/50 bg-warning-soft/40 text-warning')}
-        title="Your edits are kept as you make them; this counts what is not saved as a version yet"
-      >
-        <span className="h-1.5 w-1.5 rounded-full bg-warning" />
-        {plural(working.unsaved, 'change')} since <span className="font-mono">{working.latest.label}</span>
-      </span>
-    )
-  }
+  const dirty = working.unsaved > 0
   return (
-    <span className={cn(pill, 'border-border text-muted')}>
-      <Check className="h-3 w-3 text-success" />
-      Saved as <span className="font-mono">{working.latest.label}</span>
+    <span
+      className={cn(pill, dirty ? 'border-warning/50 bg-warning-soft/40 text-ink' : 'border-border text-muted')}
+      title={
+        dirty
+          ? `${plural(working.unsaved, 'feature')} differ from ${working.latest.label}; not saved as a version yet`
+          : `The list matches ${working.latest.label}`
+      }
+    >
+      {dirty ? (
+        <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+      ) : (
+        <Check className="h-3 w-3 text-success" />
+      )}
+      Based on: <span className="font-mono text-ink">{working.latest.label}</span>
       {working.latest.publish_number > 0 && ' · published'}
+      <span className="text-faint">·</span>
+      Changes:{' '}
+      <span className={cn('tabular-nums font-semibold', dirty ? 'text-warning' : 'text-muted')}>
+        {dirty ? working.unsaved : 'None'}
+      </span>
     </span>
   )
 }

@@ -45,6 +45,10 @@ type FeatureVersion struct {
 	// a list of versions does not have to open every snapshot.
 	FeatureCount int    `gorm:"not null"`
 	Snapshot     string `gorm:"type:text;not null"`
+	// Deleted hides a version from the list without renumbering: the row keeps
+	// its (project, number) slot so later saves never reuse it. Published
+	// versions and the working version's base cannot be deleted.
+	Deleted bool `gorm:"not null;default:false;index"`
 
 	CreatedAt time.Time
 }

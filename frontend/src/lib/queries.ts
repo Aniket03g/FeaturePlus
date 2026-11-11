@@ -1356,6 +1356,15 @@ export function useVersionsWithChanges(projectId: number) {
   })
 }
 
+/** The versions that have been marked as deleted, for the Deleted tab. */
+export function useDeletedVersions(projectId: number) {
+  return useQuery({
+    queryKey: [...versionKeys.project(projectId), 'deleted'] as const,
+    queryFn: () => api.get<FeatureVersion[]>(`/projects/${projectId}/versions`, { query: { deleted: 1 } }),
+    enabled: projectId > 0,
+  })
+}
+
 export function useSaveVersion(projectId: number) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -1465,6 +1474,43 @@ export function useSetVersionNote(projectId: number) {
       queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
       queryClient.invalidateQueries({ queryKey: ['working', projectId] })
       queryClient.invalidateQueries({ queryKey: ['published', projectId] })
+    },
+  })
+}
+
+/** Mark a saved version as deleted, hiding it from the versions list. */
+export function useDeleteVersion(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (versionId: number) => api.del(`/projects/${projectId}/versions/${versionId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: ['version-compare', projectId] })
+    },
+  })
+}
+
+/** Bring a deleted version back into the versions list. */
+export function useUndeleteVersion(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (versionId: number) =>
+      api.post<{ deleted: boolean }>(`/projects/${projectId}/versions/${versionId}/undelete`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: ['version-compare', projectId] })
+    },
+  })
+}
+
+/** Remove a deleted version for good. */
+export function usePermanentDeleteVersion(projectId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (versionId: number) => api.del(`/projects/${projectId}/versions/${versionId}?permanent=1`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: versionKeys.project(projectId) })
+      queryClient.invalidateQueries({ queryKey: ['version-compare', projectId] })
     },
   })
 }

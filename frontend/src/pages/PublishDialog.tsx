@@ -23,12 +23,16 @@ export function SaveVersionDialog({
   projectId,
   onClose,
   onSaved,
+  publishAfter = false,
 }: {
   projectId: number
   onClose: () => void
   onSaved?: (version: FeatureVersion) => void
+  /** Publish the version straight after saving it, as the next whole number. */
+  publishAfter?: boolean
 }) {
   const save = useSaveVersion(projectId)
+  const publish = usePublishVersion(projectId)
   const working = useWorkingState(projectId)
   // Untouched, the box shows the working version's note.
   const [typed, setTyped] = useState<string | null>(null)
@@ -41,6 +45,9 @@ export function SaveVersionDialog({
     setError('')
     try {
       const saved = await save.mutateAsync({ notes: notes.trim() })
+      if (publishAfter) {
+        await publish.mutateAsync({ versionId: saved.id, notes: notes.trim() })
+      }
       onSaved?.(saved)
       onClose()
     } catch (err) {
@@ -53,7 +60,12 @@ export function SaveVersionDialog({
       <form onSubmit={submit} noValidate>
         <div className="space-y-3 p-4">
           <p className="text-xs text-muted">
-            Keeps the Feature List as it is now as {working.nextSave}. You can publish it next, or keep working.
+            Keeps the Feature List as it is now as {working.nextSave}.{' '}
+            {publishAfter ? (
+              <>It will be published straight after, as {working.nextPublish}.</>
+            ) : (
+              <>You can publish it next, or keep working.</>
+            )}
           </p>
           {error && (
             <p role="alert" className="text-xs text-danger">
@@ -73,8 +85,8 @@ export function SaveVersionDialog({
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" loading={save.isPending}>
-            Save as {working.nextSave}
+          <Button type="submit" loading={save.isPending || publish.isPending}>
+            {publishAfter ? `Save & publish as ${working.nextPublish}` : `Save as ${working.nextSave}`}
           </Button>
         </div>
       </form>

@@ -40,6 +40,8 @@ func (h *VersionsHandler) Register(g *gin.RouterGroup) {
 	g.GET("/projects/:id/versions/compare", h.Compare)
 	g.GET("/projects/:id/versions/:versionId", h.Get)
 	g.PATCH("/projects/:id/versions/:versionId", h.SetVersionNote)
+	g.DELETE("/projects/:id/versions/:versionId", h.Delete)
+	g.POST("/projects/:id/versions/:versionId/undelete", h.Undelete)
 	g.GET("/projects/:id/working", h.Working)
 	g.PATCH("/projects/:id/working", h.SetWorkingNote)
 	g.POST("/projects/:id/versions/:versionId/publish", h.Publish)
@@ -148,7 +150,10 @@ func (h *VersionsHandler) List(c *gin.Context) {
 	}
 
 	withChanges := c.Query("changes") == "1"
-	query := h.db.Where("project_id = ?", projectID).Order("number DESC")
+	// By default deleted versions are hidden; ?deleted=1 shows only those, for the
+	// Deleted tab. Their number slot is kept so saves don't reuse it.
+	onlyDeleted := c.Query("deleted") == "1"
+	query := h.db.Where("project_id = ? AND deleted = ?", projectID, onlyDeleted).Order("number DESC")
 	if !withChanges {
 		query = query.Omit("snapshot")
 	}
@@ -229,6 +234,75 @@ func (h *VersionsHandler) Get(c *gin.Context) {
 		VersionDTO: h.withBase(newVersionDTO(version, names), version),
 		Snapshot:   json.RawMessage(version.Snapshot),
 	})
+}
+
+// Delete marks a saved version as deleted, hiding it from the versions list.
+// Its number is kept so later saves never reuse it. A published version, or the
+// one the working version is based on, cannot be deleted.
+//
+// DELETE /api/v1/projects/:id/versions/:versionId
+func (h *VersionsHandler) Delete(c *gin.Context) {
+	project, versionID, _, ok := h.versionTarget(c, canEdit)
+	if !ok {
+		return
+	}
+	var version models.FeatureVersion
+	if dbErr := h.db.Where("id = ? AND project_id = ?", versionID, project.ID).First(&version).Error; dbErr != nil {
+		api.Fail(c, api.FromDB(dbErr, "Version"))
+		return
+	}
+	// ?permanent=1 removes a version for good. It must already be marked as
+	// deleted, so this only ever happens from the Deleted tab.
+	if c.Query("permanent") == "1" {
+		if !version.Deleted {
+			api.Fail(c, api.Conflict("Mark the version as deleted before removing it for good"))
+			return
+		}
+		if err := h.db.Delete(&version).Error; err != nil {
+			api.Fail(c, api.Internal(err))
+			return
+		}
+		api.OK(c, gin.H{"deleted": true, "permanent": true})
+		return
+	}
+	if version.PublishNumber > 0 {
+		api.Fail(c, api.Conflict("A published version cannot be deleted"))
+		return
+	}
+	// The working version is based on this one; deleting it would leave the
+	// working list pointing at nothing.
+	var ws models.WorkingState
+	if err := h.db.Where("project_id = ?", project.ID).Limit(1).Find(&ws).Error; err == nil {
+		if ws.BaseVersionID != nil && *ws.BaseVersionID == version.ID {
+			api.Fail(c, api.Conflict("The working version is based on this version, so it cannot be deleted"))
+			return
+		}
+	}
+	if err := h.db.Model(&version).Update("deleted", true).Error; err != nil {
+		api.Fail(c, api.Internal(err))
+		return
+	}
+	api.OK(c, gin.H{"deleted": true})
+}
+
+// Undelete brings a version marked as deleted back into the versions list.
+//
+// POST /api/v1/projects/:id/versions/:versionId/undelete
+func (h *VersionsHandler) Undelete(c *gin.Context) {
+	project, versionID, _, ok := h.versionTarget(c, canEdit)
+	if !ok {
+		return
+	}
+	var version models.FeatureVersion
+	if dbErr := h.db.Where("id = ? AND project_id = ?", versionID, project.ID).First(&version).Error; dbErr != nil {
+		api.Fail(c, api.FromDB(dbErr, "Version"))
+		return
+	}
+	if err := h.db.Model(&version).Update("deleted", false).Error; err != nil {
+		api.Fail(c, api.Internal(err))
+		return
+	}
+	api.OK(c, gin.H{"deleted": false})
 }
 
 // Create saves the project's feature list as it stands now, as the next
