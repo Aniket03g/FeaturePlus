@@ -11,6 +11,8 @@ logs/
 
 # Compiled binaries
 backend/*.exe
+# Built server binary (a build artefact, not source)
+backend/bin/
 
 # Frontend
 frontend/node_modules/
