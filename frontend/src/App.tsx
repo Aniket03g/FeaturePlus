@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { projectOf, useRouter, type Route } from '@/lib/router'
-import { useProject } from '@/lib/queries'
+import { useProject, useWorking } from '@/lib/queries'
 import { AppShell, SearchInput } from '@/layouts/AppShell'
 import { Button } from '@/components/ui/button'
 import { Login, AuthLoading } from '@/pages/Login'
@@ -141,6 +141,8 @@ export function App() {
   }, [user, currentProject, lastProject])
   const sidebarProject = currentProject > 0 ? currentProject : lastProject
   const project = useProject(sidebarProject)
+  // The version the Feature List is being edited on, shown beside it in the sidebar.
+  const working = useWorking(sidebarProject)
 
   // A remembered project that has since gone, or been unshared, is forgotten.
   useEffect(() => {
@@ -176,6 +178,7 @@ export function App() {
       active={route.name === 'feature' && route.editable ? 'inProgress' : SECTION[route.name]}
       onNavigate={goTo}
       projectName={projectName}
+      workingVersion={projectName !== null && !working.isError ? (working.data?.base?.label ?? null) : null}
       title={<Title />}
       actions={
         route.name === 'projects' ? (

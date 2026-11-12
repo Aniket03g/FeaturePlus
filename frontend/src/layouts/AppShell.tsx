@@ -139,12 +139,14 @@ interface AppShellProps {
   onNavigate: (id: string) => void
   /** The name of the project the Project group leads into, or null when there is none. */
   projectName: string | null
+  /** The version the Feature List is being edited on (v2.3), or null when none is saved yet. */
+  workingVersion?: string | null
   title: ReactNode
   actions?: ReactNode
   children: ReactNode
 }
 
-export function AppShell({ active, onNavigate, projectName, title, actions, children }: AppShellProps) {
+export function AppShell({ active, onNavigate, projectName, workingVersion, title, actions, children }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const { user, signOut } = useAuth()
 
@@ -189,6 +191,7 @@ export function AppShell({ active, onNavigate, projectName, title, actions, chil
                       disabled={item.soon || (noProject && !item.anyTime)}
                       collapsed={collapsed}
                       onNavigate={onNavigate}
+                      version={item.id === 'inProgress' ? workingVersion : null}
                     />
                   ))}
                 </div>
@@ -244,6 +247,7 @@ function NavButton({
   disabled,
   collapsed,
   onNavigate,
+  version,
 }: {
   item: NavItem
   active: boolean
@@ -251,6 +255,8 @@ function NavButton({
   disabled?: boolean
   collapsed: boolean
   onNavigate: (id: string) => void
+  /** A version label shown after the item's name. */
+  version?: string | null
 }) {
   const Icon = item.icon
   const extra = item.extra
@@ -273,7 +279,13 @@ function NavButton({
       <button
         onClick={() => !disabled && onNavigate(item.id)}
         disabled={disabled}
-        title={collapsed ? item.label : undefined}
+        title={
+          version && !disabled
+            ? `${item.label}: editing ${version}`
+            : collapsed
+              ? item.label
+              : undefined
+        }
         aria-current={active ? 'page' : undefined}
         className={cn(
           'group flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors',
@@ -289,6 +301,11 @@ function NavButton({
         {!collapsed && (
           <>
             <span className="truncate">{item.label}</span>
+            {version && !disabled && (
+              <span className="ml-auto shrink-0 rounded border border-border px-1.5 font-mono text-2xs font-normal text-muted">
+                {version}
+              </span>
+            )}
             {item.soon && (
               <span className="ml-auto text-2xs font-normal text-faint">soon</span>
             )}

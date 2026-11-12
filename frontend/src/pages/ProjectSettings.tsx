@@ -6,6 +6,7 @@ import {
   useUpdateProject,
   useUpdateProjectSettings,
   type ProjectSettings as Settings,
+  type ProjectSettingsEntry as SettingsEntry,
 } from '@/lib/queries'
 import { ApiError } from '@/lib/api'
 import { canEditInfo, statusLabel, type StatusDef, type StatusParamType } from '@/lib/types'
@@ -22,14 +23,14 @@ const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyl
 
 const SECTIONS = [
   ['about', 'About'],
+  ['prompts', 'Prompts'],
   ['conventions', 'Conventions'],
   ['statuses', 'Statuses'],
-  ['architecture', 'Architecture'],
 ] as const
 
 /**
- * Project info: what the project is, how its team works, and how its code is
- * laid out. Everyone on the project reads it; the owner and publishers edit
+ * Project info: what the project is, and the prompts and conventions its team
+ * works by. Everyone on the project reads it; the owner and publishers edit
  * it, one section at a time.
  */
 export function ProjectSettings({ projectId }: { projectId: number }) {
@@ -63,7 +64,7 @@ export function ProjectSettings({ projectId }: { projectId: number }) {
             Project info
           </h2>
           <p className="mt-0.5 text-sm text-muted">
-            What this project is, how the team works on it, and how its code is laid out.
+            What this project is, and the prompts and conventions the team works by.
             {!mayEdit && ' Only the owner can change it.'}
           </p>
         </div>
@@ -77,9 +78,9 @@ export function ProjectSettings({ projectId }: { projectId: number }) {
       </div>
 
       <AboutSection projectId={projectId} mayEdit={mayEdit} />
+      <PromptsSection projectId={projectId} settings={s} mayEdit={mayEdit} />
       <ConventionsSection projectId={projectId} settings={s} mayEdit={mayEdit} />
       <StatusesSection projectId={projectId} settings={s} mayEdit={mayEdit} />
-      <ArchitectureSection projectId={projectId} settings={s} mayEdit={mayEdit} />
 
       {s.updated_at && (
         <p className="text-xs text-faint">
@@ -222,19 +223,166 @@ function AboutSection({ projectId, mayEdit }: { projectId: number; mayEdit: bool
   )
 }
 
-// ---------- Conventions ----------
+// ---------- Prompts and conventions ----------
+
+const MAX_ENTRIES = 50
+
+type EntryDraft = { title: string; body: string }
+
+/** A list of titled markdown entries, as they are edited. */
+function EntriesEditor({
+  idPrefix,
+  entries,
+  setEntries,
+  addLabel,
+  titlePlaceholder,
+}: {
+  idPrefix: string
+  entries: EntryDraft[]
+  setEntries: (update: (now: EntryDraft[]) => EntryDraft[]) => void
+  addLabel: string
+  titlePlaceholder: string
+}) {
+  return (
+    <div className="space-y-3">
+      {entries.map((entry, i) => (
+        <div key={i} className="space-y-2 rounded-md border border-border p-3">
+          <div className="flex items-center gap-2">
+            <Input
+              value={entry.title}
+              maxLength={120}
+              placeholder={titlePlaceholder}
+              onChange={(e) =>
+                setEntries((now) => now.map((row, idx) => (idx === i ? { ...row, title: e.target.value } : row)))
+              }
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEntries((now) => now.filter((_, idx) => idx !== i))}
+              aria-label="Remove entry"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <MarkdownEditor
+            id={`${idPrefix}-${i}`}
+            label={entry.title.trim() || `Entry ${i + 1}`}
+            value={entry.body}
+            onChange={(body) =>
+              setEntries((now) => now.map((row, idx) => (idx === i ? { ...row, body } : row)))
+            }
+            featureId={0}
+            attachments={[]}
+            height="12rem"
+            placeholder="Write it in Markdown"
+            canUpload={false}
+            focusOnOpen={false}
+          />
+        </div>
+      ))}
+      {entries.length < MAX_ENTRIES && (
+        <Button variant="secondary" size="sm" onClick={() => setEntries((now) => [...now, { title: '', body: '' }])}>
+          <Plus className="h-3.5 w-3.5" />
+          {addLabel}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+/** Titled entries as they read when not editing. */
+function EntriesView({ entries, empty }: { entries: SettingsEntry[]; empty: string }) {
+  if (entries.length === 0) return <p className="text-sm text-faint">{empty}</p>
+  return (
+    <div className="space-y-5">
+      {entries.map((entry, i) => (
+        <div key={i}>
+          <h4 className="text-sm font-semibold text-ink">{entry.title}</h4>
+          {entry.body ? (
+            <Markdown text={entry.body} className="mt-1 text-sm" />
+          ) : (
+            <p className="mt-1 text-sm text-faint">No body yet.</p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** Trim drafts and drop the ones left entirely blank. */
+function cleanEntries(entries: EntryDraft[]): SettingsEntry[] {
+  return entries
+    .filter((e) => e.title.trim() || e.body.trim())
+    .map((e) => ({ title: e.title.trim(), body: e.body.trim() }))
+}
+
+/** The first entry with a body but no title, if any. */
+function untitled(entries: EntryDraft[]) {
+  return entries.some((e) => e.body.trim() && !e.title.trim())
+}
+
+function PromptsSection({ projectId, settings, mayEdit }: { projectId: number; settings: Settings; mayEdit: boolean }) {
+  const update = useUpdateProjectSettings(projectId)
+  const [editing, setEditing] = useState(false)
+  const [entries, setEntries] = useState<EntryDraft[]>([])
+  const [error, setError] = useState('')
+
+  function start() {
+    setEntries(settings.prompts.map((e) => ({ title: e.title, body: e.body })))
+    setError('')
+    setEditing(true)
+  }
+
+  async function save() {
+    setError('')
+    if (untitled(entries)) {
+      setError('Give every prompt a title')
+      return
+    }
+    try {
+      await update.mutateAsync({ prompts: cleanEntries(entries) })
+      setEditing(false)
+    } catch (err) {
+      setError(errorText(err))
+    }
+  }
+
+  return (
+    <Section
+      id="prompts"
+      title="Prompts"
+      hint="Instructions for working on this project: architecture, UI standards, or anything else the team should keep in mind. Each has a title and a body."
+      editing={editing}
+      onEdit={mayEdit ? start : undefined}
+    >
+      {editing ? (
+        <>
+          <EntriesEditor
+            idPrefix="prompt"
+            entries={entries}
+            setEntries={setEntries}
+            addLabel="Add prompt"
+            titlePlaceholder="Title, e.g. UI standards"
+          />
+          <EditActions saving={update.isPending} error={error} onCancel={() => setEditing(false)} onSave={save} />
+        </>
+      ) : (
+        <EntriesView entries={settings.prompts} empty="No prompts yet." />
+      )}
+    </Section>
+  )
+}
 
 function ConventionsSection({ projectId, settings, mayEdit }: { projectId: number; settings: Settings; mayEdit: boolean }) {
   const update = useUpdateProjectSettings(projectId)
   const [editing, setEditing] = useState(false)
-  const [versions, setVersions] = useState('')
-  const [publish, setPublish] = useState('')
+  const [entries, setEntries] = useState<EntryDraft[]>([])
   const [colors, setColors] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
 
   function start() {
-    setVersions(settings.versions_convention)
-    setPublish(settings.publish_convention)
+    setEntries(settings.conventions.map((e) => ({ title: e.title, body: e.body })))
     setColors({ ...settings.color_meanings })
     setError('')
     setEditing(true)
@@ -242,73 +390,55 @@ function ConventionsSection({ projectId, settings, mayEdit }: { projectId: numbe
 
   async function save() {
     setError('')
+    if (untitled(entries)) {
+      setError('Give every convention a title')
+      return
+    }
     try {
-      await update.mutateAsync({ versions_convention: versions, publish_convention: publish, color_meanings: colors })
+      await update.mutateAsync({ conventions: cleanEntries(entries), color_meanings: colors })
       setEditing(false)
     } catch (err) {
       setError(errorText(err))
     }
   }
 
-  const starting = (isDefault: boolean) =>
-    isDefault && <p className="mb-1 text-2xs text-faint">Starting text. Edit it to fit how your team works.</p>
-
   return (
     <Section
       id="conventions"
       title="Conventions"
-      hint="How the team works on versions, when to publish, and what the feature colours mean."
+      hint="How the team works: branching, reviews, releases, and what each feature colour means. A colour has a convention chosen for it rather than a free-form body."
       editing={editing}
       onEdit={mayEdit ? start : undefined}
     >
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div>
-          <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-faint">Working on versions</h4>
-          {editing ? (
-            <MarkdownEditor
-              id="convention-versions"
-              label="Working on versions"
-              value={versions}
-              onChange={setVersions}
-              featureId={0}
-              attachments={[]}
-              height="14rem"
-              canUpload={false}
-              focusOnOpen={false}
-            />
-          ) : (
-            <>
-              {starting(settings.versions_default)}
-              <Markdown text={settings.versions_convention} className="text-sm" />
-            </>
+      {editing ? (
+        <>
+          {settings.conventions_default && (
+            <p className="text-2xs text-faint">Starting conventions. Edit them to fit how your team works.</p>
           )}
-        </div>
-        <div>
-          <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-faint">Publishing</h4>
-          {editing ? (
-            <MarkdownEditor
-              id="convention-publish"
-              label="Publishing"
-              value={publish}
-              onChange={setPublish}
-              featureId={0}
-              attachments={[]}
-              height="14rem"
-              canUpload={false}
-              focusOnOpen={false}
-            />
-          ) : (
-            <>
-              {starting(settings.publish_default)}
-              <Markdown text={settings.publish_convention} className="text-sm" />
-            </>
+          <EntriesEditor
+            idPrefix="convention"
+            entries={entries}
+            setEntries={setEntries}
+            addLabel="Add convention"
+            titlePlaceholder="Title, e.g. Branching"
+          />
+          <ColorMeanings editing saved={settings.color_meanings} colors={colors} setColors={setColors} />
+          <EditActions saving={update.isPending} error={error} onCancel={() => setEditing(false)} onSave={save} />
+        </>
+      ) : (
+        <>
+          {settings.conventions_default && (
+            <p className="text-2xs text-faint">Starting conventions. Edit them to fit how your team works.</p>
           )}
-        </div>
-      </div>
-
-      <ColorMeanings editing={editing} saved={settings.color_meanings} colors={colors} setColors={setColors} />
-
-      {editing && <EditActions saving={update.isPending} error={error} onCancel={() => setEditing(false)} onSave={save} />}
+          <EntriesView entries={settings.conventions} empty="No conventions written yet." />
+          <ColorMeanings
+            editing={false}
+            saved={settings.color_meanings}
+            colors={settings.color_meanings}
+            setColors={() => {}}
+          />
+        </>
+      )}
     </Section>
   )
 }
@@ -528,9 +658,10 @@ function ColorMeanings({
 
   return (
     <div>
-      <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-faint">What the colours mean</h4>
+      <h4 className="mb-0.5 text-xs font-semibold uppercase tracking-wide text-faint">Colour conventions</h4>
+      <p className="mb-2 text-xs text-muted">Choose what each feature colour means for this project.</p>
       {listed.length === 0 && !editing && (
-        <p className="text-sm text-faint">No colours have a meaning yet.</p>
+        <p className="text-sm text-faint">No colour conventions yet.</p>
       )}
       {listed.length > 0 && (
         <div className="space-y-2">
@@ -607,89 +738,5 @@ function ColorMeanings({
         <p className="mt-2 text-2xs text-faint">These show in the Colours legend on the Feature List.</p>
       )}
     </div>
-  )
-}
-
-// ---------- Architecture ----------
-
-function ArchitectureSection({ projectId, settings, mayEdit }: { projectId: number; settings: Settings; mayEdit: boolean }) {
-  const update = useUpdateProjectSettings(projectId)
-  const [editing, setEditing] = useState(false)
-  const [text, setText] = useState('')
-  const [modules, setModules] = useState('')
-  const [error, setError] = useState('')
-
-  function start() {
-    setText(settings.architecture)
-    setModules(settings.modules)
-    setError('')
-    setEditing(true)
-  }
-
-  async function save() {
-    setError('')
-    try {
-      await update.mutateAsync({ architecture: text, modules })
-      setEditing(false)
-    } catch (err) {
-      setError(errorText(err))
-    }
-  }
-
-  return (
-    <Section
-      id="architecture"
-      title="Architecture"
-      hint="How the code is put together, and the modules it is made of."
-      editing={editing}
-      onEdit={mayEdit ? start : undefined}
-    >
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div>
-          <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-faint">Overview</h4>
-          {editing ? (
-            <MarkdownEditor
-              id="architecture-text"
-              label="Overview"
-              value={text}
-              onChange={setText}
-              featureId={0}
-              attachments={[]}
-              height="16rem"
-              placeholder="The parts of the system and how they talk to each other."
-              canUpload={false}
-              focusOnOpen={false}
-            />
-          ) : settings.architecture ? (
-            <Markdown text={settings.architecture} className="text-sm" />
-          ) : (
-            <p className="text-sm text-faint">No overview written yet.</p>
-          )}
-        </div>
-        <div>
-          <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-faint">Modules</h4>
-          {editing ? (
-            <MarkdownEditor
-              id="architecture-modules"
-              label="Modules"
-              value={modules}
-              onChange={setModules}
-              featureId={0}
-              attachments={[]}
-              height="16rem"
-              placeholder={'- **Backend API** in backend/api: the JSON API\n- **Web app** in frontend/src: the screens'}
-              canUpload={false}
-              focusOnOpen={false}
-            />
-          ) : settings.modules ? (
-            <Markdown text={settings.modules} className="text-sm" />
-          ) : (
-            <p className="text-sm text-faint">No modules written yet.</p>
-          )}
-        </div>
-      </div>
-
-      {editing && <EditActions saving={update.isPending} error={error} onCancel={() => setEditing(false)} onSave={save} />}
-    </Section>
   )
 }

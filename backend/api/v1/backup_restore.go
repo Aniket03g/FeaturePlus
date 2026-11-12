@@ -800,9 +800,26 @@ func restoreBackup(tx *gorm.DB, opened *openedBackup, people *restorePeople, wit
 		byNumber[v.Number] = row.ID
 	}
 	if b.Settings != nil {
-		row := models.ProjectSettings{ProjectID: project.ID, VersionsConvention: b.Settings.VersionsConvention,
-			PublishConvention: b.Settings.PublishConvention, Architecture: b.Settings.Architecture,
-			ColorMeanings: string(b.Settings.ColorMeanings), Modules: b.Settings.Modules, UpdatedAt: time.Now()}
+		prompts, _ := models.MarshalSettingsEntries(b.Settings.Prompts)
+		// An empty list in a backup may just mean the writer did not store it.
+		// Fall back to the conventions that came before the list existed.
+		conventions := b.Settings.Conventions
+		if len(conventions) == 0 {
+			if b.Settings.VersionsConvention != "" {
+				conventions = append(conventions, models.SettingsEntry{Title: "Working on versions", Body: b.Settings.VersionsConvention})
+			}
+			if b.Settings.PublishConvention != "" {
+				conventions = append(conventions, models.SettingsEntry{Title: "Publishing", Body: b.Settings.PublishConvention})
+			}
+		}
+		conventionsJSON := ""
+		if len(conventions) > 0 {
+			conventionsJSON, _ = models.MarshalSettingsEntries(conventions)
+		}
+		row := models.ProjectSettings{ProjectID: project.ID, Prompts: prompts, Conventions: conventionsJSON,
+			VersionsConvention: b.Settings.VersionsConvention, PublishConvention: b.Settings.PublishConvention,
+			Architecture: b.Settings.Architecture, ColorMeanings: string(b.Settings.ColorMeanings),
+			Modules: b.Settings.Modules, UpdatedAt: time.Now()}
 		if err := tx.Create(&row).Error; err != nil {
 			return nil, err
 		}

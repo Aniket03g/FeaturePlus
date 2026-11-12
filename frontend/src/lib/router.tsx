@@ -27,7 +27,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
  *   /app/projects/:id/versions/copies        the same page, on its Copies tab
  *   /app/projects/:id/copies/:copyId/merge   merging a published copy into the list
  *   /app/projects/:id/compare/:from/:to      two lists compared as a tree (a version id, c+copy id, or current)
- *   /app/projects/:id/settings               project info: about, conventions, architecture
+ *   /app/projects/:id/settings               project info: about, prompts, conventions
  *   /app/projects/:id/team                   the project's members and their roles
  *   /app/projects/:id/messages               the latest messages on the project's features
  *   /app/team                                every account on the server (admins)

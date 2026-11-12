@@ -150,13 +150,20 @@ export function useUpdateProject(id: number) {
 
 // ---------- project settings ----------
 
+/** A titled piece of markdown in a project's settings: a prompt or a convention. */
+export interface ProjectSettingsEntry {
+  title: string
+  body: string
+}
+
 /** How a project's team works and how its code is laid out. */
 export interface ProjectSettings {
-  versions_convention: string
-  /** The convention was never written; this is the built-in starting text. */
-  versions_default: boolean
-  publish_convention: string
-  publish_default: boolean
+  /** Instructions for working on the project, e.g. architecture or UI standards. */
+  prompts: ProjectSettingsEntry[]
+  /** How the team works, e.g. branching or release rules. */
+  conventions: ProjectSettingsEntry[]
+  /** The conventions were never written; these are the built-in starting entries. */
+  conventions_default: boolean
   /** Colour name to what it means, e.g. red: "Blocked". */
   color_meanings: Record<string, string>
   architecture: string
@@ -183,7 +190,7 @@ export function useUpdateProjectSettings(projectId: number) {
   return useMutation({
     mutationFn: (
       body: Partial<
-        Pick<ProjectSettings, 'versions_convention' | 'publish_convention' | 'color_meanings' | 'architecture' | 'modules' | 'statuses'>
+        Pick<ProjectSettings, 'prompts' | 'conventions' | 'color_meanings' | 'architecture' | 'modules' | 'statuses'>
       >,
     ) => api.patch<ProjectSettings>(`/projects/${projectId}/settings`, body),
     onSuccess: (saved) => queryClient.setQueryData(['project-settings', projectId], saved),

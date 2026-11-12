@@ -76,7 +76,7 @@ export function canDownload(role: ProjectRole | undefined) {
   return atLeast(role, 'publisher')
 }
 
-/** Owner (or admin): change the project info and its conventions. */
+/** Owner (or admin): change the project info, its prompts and its conventions. */
 export function canEditInfo(role: ProjectRole | undefined) {
   return atLeast(role, 'owner')
 }

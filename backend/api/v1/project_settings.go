@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -13,19 +14,88 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// A project's settings: its conventions, colour meanings and architecture.
-// Anyone who can see the project reads them; the owner and publishers change
-// them, as they set the project's rules. See models.ProjectSettings.
+// A project's settings: its prompts, conventions, colour meanings and
+// architecture. Anyone who can see the project reads them; the owner and
+// publishers change them, as they set the project's rules. See
+// models.ProjectSettings.
 
 // featureColors are the colours a feature can have, as the screens name them.
 var featureColors = []string{"red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"}
 
 const (
-	maxColorMeaning = 80
-	maxSettingsText = 20000
-	defaultVersions = "- Work in the **Feature List** (the working version). Every edit is kept as you make it.\n- When a piece of work is done, **Save** it as a version (v1.1, v1.2…) with a note saying what changed.\n- To work from an older version, open it with **View** on the Versions page. Save or discard your changes first.\n- Write a note on the working version so others know what is being worked on."
-	defaultPublish  = "- Publish when a saved version is ready for everyone to read; the newest save becomes the next whole number (v1.3 → v2).\n- Only the owner and publishers publish. Editors save versions and ask a publisher.\n- Give every publish a note that says what it is for, e.g. \"Ready for client review\".\n- Changes since the last publish are marked on the Feature List; check them before publishing."
+	maxColorMeaning    = 80
+	maxSettingsText    = 20000
+	maxSettingsEntries = 50
+	maxSettingsTitle   = 120
+	defaultVersions    = "- Work in the **Feature List** (the working version). Every edit is kept as you make it.\n- When a piece of work is done, **Save** it as a version (v1.1, v1.2…) with a note saying what changed.\n- To work from an older version, open it with **View** on the Versions page. Save or discard your changes first.\n- Write a note on the working version so others know what is being worked on."
+	defaultPublish     = "- Publish when a saved version is ready for everyone to read; the newest save becomes the next whole number (v1.3 → v2).\n- Only the owner and publishers publish. Editors save versions and ask a publisher.\n- Give every publish a note that says what it is for, e.g. \"Ready for client review\".\n- Changes since the last publish are marked on the Feature List; check them before publishing."
 )
+
+// defaultConventions is the starting list a project sees before anyone has
+// written its conventions. It carries the guidance that used to be shown as
+// two fixed fields.
+func defaultConventions() []models.SettingsEntry {
+	return []models.SettingsEntry{
+		{Title: "Working on versions", Body: defaultVersions},
+		{Title: "Publishing", Body: defaultPublish},
+	}
+}
+
+// projectConventions returns the conventions to show, and whether they are the
+// built-in starting list. Conventions stored before the list existed are
+// brought forward as entries with their old headings.
+func projectConventions(s models.ProjectSettings) ([]models.SettingsEntry, bool) {
+	if strings.TrimSpace(s.Conventions) != "" {
+		return models.ParseSettingsEntries(s.Conventions), false
+	}
+	var legacy []models.SettingsEntry
+	if strings.TrimSpace(s.VersionsConvention) != "" {
+		legacy = append(legacy, models.SettingsEntry{Title: "Working on versions", Body: s.VersionsConvention})
+	}
+	if strings.TrimSpace(s.PublishConvention) != "" {
+		legacy = append(legacy, models.SettingsEntry{Title: "Publishing", Body: s.PublishConvention})
+	}
+	if len(legacy) > 0 {
+		return legacy, false
+	}
+	return defaultConventions(), true
+}
+
+// entriesOrEmpty keeps JSON lists as [] rather than null, so the screens can
+// always map over them.
+func entriesOrEmpty(entries []models.SettingsEntry) []models.SettingsEntry {
+	if entries == nil {
+		return []models.SettingsEntry{}
+	}
+	return entries
+}
+
+// normalizeSettingsEntries trims titles and bodies, drops entries that are
+// entirely blank, and reports the first entry that breaks a limit.
+func normalizeSettingsEntries(entries []models.SettingsEntry) ([]models.SettingsEntry, error) {
+	if len(entries) > maxSettingsEntries {
+		return nil, fmt.Errorf("Keep it to %d entries or fewer", maxSettingsEntries)
+	}
+	out := make([]models.SettingsEntry, 0, len(entries))
+	for i, e := range entries {
+		title := strings.TrimSpace(e.Title)
+		body := strings.TrimSpace(e.Body)
+		if title == "" && body == "" {
+			continue
+		}
+		if title == "" {
+			return nil, fmt.Errorf("Entry %d needs a title", i+1)
+		}
+		if len(title) > maxSettingsTitle {
+			return nil, fmt.Errorf("Keep each title under %d characters", maxSettingsTitle)
+		}
+		if len(body) > maxSettingsText {
+			return nil, fmt.Errorf("Keep each body under %d characters", maxSettingsText)
+		}
+		out = append(out, models.SettingsEntry{Title: title, Body: body})
+	}
+	return out, nil
+}
 
 // projectModule is one row of the modules table the settings briefly had,
 // read only to turn old rows into text.
@@ -59,32 +129,31 @@ func modulesText(stored string) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// ProjectSettingsDTO is a project's settings. A convention never written
-// comes back as starting text, with its Default flag set.
+// ProjectSettingsDTO is a project's settings. Conventions never written come
+// back as a starting list, with ConventionsDefault set.
 type ProjectSettingsDTO struct {
-	VersionsConvention string             `json:"versions_convention"`
-	VersionsDefault    bool               `json:"versions_default"`
-	PublishConvention  string             `json:"publish_convention"`
-	PublishDefault     bool               `json:"publish_default"`
-	ColorMeanings      map[string]string  `json:"color_meanings"`
-	Architecture       string             `json:"architecture"`
-	Modules            string             `json:"modules"`
+	Prompts            []models.SettingsEntry `json:"prompts"`
+	Conventions        []models.SettingsEntry `json:"conventions"`
+	ConventionsDefault bool                   `json:"conventions_default"`
+	ColorMeanings      map[string]string      `json:"color_meanings"`
+	Architecture       string                 `json:"architecture"`
+	Modules            string                 `json:"modules"`
 	// Statuses are the feature statuses this project offers. When the project
 	// has configured none, the defaults are returned with StatusesDefault set.
 	Statuses        []models.StatusDef `json:"statuses"`
 	StatusesDefault bool               `json:"statuses_default"`
-	UpdatedBy          string             `json:"updated_by"`
-	UpdatedAt          *time.Time         `json:"updated_at"`
+	UpdatedBy       string             `json:"updated_by"`
+	UpdatedAt       *time.Time         `json:"updated_at"`
 }
 
 // UpdateProjectSettingsRequest changes the fields present.
 type UpdateProjectSettingsRequest struct {
-	VersionsConvention *string             `json:"versions_convention"`
-	PublishConvention  *string             `json:"publish_convention"`
-	ColorMeanings      *map[string]string  `json:"color_meanings"`
-	Architecture       *string             `json:"architecture"`
-	Modules            *string             `json:"modules"`
-	Statuses           *[]models.StatusDef `json:"statuses"`
+	Prompts       *[]models.SettingsEntry `json:"prompts"`
+	Conventions   *[]models.SettingsEntry `json:"conventions"`
+	ColorMeanings *map[string]string      `json:"color_meanings"`
+	Architecture  *string                 `json:"architecture"`
+	Modules       *string                 `json:"modules"`
+	Statuses      *[]models.StatusDef     `json:"statuses"`
 }
 
 func registerProjectSettingsRoutes(g *gin.RouterGroup, db *gorm.DB) {
@@ -101,16 +170,15 @@ func loadProjectSettings(db *gorm.DB, projectID int) (models.ProjectSettings, er
 
 func projectSettingsDTO(db *gorm.DB, s models.ProjectSettings) ProjectSettingsDTO {
 	out := ProjectSettingsDTO{
-		VersionsConvention: s.VersionsConvention, PublishConvention: s.PublishConvention,
-		Architecture: s.Architecture, ColorMeanings: map[string]string{}, Modules: modulesText(s.Modules),
-		Statuses: models.ParseStatuses(s.Statuses), StatusesDefault: strings.TrimSpace(s.Statuses) == "",
+		Prompts:         entriesOrEmpty(models.ParseSettingsEntries(s.Prompts)),
+		Architecture:    s.Architecture,
+		ColorMeanings:   map[string]string{},
+		Modules:         modulesText(s.Modules),
+		Statuses:        models.ParseStatuses(s.Statuses),
+		StatusesDefault: strings.TrimSpace(s.Statuses) == "",
 	}
-	if out.VersionsConvention == "" {
-		out.VersionsConvention, out.VersionsDefault = defaultVersions, true
-	}
-	if out.PublishConvention == "" {
-		out.PublishConvention, out.PublishDefault = defaultPublish, true
-	}
+	out.Conventions, out.ConventionsDefault = projectConventions(s)
+	out.Conventions = entriesOrEmpty(out.Conventions)
 	if s.ColorMeanings != "" {
 		_ = json.Unmarshal([]byte(s.ColorMeanings), &out.ColorMeanings)
 	}
@@ -196,10 +264,29 @@ func updateProjectSettingsHandler(db *gorm.DB) gin.HandlerFunc {
 			}
 			*into = v
 		}
-		text("versions_convention", req.VersionsConvention, &s.VersionsConvention)
-		text("publish_convention", req.PublishConvention, &s.PublishConvention)
 		text("architecture", req.Architecture, &s.Architecture)
 		text("modules", req.Modules, &s.Modules)
+
+		entries := func(field string, value *[]models.SettingsEntry, into *string) {
+			if value == nil {
+				return
+			}
+			cleaned, err := normalizeSettingsEntries(*value)
+			if err != nil {
+				invalid = invalid.WithField(field, err.Error())
+				bad = true
+				return
+			}
+			encoded, err := models.MarshalSettingsEntries(cleaned)
+			if err != nil {
+				invalid = invalid.WithField(field, "Could not save this list")
+				bad = true
+				return
+			}
+			*into = encoded
+		}
+		entries("prompts", req.Prompts, &s.Prompts)
+		entries("conventions", req.Conventions, &s.Conventions)
 
 		if req.ColorMeanings != nil {
 			known := map[string]bool{}

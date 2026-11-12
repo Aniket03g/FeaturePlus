@@ -58,7 +58,7 @@ Use it two ways:
 | Projects › List page | `ADD_UI_PAGE` | `frontend/src/pages/Projects.tsx`; route `GET /api/v1/projects` |
 | Projects › Dashboard | `ADD_UI_PAGE` | `frontend/src/pages/ProjectDashboard.tsx`, `ProjectDetail.tsx` |
 | Projects › Progress stats | `ADD_FUNCTION` | `project_handler.go:{GetProjectProgress,getProjectProgressStats,GetFeaturesProgressFragment}` |
-| Projects › Settings › model | `ADD_DB_TABLE` | `backend/models/project_settings.go` → `project_settings` (versions_convention, publish_convention, architecture, color_meanings, modules) |
+| Projects › Settings › model | `ADD_DB_TABLE` | `backend/models/project_settings.go` → `project_settings` (prompts, conventions, architecture, color_meanings, modules, statuses) |
 | Projects › Settings › editor | `ADD_UI_PAGE` | `frontend/src/pages/ProjectSettings.tsx`; `project_handler.go:{GetProjectSettingsModal,UpdateProjectSettings}` |
 | Projects › Members › model | `ADD_DB_TABLE` | `backend/models/project_member.go` → `project_members` (project_id, user_id, role, added_by) |
 | Projects › Team page | `ADD_UI_PAGE` | `frontend/src/pages/ProjectTeam.tsx`, `Team.tsx`; route `GET /api/v1/projects/:id/members` |

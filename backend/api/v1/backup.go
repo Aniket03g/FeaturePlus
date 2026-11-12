@@ -82,8 +82,8 @@ type ProjectBackup struct {
 	Dependencies []BackupDependency `json:"dependencies"`
 	Comments     []BackupComment    `json:"comments"`
 	// Messages are the messages left on features.
-	Messages []BackupMessage `json:"messages,omitempty"`
-	Attachments  []BackupAttachment `json:"attachments"`
+	Messages    []BackupMessage    `json:"messages,omitempty"`
+	Attachments []BackupAttachment `json:"attachments"`
 	// FeatureAttachments are files attached to a feature rather than a task;
 	// their FeatureID is set and their TaskID is not.
 	FeatureAttachments []BackupAttachment       `json:"feature_attachments"`
@@ -98,10 +98,10 @@ type ProjectBackup struct {
 	// Working is what the working version is based on, and its note.
 	Working *BackupWorking `json:"working,omitempty"`
 	// Settings are the project's conventions, colour meanings and architecture.
-	Settings *BackupSettings `json:"settings,omitempty"`
-	Copies             []BackupCopy             `json:"copies"`
-	Members            []BackupMember           `json:"members"`
-	FeatureAccess      []BackupFeatureAccess    `json:"feature_access"`
+	Settings      *BackupSettings       `json:"settings,omitempty"`
+	Copies        []BackupCopy          `json:"copies"`
+	Members       []BackupMember        `json:"members"`
+	FeatureAccess []BackupFeatureAccess `json:"feature_access"`
 }
 
 type BackupProject struct {
@@ -299,11 +299,15 @@ type BackupVersion struct {
 
 // BackupSettings is a project's settings as stored; see models.ProjectSettings.
 type BackupSettings struct {
-	VersionsConvention string          `json:"versions_convention,omitempty"`
-	PublishConvention  string          `json:"publish_convention,omitempty"`
-	Architecture       string          `json:"architecture,omitempty"`
-	ColorMeanings      json.RawMessage `json:"color_meanings,omitempty"`
-	Modules            string          `json:"modules,omitempty"`
+	Prompts       []models.SettingsEntry `json:"prompts,omitempty"`
+	Conventions   []models.SettingsEntry `json:"conventions,omitempty"`
+	Architecture  string                 `json:"architecture,omitempty"`
+	ColorMeanings json.RawMessage        `json:"color_meanings,omitempty"`
+	Modules       string                 `json:"modules,omitempty"`
+	// VersionsConvention and PublishConvention are what Conventions replaced.
+	// They are kept so old backups still restore.
+	VersionsConvention string `json:"versions_convention,omitempty"`
+	PublishConvention  string `json:"publish_convention,omitempty"`
 }
 
 // BackupWorking is the working version's base, by version Number, and note.
@@ -681,9 +685,15 @@ func collectBackup(db *gorm.DB, files *sqlitefs.SQLiteFS, project *models.Projec
 	if err != nil {
 		return out, nil, err
 	}
-	if settings.UpdatedByID != 0 || settings.VersionsConvention != "" || settings.Architecture != "" {
-		bs := &BackupSettings{VersionsConvention: settings.VersionsConvention,
-			PublishConvention: settings.PublishConvention, Architecture: settings.Architecture}
+	if settings.UpdatedByID != 0 || settings.VersionsConvention != "" || settings.PublishConvention != "" ||
+		settings.Architecture != "" || settings.Prompts != "" || settings.Conventions != "" {
+		bs := &BackupSettings{
+			Prompts:            models.ParseSettingsEntries(settings.Prompts),
+			Conventions:        models.ParseSettingsEntries(settings.Conventions),
+			Architecture:       settings.Architecture,
+			VersionsConvention: settings.VersionsConvention,
+			PublishConvention:  settings.PublishConvention,
+		}
 		if settings.ColorMeanings != "" {
 			bs.ColorMeanings = json.RawMessage(settings.ColorMeanings)
 		}

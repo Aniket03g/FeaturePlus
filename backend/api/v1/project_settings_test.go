@@ -45,15 +45,25 @@ func TestProjectSettingsDefaultsAndEditing(t *testing.T) {
 	path := "/api/v1/projects/" + strconv.Itoa(project.ID) + "/settings"
 	r := settingsRouterAs(t, db, owner.ID)
 
-	// Never written: starting text for the conventions, nothing else.
+	// Never written: the starting conventions, no prompts, nothing else.
 	got := decodeSettings(t, do(r, http.MethodGet, path, "").Body.Bytes())
-	if !got.VersionsDefault || !got.PublishDefault || got.VersionsConvention == "" ||
+	if !got.ConventionsDefault || len(got.Conventions) != 2 || len(got.Prompts) != 0 ||
 		len(got.ColorMeanings) != 0 || len(got.Modules) != 0 {
 		t.Fatalf("defaults = %+v", got)
 	}
+	if got.Conventions[0].Title == "" || got.Conventions[0].Body == "" {
+		t.Errorf("starting conventions have no title or body: %+v", got.Conventions)
+	}
 
 	w := do(r, http.MethodPatch, path, `{
-		"versions_convention": " Save at the end of each day ",
+		"prompts": [
+			{"title": " UI standards ", "body": " Use the design tokens. "},
+			{"title": "", "body": ""}
+		],
+		"conventions": [
+			{"title": " Working on versions ", "body": " Save at the end of each day "},
+			{"title": "", "body": ""}
+		],
 		"color_meanings": {"red": " Blocked ", "green": "Ready", "blue": ""},
 		"architecture": "Go API and a React app.",
 		"modules": "- **Backend** in backend/: the API"
@@ -62,8 +72,12 @@ func TestProjectSettingsDefaultsAndEditing(t *testing.T) {
 		t.Fatalf("patch: status %d: %s", w.Code, w.Body.String())
 	}
 	got = decodeSettings(t, do(r, http.MethodGet, path, "").Body.Bytes())
-	if got.VersionsDefault || got.VersionsConvention != "Save at the end of each day" || !got.PublishDefault {
-		t.Errorf("conventions = %+v", got)
+	if got.ConventionsDefault || len(got.Conventions) != 1 ||
+		got.Conventions[0].Title != "Working on versions" || got.Conventions[0].Body != "Save at the end of each day" {
+		t.Errorf("conventions = %+v", got.Conventions)
+	}
+	if len(got.Prompts) != 1 || got.Prompts[0].Title != "UI standards" || got.Prompts[0].Body != "Use the design tokens." {
+		t.Errorf("prompts = %+v", got.Prompts)
 	}
 	if len(got.ColorMeanings) != 2 || got.ColorMeanings["red"] != "Blocked" || got.ColorMeanings["green"] != "Ready" {
 		t.Errorf("colour meanings = %+v (an empty one should be dropped)", got.ColorMeanings)
@@ -76,12 +90,17 @@ func TestProjectSettingsDefaultsAndEditing(t *testing.T) {
 	}
 
 	// A field left out is left alone.
-	do(r, http.MethodPatch, path, `{"publish_convention": "Publish on Fridays"}`)
-	if got = decodeSettings(t, do(r, http.MethodGet, path, "").Body.Bytes()); got.Architecture == "" || got.PublishConvention != "Publish on Fridays" {
+	do(r, http.MethodPatch, path, `{"prompts": [{"title":"Architecture","body":"Hexagonal."}]}`)
+	if got = decodeSettings(t, do(r, http.MethodGet, path, "").Body.Bytes()); got.Architecture == "" ||
+		len(got.Prompts) != 1 || got.Prompts[0].Title != "Architecture" || len(got.Conventions) != 1 {
 		t.Errorf("after a partial patch = %+v", got)
 	}
 
-	// Refused: unknown colours, a module with no name.
+	// An entry with a body but no title is refused, so lists stay readable.
+	if w := do(r, http.MethodPatch, path, `{"conventions": [{"title":" ","body":"No heading"}]}`); w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("untitled entry: status %d, want 422", w.Code)
+	}
+	// Refused: unknown colours.
 	if w := do(r, http.MethodPatch, path, `{"color_meanings": {"brown": "x"}}`); w.Code != http.StatusUnprocessableEntity {
 		t.Errorf("unknown colour: status %d, want 422", w.Code)
 	}
@@ -90,6 +109,13 @@ func TestProjectSettingsDefaultsAndEditing(t *testing.T) {
 		Update("modules", `[{"name":"Web","path":"web/","purpose":"Pages"}]`)
 	if got = decodeSettings(t, do(r, http.MethodGet, path, "").Body.Bytes()); got.Modules != "- **Web** `web/`: Pages" {
 		t.Errorf("old list modules = %q", got.Modules)
+	}
+	// Conventions saved before they were a list come back as entries.
+	db.Model(&models.ProjectSettings{}).Where("project_id = ?", project.ID).
+		Updates(map[string]any{"conventions": "", "versions_convention": "Release daily"})
+	if got = decodeSettings(t, do(r, http.MethodGet, path, "").Body.Bytes()); len(got.Conventions) != 1 ||
+		got.Conventions[0].Title != "Working on versions" || got.Conventions[0].Body != "Release daily" || got.ConventionsDefault {
+		t.Errorf("old conventions = %+v", got.Conventions)
 	}
 
 	// Editors and viewers read; publishers write; editors cannot rename the project.
@@ -124,6 +150,8 @@ func TestProjectSettingsSurviveBackupAndRestore(t *testing.T) {
 	files := newFileStore(t, db)
 	fx := seedBackupProject(t, db, files)
 	db.Create(&models.ProjectSettings{ProjectID: fx.project.ID, Architecture: "Monolith", UpdatedByID: fx.owner.ID,
+		Prompts:       `[{"title":"UI standards","body":"Use the tokens."}]`,
+		Conventions:   `[{"title":"Branches","body":"One feature per branch."}]`,
 		ColorMeanings: `{"red":"Blocked"}`, Modules: `[{"name":"Web","path":"web/","purpose":"Pages"}]`})
 
 	result := restored(t, postBackup(t, db, files, fx.owner.ID, "restore", downloadBackup(t, db, files, fx.owner.ID, fx.project.ID)))
@@ -134,5 +162,8 @@ func TestProjectSettingsSurviveBackupAndRestore(t *testing.T) {
 	dto := projectSettingsDTO(db, got)
 	if dto.Architecture != "Monolith" || dto.ColorMeanings["red"] != "Blocked" || dto.Modules != "- **Web** `web/`: Pages" {
 		t.Fatalf("restored settings = %+v", dto)
+	}
+	if len(dto.Prompts) != 1 || dto.Prompts[0].Title != "UI standards" || len(dto.Conventions) != 1 || dto.Conventions[0].Title != "Branches" {
+		t.Fatalf("restored prompts/conventions = %+v", dto)
 	}
 }
